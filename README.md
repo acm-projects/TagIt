@@ -119,18 +119,14 @@ TagIt is a Chrome extension that helps users manage email overload by transformi
 
 ## Tech Stack & Resources 💻
 
-<details>
- <summary>Start here!</summary>
+#### Start here!
 
   - [What is a frontend?](https://youtu.be/WG5ikvJ2TKA?si=mBepopDcfIZK37jk)
   - [What is a backend?](https://youtu.be/XBu54nfzxAQ?si=kuioRqmCAxXhQocA)
   - [REST APIs](https://youtu.be/LooL6_chvN4?si=amF2wvhjfx1-UiaM)
   - [Basic Git & GitHub in VSCode Tutorial](https://youtu.be/z5jZ9lrSpqk?si=51sKMz2JHPklqfnV)
- <br></details>
 
-<details>
-
-<summary>React Chrome Extension</summary>
+#### React Chrome Extension
 
 - <a href="https://www.luckymedia.dev/blog/how-to-create-a-chrome-extension-with-react-typescript-tailwindcss-and-vite-in-2024">How to Create a Chrome Extension with React, TypeScript, TailwindCSS, and Vite</a>
 - <a href="https://web-highlights.com/blog/how-to-build-a-chrome-extension-using-react/">How To Build A Chrome Extension Using React</a>
@@ -143,17 +139,14 @@ TagIt is a Chrome extension that helps users manage email overload by transformi
 - <a href="https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts?utm_source=chatgpt.com">Content Scripts:</a>
   - It allows you to read details from the web page
   - <a href="https://dev.to/oluwatobi2001/a-beginners-guide-to-building-content-scripts-df?utm_source=chatgpt.com">Beginners guide to Building Content Scripts</a>
-  <br></details>
 
-<details>
-<summary>React Website</summary>
+#### React Website
 
 - <a href="https://legacy.reactjs.org/tutorial/tutorial.html#setup-for-the-tutorial">Setup</a>
 - <a href="https://legacy.reactjs.org/tutorial/tutorial.html#setup-for-the-tutorial">Setting up the Environment</a>
 - <a href="https://youtu.be/SqcY0GlETPk?si=7m4sb_bs-ksPQLkv">React Tutorial for Beginners</a>
 - Do’s and Don'ts - 
   - <a href="https://www.youtube.com/watch?v=b0IZo2Aho9Y">10 React Antipatterns to Avoid - Code This, Not That!</a>
-<br></details>
 
 ## Git Commands 🤖
 
