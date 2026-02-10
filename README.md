@@ -16,13 +16,12 @@ TagIt is a Chrome extension that helps users manage email overload by transformi
 <details>
   <summary>Week 1: Set Up ⚙️</summary>
 
-**Feb 11-18**
+**Feb 11th - 18th**
   - Discuss who’s frontend/backend and overall project goals & techstack
   - Go over GitHub basics:
     - Create branches.
   - Start wireframing on Figma
   - Research techstack and gain familiarity
-
 <br></details>
 
 <!-- 
