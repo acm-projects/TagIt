@@ -9,13 +9,28 @@ TagIt is a Chrome extension that helps users manage email overload by transformi
 
 ## MVP 🏆
 
+- OAuth (Gmail/Outlook)
+- Inbox scanning with action summary
+- AI tagging system (Urgent, Action Required, Promotional)
+  - Tag reasoning
+- Deadline & meeting time extraction
+- Auto-sync to calendar w/ conflict alerts
+  - Events only added w/ user confirmation
+  - Manual override
+- Unified dashboard
+
 ## Stretch Goals 💪
 
-## Milestones 🎯
+- Weekly digest
+- Follow-up reminders
+- Unsubscribe suggestions
+- Context aware summaries
+
+## Timeline 📆
 
 <details>
   <summary>Week 1: Set Up ⚙️</summary>
-  
+
   - Discuss who’s frontend/backend and overall project goals & techstack
   - Go over GitHub basics:
     - Create branches.
@@ -29,59 +44,128 @@ TagIt is a Chrome extension that helps users manage email overload by transformi
   - **Front End:**
     - UI/UX design in Figma for pop up extension
     - UI/UX design in Figma for website
-    - Create navigation across components
+    - Color palette & logo design
   - **Back End:**
     - Set up user authentication & read email perms
-    - Work on designing the Schema for the Database/s
+    - Work on designing the Schema for the Database
+    - API research
 <br></details>
 
-<!-- 
 <details>
   <summary>Weeks 3-4: Coding 👨🏻‍💻</summary>
   
   - **Front End:**
-    - Implement closet gallery UI and item view screens
-    - Display GPT-generated outfit with reason on “Today’s Fit” page
-    - Add photo capture functionality with preview
-  - **Back End:**
-    - Integrate GPT API to generate daily outfits
-    - Store wear frequency data and last worn timestamp
-    - Return filtered item lists for use in suggestions
-<br></details>
+    - Signup/Login
+    - “Connecting email…” screen
+    - Tag badges
+    - Pop ups for detected events/deadlines
 
+
+  - **Back End:**
+    - Implement Oauth
+    - Fetch recent emails
+      - Store in database
+    - AI tagging
+      - Deadline extraction
+    - Google Calendar integration
+
+<br></details>
 
 <details>
   <summary>Weeks 5-6: Middle Stretch 👾</summary>
-  
+
   - **Front End:**
-    - LBuild and style wear frequency dashboard
-    - Create "under-worn alert" badges next to clothing items
-    - Polish UI for full outfit display
+    - Priority inbox view
+    - Action summary
+    - Email hierarchy
+    - Deadline view
+
+
   - **Back End:**
-    - Create logic for alerting underused clothes
-    - Set up SMS morning suggestions
-    - Finalize outfit reasoning template from GPT output
-    - Begin stretch goals
+    - Priority logic
+    - Urgency reasoning
+    - Fetch calendar meeting times
+    - Conflict detection logic
+    - Set up demo account
+
+
 <br></details>
 
 <details>
   <summary>Weeks 7-8: Finishing Touches 👔</summary>
   
-  - Finalize backend and frontend integration by 7th week.
   - Plan and brainstorm for the presentation.
     - Watch previous presentations for inspiration and understanding.
   - Work on stretch goals.
-  - Ensure connectivity between frontend and backend.
+
+  - **Front End:**
+    - Presentation slides & script
+    - Final feature touches
+
+  - **Back End:**
+    - Last integrations 
+    - Finished video/demo
+
+  
 <br></details>
 
 <details>
   <summary>Weeks 9-10: Wrapping Up/Presentation Night 🗣🎤🖥️</summary>
   
   - Complete any remaining stretch goals.
-  - Prepare and practice the presentation.
-  - Present to stakeholders.
+  - Prepare and practice the presentation & Q&A.
+  - Present!
 <br></details>
--->
+
+## Tech Stack & Resources 💻
+
+<details>
+ <summary>Start here!</summary>
+
+  - [What is a frontend?](https://youtu.be/WG5ikvJ2TKA?si=mBepopDcfIZK37jk)
+  - [What is a backend?](https://youtu.be/XBu54nfzxAQ?si=kuioRqmCAxXhQocA)
+  - [REST APIs](https://youtu.be/LooL6_chvN4?si=amF2wvhjfx1-UiaM)
+  - [Basic Git & GitHub in VSCode Tutorial](https://youtu.be/z5jZ9lrSpqk?si=51sKMz2JHPklqfnV)
+ <br></details>
+
+<details>
+
+<summary>React Chrome Extension</summary>
+
+- <a href="https://www.luckymedia.dev/blog/how-to-create-a-chrome-extension-with-react-typescript-tailwindcss-and-vite-in-2024">How to Create a Chrome Extension with React, TypeScript, TailwindCSS, and Vite</a>
+- <a href="https://web-highlights.com/blog/how-to-build-a-chrome-extension-using-react/">How To Build A Chrome Extension Using React</a>
+- Tailwind CSS:
+  - <a href="https://tailwindcss.com/docs/installation">Documentation</a>
+  - <a href="https://www.youtube.com/watch?v=bv_YdzsW3XY">Build a Chrome Extension in MINUTES With React and Tailwind CSS!</a>
+- Vite:
+  - <a href="https://vite.dev/guide/">Documentation</a>
+  - <a href="https://www.youtube.com/watch?v=GGi7Brsf7js">Full Tutorial | Building a Chrome Extension in Typescript and Vite</a>
+- <a href="https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts?utm_source=chatgpt.com">Content Scripts:</a>
+  - It allows you to read details from the web page
+  - <a href="https://dev.to/oluwatobi2001/a-beginners-guide-to-building-content-scripts-df?utm_source=chatgpt.com">Beginners guide to Building Content Scripts</a>
+  <br></details>
+
+<details>
+<summary>React Website</summary>
+
+- <a href="https://legacy.reactjs.org/tutorial/tutorial.html#setup-for-the-tutorial">Setup</a>
+- <a href="https://legacy.reactjs.org/tutorial/tutorial.html#setup-for-the-tutorial">Setting up the Environment</a>
+- <a href="https://youtu.be/SqcY0GlETPk?si=7m4sb_bs-ksPQLkv">React Tutorial for Beginners</a>
+- Do’s and Don'ts - 
+  - <a href="https://www.youtube.com/watch?v=b0IZo2Aho9Y">10 React Antipatterns to Avoid - Code This, Not That!</a>
+<br></details>
+
+## Git Commands 🤖
+
+| Command                       | What it does                        |
+| ----------------------------- | ----------------------------------- |
+| git branch                    | lists all the branches              |
+| git branch "branch name"      | makes a new branch                  |
+| git checkout "branch name"    | switches to specified branch       |
+| git add .                     | finds all changed files             |
+| git commit -m "Testing123"    | commit with a message               |
+| git push                      | push to branch                      |
+| git pull "branch"             | pull updates from a specific branch |
 
 ## Team TagIt 😆
 
