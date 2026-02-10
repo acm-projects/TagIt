@@ -15,8 +15,6 @@ TagIt is a Chrome extension that helps users manage email overload by transformi
 
 <details>
   <summary>Week 1: Set Up ⚙️</summary>
-
-**Feb 11th - 18th**
   - Discuss who’s frontend/backend and overall project goals & techstack
   - Go over GitHub basics:
     - Create branches.
@@ -24,25 +22,18 @@ TagIt is a Chrome extension that helps users manage email overload by transformi
   - Research techstack and gain familiarity
 <br></details>
 
-<!-- 
 <details>
   <summary>Week 2: More Preparation 💡</summary>
-  
   - **Front End:**
-    - Work on base UI/UX design in Figma
-    - Create basic navigation across app pages
-    - Begin planning Closet Upload and Home screens
+    - UI/UX design in Figma for pop up extension
+    - UI/UX design in Figma for website
+    - Create navigation across components
   - **Back End:**
-    - Set up user authentication with JWT/Cognito
-    - Begin work on image upload handling and storage (e.g., S3)
-    - Start researching Rekognition for basic image analysis
+    - Set up user authentication & read email perms
     - Work on designing the Schema for the Database/s
-  - Work as a team to figure out how the whole app should work.
-    - Work out all of the small details, such as how it should flow and general layout.
-      - Have an idea in mind to build off by the end of week
-    - Make sure everyone is on the same page
 <br></details>
 
+<!-- 
 <details>
   <summary>Weeks 3-4: Coding 👨🏻‍💻</summary>
   
