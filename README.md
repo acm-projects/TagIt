@@ -128,6 +128,7 @@ TagIt is a Chrome extension that helps users manage email overload by transformi
 
 #### React Chrome Extension
 
+- <a href="https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world">Get started here!</a>
 - <a href="https://www.luckymedia.dev/blog/how-to-create-a-chrome-extension-with-react-typescript-tailwindcss-and-vite-in-2024">How to Create a Chrome Extension with React, TypeScript, TailwindCSS, and Vite</a>
 - <a href="https://web-highlights.com/blog/how-to-build-a-chrome-extension-using-react/">How To Build A Chrome Extension Using React</a>
 - Tailwind CSS:
