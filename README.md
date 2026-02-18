@@ -164,7 +164,7 @@ TagIt is a Chrome extension that helps users manage email overload by transformi
 ## Team TagIt 😆
 
 **Developers**
-- Ankitha Shaji Thomas
+- Ankitha Shaji Thomas -  hello!
 - Peyton McEntire
 - Aryan Sanoj Raj
 - Sneha Lal
