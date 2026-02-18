@@ -171,7 +171,7 @@ TagIt is a Chrome extension that helps users manage email overload by transformi
 - Hayden Hayes
 
 **Project Manager**
-- Tramanh Trinh 
+- Tramanh Trinh - litmas
 
 **Industry Mentor**
 - Abis Naqvi
