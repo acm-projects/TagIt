@@ -1,0 +1,14 @@
+# Repository-level ignores
+
+# Ignore local environment files (do NOT commit secrets)
+/backend/.env
+/backend/backend.env
+
+# Node modules (local installs)
+node_modules/
+**/node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
