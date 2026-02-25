@@ -1,0 +1,4 @@
+CD Frontend - enter  frontend folder
+npm install
+npm run dev - creates a live server for editing
+npm run build - builds chrome extension, allows you to add to chrome
