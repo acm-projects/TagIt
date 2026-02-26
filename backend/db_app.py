@@ -15,11 +15,14 @@ try:
 except Exception as e: 
     print(f"Error connecting to MongoDB: {e}")  
 
+
 app = Flask(__name__) 
 
-@app.route("/", methods=["GET"]) 
+@app.route("/get_all", methods=["GET"]) 
 def home():
+    db.get
     return jsonify({"message": "Welcome to the TagIt API!"}) 
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=8000) 
