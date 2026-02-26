@@ -20,7 +20,6 @@ app = Flask(__name__)
 
 @app.route("/get_all", methods=["GET"]) 
 def home():
-    db.get
     return jsonify({"message": "Welcome to the TagIt API!"}) 
 
 
