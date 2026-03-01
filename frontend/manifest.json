@@ -3,8 +3,19 @@
   "name": "TagIt",
   "version": "1.0.0",
   "description": "A Chrome extension built with Vite and React",
+
+  "permissions": ["sidePanel"],
+
   "action": {
-    "default_popup": "index.html"
+    "default_title": "TagIt"
   },
-  "permissions": []
+
+  "background": {
+  "service_worker": "background.js",
+  "type": "module"
+  },
+
+  "side_panel": {
+    "default_path": "index.html"
+  }
 }
