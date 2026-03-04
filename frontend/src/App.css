@@ -6,6 +6,6 @@ body,
 }
 
 body {
-  min-width: 0;
+  min-width: 420px;
   background: #f8e7dd;
 }
