@@ -9,6 +9,9 @@ import MailPage from "./pages/MailPage";
 import CalendarPage from "./pages/CalendarPage";
 import TasksPage from "./pages/TasksPage";
 import SettingsPage from "./pages/SettingsPage";
+import AuthenticatePage from "./pages/authenticate/AuthenticatePage";
+import ConnectedEmailsPage from "./pages/connected-emails/ConnectedEmailsPage";
+import SetupPage from "./pages/setup/SetupPage";
 
 const App: React.FC = () => {
   return (
@@ -17,6 +20,9 @@ const App: React.FC = () => {
         <Route path="/" element={<Popup />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/authenticate" element={<AuthenticatePage />} />
+        <Route path="/connected-emails" element={<ConnectedEmailsPage />} />
+        <Route path="/setup" element={<SetupPage />} />
         <Route path="/today" element={<TodayPage />} />
         <Route path="/mail" element={<MailPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
