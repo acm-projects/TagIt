@@ -1,57 +1,151 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 const BACKEND_BASE = "http://localhost:3000";
 
+type Provider = "gmail" | "outlook";
+
 const Popup: React.FC = () => {
+  const [provider, setProvider] = useState<Provider>("gmail");
   const [loading, setLoading] = useState(false);
   const [calLoading, setCalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [subject, setSubject] = useState<string | null>(null);
   const [calStatus, setCalStatus] = useState<string | null>(null);
+  const [msAuthed, setMsAuthed] = useState(false);
 
-  async function showLatestEmail() {
-    setLoading(true);
+  // Check Microsoft auth status on mount / provider switch
+  useEffect(() => {
+    if (provider === "outlook") {
+      fetch(`${BACKEND_BASE}/auth/microsoft/status`)
+        .then(r => r.json())
+        .then(d => setMsAuthed(!!d.authenticated))
+        .catch(() => setMsAuthed(false));
+    }
+  }, [provider]);
+
+  function resetState() {
     setError(null);
     setMessage(null);
     setSubject(null);
     setCalStatus(null);
-    try {
-      const listResp = await fetch(`${BACKEND_BASE}/messages?maxResults=1`);
-      if (!listResp.ok) {
-        const authUrlResp = await fetch(`${BACKEND_BASE}/auth/url`);
-        if (authUrlResp.ok) {
-          const { url } = await authUrlResp.json();
-          window.open(url, "_blank", "width=500,height=700");
-          setError("Opened Google sign-in in a new window. After granting access, close it and click the button again.");
-        } else {
-          setError(`Auth URL error: ${listResp.status}`);
+  }
+
+  function switchProvider(p: Provider) {
+    setProvider(p);
+    resetState();
+  }
+
+  // ── Open OAuth popup and wait for success message ──────────────────────────
+
+  function openAuthPopup(url: string): Promise<void> {
+    return new Promise((resolve) => {
+      const win = window.open(url, "_blank", "width=500,height=700");
+      const handler = (e: MessageEvent) => {
+        if (e.data === "oauth_success") {
+          window.removeEventListener("message", handler);
+          win?.close();
+          resolve();
         }
-        return;
-      }
+      };
+      window.addEventListener("message", handler);
+      // Fallback: resolve after 2 min regardless
+      setTimeout(() => { window.removeEventListener("message", handler); resolve(); }, 120_000);
+    });
+  }
 
-      const listData = await listResp.json();
-      if (!listData?.messages?.length) {
-        setError("No messages found.");
-        return;
-      }
+  // ── Sign in to Microsoft ───────────────────────────────────────────────────
 
-      const id = listData.messages[0].id;
-      const msgResp = await fetch(`${BACKEND_BASE}/message/${id}`);
-      if (!msgResp.ok) {
-        setError(`Failed to fetch message: ${msgResp.status}`);
+  async function signInMicrosoft() {
+    setLoading(true);
+    resetState();
+    try {
+      const resp = await fetch(`${BACKEND_BASE}/auth/microsoft/url`);
+      if (!resp.ok) {
+        setError("Could not get Microsoft auth URL. Is MS_CLIENT_ID set on the server?");
         return;
       }
-      const msgData = await msgResp.json();
-      const body = msgData.plainBody || msgData.message?.snippet || JSON.stringify(msgData.message, null, 2);
-      setMessage(body);
-      setSubject(msgData.subject || msgData.message?.snippet || null);
+      const { url } = await resp.json();
+      await openAuthPopup(url);
+      setMsAuthed(true);
     } catch (err: any) {
       setError(err.message || String(err));
     } finally {
       setLoading(false);
     }
   }
+
+  // ── Fetch latest email (Gmail or Outlook) ──────────────────────────────────
+
+  async function showLatestEmail() {
+    setLoading(true);
+    resetState();
+    try {
+      if (provider === "gmail") {
+        await fetchGmailLatest();
+      } else {
+        await fetchOutlookLatest();
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchGmailLatest() {
+    const listResp = await fetch(`${BACKEND_BASE}/messages?maxResults=1`);
+    if (!listResp.ok) {
+      // Trigger Google auth
+      const authUrlResp = await fetch(`${BACKEND_BASE}/auth/url`);
+      if (authUrlResp.ok) {
+        const { url } = await authUrlResp.json();
+        await openAuthPopup(url);
+        setError("Signed in! Click the button again to load your email.");
+      } else {
+        setError(`Auth URL error: ${listResp.status}`);
+      }
+      return;
+    }
+    const listData = await listResp.json();
+    if (!listData?.messages?.length) { setError("No messages found."); return; }
+
+    const id = listData.messages[0].id;
+    const msgResp = await fetch(`${BACKEND_BASE}/message/${id}`);
+    if (!msgResp.ok) { setError(`Failed to fetch message: ${msgResp.status}`); return; }
+    const msgData = await msgResp.json();
+    setMessage(msgData.plainBody || msgData.message?.snippet || "");
+    setSubject(msgData.subject || msgData.message?.snippet || null);
+  }
+
+  async function fetchOutlookLatest() {
+    if (!msAuthed) {
+      await signInMicrosoft();
+      setError("Signed in! Click the button again to load your email.");
+      return;
+    }
+    const listResp = await fetch(`${BACKEND_BASE}/outlook/messages?maxResults=1`);
+    if (!listResp.ok) {
+      const data = await listResp.json().catch(() => ({}));
+      // If unauthorized, re-auth
+      if (listResp.status === 500 && data.error?.toLowerCase().includes('token')) {
+        setMsAuthed(false);
+        setError("Microsoft session expired. Please sign in again.");
+      } else {
+        setError(`Outlook error: ${data.error || listResp.status}`);
+      }
+      return;
+    }
+    const listData = await listResp.json();
+    if (!listData?.messages?.length) { setError("No messages found."); return; }
+
+    const id = listData.messages[0].id;
+    const msgResp = await fetch(`${BACKEND_BASE}/outlook/message/${encodeURIComponent(id)}`);
+    if (!msgResp.ok) { setError(`Failed to fetch message: ${msgResp.status}`); return; }
+    const msgData = await msgResp.json();
+    setMessage(msgData.plainBody || msgData.message?.bodyPreview || "");
+    setSubject(msgData.subject || msgData.message?.bodyPreview || null);
+  }
+
+  // ── Add to Google Calendar ─────────────────────────────────────────────────
 
   async function addToCalendar() {
     if (!subject) return;
@@ -66,24 +160,19 @@ const Popup: React.FC = () => {
       });
       const data = await resp.json();
       if (!resp.ok) {
-        // If it's an auth error, prompt re-auth (Calendar scope may not be granted yet)
-        if (resp.status === 500 && data.error?.includes('invalid_grant')) {
+        if (resp.status === 500 && data.error?.includes("invalid_grant")) {
           const authUrlResp = await fetch(`${BACKEND_BASE}/auth/url`);
           if (authUrlResp.ok) {
             const { url } = await authUrlResp.json();
-            window.open(url, "_blank", "width=500,height=700");
-            setError("Re-authorization needed for Calendar access. Sign in again, then retry.");
+            await openAuthPopup(url);
+            setError("Re-authorized Google. Try adding to calendar again.");
           }
         } else {
           setError(`Calendar error: ${data.error}`);
         }
         return;
       }
-      setCalStatus(`Added to today's calendar! `);
-      // Optionally open the event
-      if (data.htmlLink) {
-        setCalStatus(`Added! `);
-      }
+      setCalStatus(data.htmlLink ? `Added! Open in Google Calendar` : "Added to today's calendar!");
     } catch (err: any) {
       setError(err.message || String(err));
     } finally {
@@ -91,35 +180,90 @@ const Popup: React.FC = () => {
     }
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
-    <div className="p-4">
+    <div className="p-4 min-w-[320px]">
       <h1 className="text-3xl font-bold mb-4">TagIt</h1>
 
+      {/* Provider toggle */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => switchProvider("gmail")}
+          className={`flex-1 px-3 py-2 rounded text-sm font-medium border transition-colors ${
+            provider === "gmail"
+              ? "bg-blue-600 text-white border-blue-600"
+              : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
+          }`}
+        >
+          Gmail
+        </button>
+        <button
+          onClick={() => switchProvider("outlook")}
+          className={`flex-1 px-3 py-2 rounded text-sm font-medium border transition-colors ${
+            provider === "outlook"
+              ? "bg-blue-600 text-white border-blue-600"
+              : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
+          }`}
+        >
+          Outlook
+        </button>
+      </div>
+
+      {/* Outlook sign-in button (shown when not authed) */}
+      {provider === "outlook" && !msAuthed && (
+        <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+          <p className="mb-2 font-medium">Sign in to your Microsoft account to access Outlook.</p>
+          <button
+            onClick={signInMicrosoft}
+            disabled={loading}
+            className="bg-blue-700 text-white px-3 py-1.5 rounded hover:bg-blue-800 disabled:opacity-50"
+          >
+            {loading ? "Opening sign-in…" : "Sign in with Microsoft"}
+          </button>
+        </div>
+      )}
+
+      {/* Authed Outlook indicator */}
+      {provider === "outlook" && msAuthed && (
+        <div className="mb-3 flex items-center gap-2 text-sm text-green-700">
+          <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+          Connected to Microsoft
+          <button
+            onClick={signInMicrosoft}
+            className="ml-auto text-xs text-gray-500 underline hover:text-gray-700"
+          >
+            Switch account
+          </button>
+        </div>
+      )}
+
+      {/* Main action button */}
       <button
-        className="bg-blue-600 text-white px-4 py-2 rounded"
+        className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
         onClick={showLatestEmail}
         disabled={loading}
       >
-        {loading ? "Loading…" : "Show latest email"}
+        {loading ? "Loading…" : `Show latest ${provider === "gmail" ? "Gmail" : "Outlook"} email`}
       </button>
 
       {error && (
-        <div className="mt-4 text-red-600 whitespace-pre-wrap">{error}</div>
+        <div className="mt-4 text-red-600 whitespace-pre-wrap text-sm">{error}</div>
       )}
 
       {message && (
         <>
           {subject && (
-            <div className="mt-3 text-sm font-semibold text-gray-700">
+            <div className="mt-3 text-sm font-semibold text-gray-700 truncate" title={subject}>
               Subject: {subject}
             </div>
           )}
-          <div className="mt-2 p-3 border rounded bg-gray-50 max-h-64 overflow-auto whitespace-pre-wrap">
+          <div className="mt-2 p-3 border rounded bg-gray-50 max-h-64 overflow-auto whitespace-pre-wrap text-sm">
             {message}
           </div>
 
           <button
-            className="mt-3 bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50"
+            className="mt-3 w-full bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
             onClick={addToCalendar}
             disabled={calLoading || !subject}
           >
@@ -127,7 +271,7 @@ const Popup: React.FC = () => {
           </button>
 
           {calStatus && (
-            <div className="mt-2 text-green-700 font-medium">{calStatus}</div>
+            <div className="mt-2 text-green-700 font-medium text-sm">{calStatus}</div>
           )}
         </>
       )}
