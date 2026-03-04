@@ -53,7 +53,10 @@ const SignupPage: React.FC = () => {
           </div>
         </div>
 
-        <button className="mt-10 w-56 rounded-full bg-[#A34712] py-3 text-base font-medium text-white">
+        <button
+          className="mt-10 w-56 rounded-full bg-[#A34712] py-3 text-base font-medium text-white"
+          onClick={() => navigate("/authenticate")}
+        >
           Create Account
         </button>
 
