@@ -1,13 +1,36 @@
 from dotenv import load_dotenv
+from flask import json
 from google import genai
-import os
+import requests
+import os 
+
+# try:
+#     from watchdog.observers import Observer 
+#     from watchdog.events import FileSystemEventHandler
+# except (ImportError, ModuleNotFoundError):  
+#     Observer = None
+#     FileSystemEventHandler = None
+   
+
+# class JsonHandler(FileSystemEventHandler):
+#     def on_created(self, event):
+#         if event.is_directory or not event.src_path.endswith('.json'):
+#             return
+        
+#         print(f"New file detected: {event.src_path}")
+        
+#         # Read the new file and send it
+#         with open(event.src_path, 'r') as f:
+#             data = json.load(f)
+#             requests.post("http://127.0.0.1/api/emails", json=data)
 
 load_dotenv()
 api = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=api)
+client = genai.Client(api_key=api) 
+
+
 
 Tags = ["Internship", "Job Offer", "Meeting Request", "Assigments/Deadlines", "Newsletter", "Other"]; 
-#tasks , events, date for something is due or event. 
 
 email_subject = "[ecs.all] Reminder: ECS Printing Notice - Sunday 3/1"
 email_body = f"""Good afternoon.
@@ -44,8 +67,10 @@ Your output MUST be a valid JSON object containing exactly these four keys:
  2. "assignedCategory": The single best-fitting category selected EXACTLY from the provided list of tags.
  3. "priorityLevel": An integer from 1 to 4 determining the urgency (1 = Critical/Immediate Action Required, 2 = High Priority/Important, 3 = Normal/Informational, 4 = Low Priority/No Action Needed).
  4. "uiBadges": An array of 1 to 2 very short, single-word strings to be used as visual tags (e.g., ["Internship", "Resume"] or ["Temporary", "Credit"]). 
- 5.
-
+ 5. "tasks/to-dos": An array of 0 to 3 concise, actionable tasks that the user needs to complete, each task should be a single sentence starting with a verb (e.g., "Submit resume", "Schedule meeting", "Review document").
+ 6. "deadlines": An array of 0 to 2 concise deadline statements, each starting with "Deadline: " (e.g., "Deadline to submit: March 15, 2026").
+ 7. "events": An array of 0 to 2 concise event statements, each starting with "Event: " (e.g., "Event: Interview on March 20, 2026 at 3 PM").
+ 
 
 Input Email: Subject: {email_subject} 
 Body: {email_body}
