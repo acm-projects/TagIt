@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import PageTopBar from "../components/PageTopBar";
 import gmailLogo from "../assets/Logos/gmail.png";
 import outlookLogo from "../assets/Logos/outlook.png";
 
@@ -51,18 +50,6 @@ const AuthenticatePage: React.FC = () => {
 
   return (
     <div className="relative min-h-full bg-[#F8E7DD] p-4">
-      <PageTopBar
-        back={{ label: "Back", to: "/signup" }}
-        right={
-          <button
-            type="button"
-            className="rounded-full bg-white px-4 py-2 text-sm font-medium text-[#A34712] shadow-sm hover:bg-[#FFF9F4] transition"
-            onClick={() => navigate("/setup")}
-          >
-            Setup
-          </button>
-        }
-      />
 
       <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center rounded-3xl bg-[#FDE5D1] px-10 pt-16">
         <h1 className="mb-4 font-instrument text-5xl font-normal text-[#A34712]">
