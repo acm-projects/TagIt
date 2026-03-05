@@ -26,3 +26,10 @@ dist-ssr
 .env
 *.env.local
 *.env.*.local
+
+
+# System Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
