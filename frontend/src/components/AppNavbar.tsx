@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 const NAV_ITEMS: { path: string; icon: string; label: string }[] = [
   { path: "/today", icon: "today", label: "Today" },
@@ -11,13 +11,11 @@ const NAV_ITEMS: { path: string; icon: string; label: string }[] = [
 
 const AppNavbar: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
 
   return (
     <nav className="flex w-20 flex-col items-center justify-between border-r border-[#F7C9AA] bg-[#FFF9F4] py-8">
       <div className="flex flex-col items-center gap-24 mt-16">
         {NAV_ITEMS.map(({ path, icon, label }) => {
-          const isActive = location.pathname === path;
           return (
             <button
               key={path}

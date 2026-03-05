@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 type Priority = {
   id: string;
@@ -16,6 +17,7 @@ const initialPriorities: Priority[] = [
 ];
 
 const SetupPage: React.FC = () => {
+  const navigate = useNavigate();
   const [priorities, setPriorities] = useState<Priority[]>(initialPriorities);
   const [dragId, setDragId] = useState<string | null>(null);
 
@@ -74,7 +76,11 @@ const SetupPage: React.FC = () => {
               + Add Priorities
             </button>
 
-            <button className="mx-auto block w-52 rounded-md bg-[#A34712] py-3 text-base font-medium text-white">
+            <button
+              type="button"
+              onClick={() => navigate("/calendar")}
+              className="mx-auto block w-52 rounded-md bg-[#A34712] py-3 text-base font-medium text-white"
+            >
               Finish setup
             </button>
           </div>
