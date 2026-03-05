@@ -46,12 +46,24 @@ const AuthenticatePage: React.FC = () => {
     );
   };
 
-  // Microsoft (Outlook) authentication — not implemented yet. Placeholder for next phase.
   const handleOutlookLogin = () => {
     setError(null);
     setLoadingProvider("microsoft");
-    setError("Microsoft (Outlook) sign-in is not available yet. Use Gmail for now.");
-    setLoadingProvider(null);
+    chrome.runtime.sendMessage(
+      { type: "startMicrosoftOAuth" },
+      (response: { success?: boolean; data?: { email: string }; error?: string }) => {
+        setLoadingProvider(null);
+        if (chrome.runtime.lastError) {
+          setError(chrome.runtime.lastError.message ?? "Connection failed");
+          return;
+        }
+        if (response?.success && response.data?.email) {
+          navigate("/connected-emails");
+          return;
+        }
+        setError(response?.error ?? "Microsoft sign-in failed");
+      }
+    );
   };
 
   return (

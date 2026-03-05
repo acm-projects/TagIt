@@ -5,6 +5,11 @@ import type { AuthProvider } from "../services/auth/tokenStorage";
 
 type ConnectedEmail = { provider: AuthProvider; email: string };
 
+const PROVIDER_LABELS: Record<AuthProvider, string> = {
+  google: "Gmail",
+  microsoft: "Microsoft",
+};
+
 function TrashIcon({ className }: { className?: string }) {
   return (
     <span className={className} aria-hidden>
@@ -38,6 +43,13 @@ const ConnectedEmailsPage: React.FC = () => {
     loadEmails().finally(() => setLoading(false));
   }, [loadEmails]);
 
+  // Refresh list when storage changes (e.g. new account connected in another flow)
+  useEffect(() => {
+    const listener = () => void loadEmails();
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, [loadEmails]);
+
   const handleRemove = async (provider: AuthProvider) => {
     await removeToken(provider);
     await loadEmails();
@@ -49,7 +61,7 @@ const ConnectedEmailsPage: React.FC = () => {
 
       <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center rounded-3xl bg-[#FFF9F4] px-8 py-8">
         <div className="w-full max-w-xl space-y-8 text-center">
-          <h1 className="text-4xl font-semibold tracking-wide text-[#A34712]">
+          <h1 className="mb-4 font-instrument text-5xl font-normal text-[#A34712]">
             Connected Emails
           </h1>
 
@@ -63,21 +75,24 @@ const ConnectedEmailsPage: React.FC = () => {
                 emails.map(({ provider, email }) => (
                   <div
                     key={`${provider}-${email}`}
-                    className="flex items-center justify-between rounded-full border border-[#C86C2F] bg-white px-4 py-3 shadow-sm"
+                    className="flex items-center gap-4 rounded-full border border-[#C86C2F] bg-white px-4 py-3 shadow-sm"
                   >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F7C9AA] text-sm font-semibold text-[#A34712]"
-                        aria-hidden
-                      >
-                        {email.charAt(0).toUpperCase()}
+                    <span
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F7C9AA] text-sm font-semibold text-[#A34712]"
+                      aria-hidden
+                    >
+                      {email.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1 text-left">
+                      <span className="block truncate text-lg text-[#3F2A1E]">{email}</span>
+                      <span className="block text-xs font-medium text-[#8B6F60]">
+                        {PROVIDER_LABELS[provider]} · Connected
                       </span>
-                      <span className="text-lg text-[#3F2A1E]">{email}</span>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleRemove(provider)}
-                      className="rounded p-1 text-[#7A4A2D] hover:bg-[#F7C9AA]/50"
+                      className="shrink-0 rounded-full p-2 text-[#7A4A2D] hover:bg-[#F7C9AA]/50 transition-colors"
                       aria-label={`Remove ${email}`}
                     >
                       <TrashIcon />

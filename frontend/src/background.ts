@@ -8,6 +8,11 @@ import {
   fetchGoogleUserEmail,
   parseTokenFromRedirect,
 } from "./services/auth/googleOAuth";
+import {
+  buildMicrosoftAuthUrl,
+  exchangeMicrosoftCodeForTokens,
+  fetchMicrosoftUserEmail,
+} from "./services/auth/microsoftOAuth";
 import { saveToken } from "./services/auth/tokenStorage";
 
 const enableSidePanelOnClick = async () => {
@@ -56,13 +61,14 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    // Microsoft (Outlook) OAuth — not implemented yet. Placeholder for future.
     if (message.type === "startMicrosoftOAuth") {
-      sendResponse({
-        success: false,
-        error: "Microsoft authentication is not implemented yet.",
-      });
-      return false;
+      runMicrosoftOAuth()
+        .then((data) => sendResponse({ success: true, data }))
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : "Microsoft sign-in failed";
+          sendResponse({ success: false, error: msg });
+        });
+      return true;
     }
 
     return false;
@@ -94,6 +100,45 @@ async function runGoogleOAuth(): Promise<{ email: string }> {
 
   await saveToken("google", {
     access_token: accessToken,
+    email,
+  });
+
+  return { email };
+}
+
+async function runMicrosoftOAuth(): Promise<{ email: string }> {
+  const { url, codeVerifier } = await buildMicrosoftAuthUrl();
+
+  const redirectUrl = await new Promise<string>((resolve, reject) => {
+    chrome.identity.launchWebAuthFlow(
+      { url, interactive: true },
+      (callbackUrl?: string) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message ?? "OAuth cancelled"));
+          return;
+        }
+        if (!callbackUrl) {
+          reject(new Error("OAuth flow did not return a URL"));
+          return;
+        }
+        resolve(callbackUrl);
+      }
+    );
+  });
+
+  const parsed = new URL(redirectUrl);
+  const code = parsed.searchParams.get("code") ?? new URLSearchParams(parsed.hash?.slice(1) || "").get("code");
+  if (!code) {
+    const error = parsed.searchParams.get("error") ?? parsed.searchParams.get("error_description") ?? "No code in redirect";
+    throw new Error(`Microsoft OAuth: ${error}`);
+  }
+
+  const tokens = await exchangeMicrosoftCodeForTokens(code, codeVerifier);
+  const email = await fetchMicrosoftUserEmail(tokens.access_token);
+
+  await saveToken("microsoft", {
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
     email,
   });
 

@@ -21,12 +21,12 @@ export function getGoogleClientId(): string {
   return id;
 }
 
-/** Placeholder for future Microsoft auth. Do not use until implemented. */
+/** Microsoft (Outlook) OAuth — requires VITE_MICROSOFT_CLIENT_ID in .env */
 export function getMicrosoftClientId(): string {
   const id = getEnv("VITE_MICROSOFT_CLIENT_ID");
   if (!id) {
     throw new Error(
-      "VITE_MICROSOFT_CLIENT_ID is not set. Microsoft authentication is not implemented yet."
+      "VITE_MICROSOFT_CLIENT_ID is not set. Add it to .env (see .env.example) and rebuild."
     );
   }
   return id;
