@@ -118,7 +118,7 @@ const ConnectedEmailsPage: React.FC = () => {
               onClick={() => navigate("/setup")}
               className="w-40 rounded-md bg-[#A34712] py-3 text-base font-medium text-white hover:bg-[#8B3A0F] transition"
             >
-              Exit
+              Continue
             </button>
           </div>
         </div>
