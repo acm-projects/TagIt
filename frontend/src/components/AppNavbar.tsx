@@ -15,7 +15,7 @@ const AppNavbar: React.FC = () => {
 
   return (
     <nav className="flex w-20 flex-col items-center justify-between border-r border-[#F7C9AA] bg-[#FFF9F4] py-8">
-      <div className="flex flex-col items-center gap-6 mt-1000">
+      <div className="flex flex-col items-center gap-24 mt-16">
         {NAV_ITEMS.map(({ path, icon, label }) => {
           const isActive = location.pathname === path;
           return (
@@ -24,11 +24,9 @@ const AppNavbar: React.FC = () => {
               type="button"
               aria-label={label}
               onClick={() => navigate(path)}
-              className={`flex h-11 w-11 items-center justify-center rounded-xl transition-colors cursor-pointer ${
-                isActive ? "bg-[#F7C9AA] text-[#A34712]" : "text-[#8B6F60] hover:bg-[#F7C9AA]/50 hover:text-[#A34712]"
-              }`}
+              className="flex h-16 w-16 items-center justify-center rounded-xl cursor-pointer text-[#8B6F60] hover:bg-transparent hover:text-[#8B6F60] focus:outline-none focus:ring-0"
             >
-              <span className="material-symbols-outlined text-[28px]">{icon}</span>
+              <span className="material-symbols-outlined text-[36px]">{icon}</span>
             </button>
           );
         })}
