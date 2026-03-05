@@ -3,6 +3,7 @@
 # Ignore local environment files (do NOT commit secrets)
 /backend/.env
 /backend/backend.env
+*.env
 
 # Node modules (local installs)
 node_modules/
