@@ -1,10 +1,6 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import todayIcon from "../assets/nav-buttons/today.png";
-import mailIcon from "../assets/nav-buttons/mail.png";
-import calendarIcon from "../assets/nav-buttons/calender.png";
-import tasksIcon from "../assets/nav-buttons/tasks.png";
-import settingsIcon from "../assets/nav-buttons/settings.png";
+import AppNavbar from "../components/AppNavbar";
+import DateHeader from "../components/DateHeader";
 
 type TaskItem = {
   label: string;
@@ -24,7 +20,6 @@ const initialTasks: TaskItem[] = [
 ];
 
 const TasksPage: React.FC = () => {
-  const navigate = useNavigate();
   const [tasks, setTasks] = useState<TaskItem[]>(initialTasks);
 
   const toggleTask = (index: number) => {
@@ -38,57 +33,12 @@ const TasksPage: React.FC = () => {
   return (
     <div className="min-h-full bg-[#FFF2E9] p-4">
       <div className="flex min-h-[calc(100vh-2rem)] w-full rounded-3xl bg-[#FFFBF8]">
-        {/* Side navigation - matches other pages */}
-        <nav className="flex w-16 flex-col items-center border-r border-[#F7C9AA] bg-[#FFF9F4] py-6">
-          <div className="flex flex-col items-center gap-4">
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center cursor-pointer"
-              onClick={() => navigate("/today")}
-            >
-              <img src={todayIcon} alt="Today" className="h-full w-full" />
-            </button>
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center cursor-pointer"
-              onClick={() => navigate("/mail")}
-            >
-              <img src={mailIcon} alt="Mail" className="h-full w-full" />
-            </button>
-            <button
-              type="button"
-              className="flex h-9 w-9 items-center justify-center cursor-pointer"
-              onClick={() => navigate("/calendar")}
-            >
-              <img src={calendarIcon} alt="Calendar" className="h-full w-full" />
-            </button>
-            <button
-              type="button"
-              className="flex h-9 w-9 items-center justify-center cursor-pointer"
-              onClick={() => navigate("/tasks")}
-            >
-              <img src={tasksIcon} alt="Tasks" className="h-full w-full" />
-            </button>
-            <button
-              type="button"
-              className="flex h-9 w-9 items-center justify-center cursor-pointer"
-              onClick={() => navigate("/settings")}
-            >
-              <img src={settingsIcon} alt="Settings" className="h-full w-full" />
-            </button>
-          </div>
-        </nav>
+        <AppNavbar />
 
         {/* Main content */}
         <main className="flex-1 px-8 py-6 text-[#A34712]">
-          {/* Date header */}
-          <header className="flex flex-col items-center border-b border-[#E6C7B3] pb-4 text-center">
-            <div className="flex w-full items-center justify-center gap-8 text-2xl font-medium">
-              <button className="cursor-pointer">&larr;</button>
-              <span className="tracking-wide">02/18/2026</span>
-              <button className="cursor-pointer">&rarr;</button>
-            </div>
-            <p className="mt-1 text-sm">Wednesday</p>
+          <header className="border-b border-[#E6C7B3] pb-4">
+            <DateHeader />
           </header>
 
           {/* Deadlines */}

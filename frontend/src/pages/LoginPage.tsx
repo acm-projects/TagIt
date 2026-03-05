@@ -1,19 +1,14 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import PageTopBar from "../components/PageTopBar";
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
 
   return (
     <div className="relative min-h-full bg-[#F8E7DD] p-4">
-      <button
-        type="button"
-        className="absolute left-6 top-6 text-sm font-medium text-[#A34712]"
-        onClick={() => navigate("/")}
-      >
-        ← Back
-      </button>
-      <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center rounded-3xl bg-[#FDE5D1] px-10">
+      <PageTopBar back={{ label: "Back", to: "/" }} />
+      <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center rounded-3xl bg-[#FDE5D1] px-10 pt-16">
         <h1 className="mb-10 font-instrument text-5xl font-normal text-[#A34712]">
           Login
         </h1>
