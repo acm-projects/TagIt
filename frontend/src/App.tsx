@@ -10,6 +10,7 @@ import CalendarPage from "./pages/CalendarPage";
 import TasksPage from "./pages/TasksPage";
 import SettingsPage from "./pages/SettingsPage";
 import AuthenticatePage from "./pages/AuthenticatePage";
+import ConnectedEmailsPage from "./pages/ConnectedEmailsPage";
 import SetupPage from "./pages/SetupPage";
 
 const App: React.FC = () => {
@@ -20,6 +21,7 @@ const App: React.FC = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/authenticate" element={<AuthenticatePage />} />
+        <Route path="/connected-emails" element={<ConnectedEmailsPage />} />
         <Route path="/setup" element={<SetupPage />} />
         <Route path="/today" element={<TodayPage />} />
         <Route path="/mail" element={<MailPage />} />

@@ -4,15 +4,15 @@
   "version": "1.0.0",
   "description": "A Chrome extension built with Vite and React",
 
-  "permissions": ["sidePanel", "activeTab", "scripting"],
+  "permissions": ["sidePanel", "activeTab", "scripting", "identity", "storage"],
 
   "action": {
     "default_title": "TagIt"
   },
 
   "background": {
-  "service_worker": "src/background.js",
-  "type": "module"
+    "service_worker": "src/background.ts",
+    "type": "module"
   },
 
   "content_scripts": [
