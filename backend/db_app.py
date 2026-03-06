@@ -3,6 +3,7 @@ from flask import Flask, jsonify, request
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import certifi 
+from flask_cors import CORS
 
 from AI_Summary import analyze_email_with_gemini
 
@@ -10,14 +11,19 @@ from AI_Summary import analyze_email_with_gemini
 load_dotenv()
 app = Flask(__name__) 
 MONGO_URI = os.getenv("MONGO_URI")
+CORS(app)
 
 try:
-    client = MongoClient(MONGO_URI)
-    db = client.get_database()
+    # Add certifi.where() to fix the Mac SSL handshake error
+    client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
+    
+    # Use get_default_database() so it knows which cluster to use
+    db = client.get_default_database()
+    
     client.admin.command('ping') 
-    print("Connected to MongoDB and pinged")
+    print("✅ Connected to MongoDB and pinged")
 except Exception as e: 
-    print(f"Error connecting to MongoDB: {e}")  
+    print(f"❌ Error connecting to MongoDB: {e}") 
 
 
 

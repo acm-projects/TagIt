@@ -30,6 +30,29 @@ const Popup: React.FC = () => {
     setSubject(null);
     setCalStatus(null);
   }
+  // ── Send to Python AI Pipeline ─────────────────────────────────────────────
+  async function processWithAI(emailSubject: string, emailBody: string, emailId: string) {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+            subject: emailSubject, 
+            body: emailBody, 
+            originalId: emailId 
+        })
+      });
+      
+      if (!res.ok) throw new Error("Python server error");
+      
+      const data = await res.json();
+      return data.ai_summary; // Matches the key from your Python backend
+
+    } catch (err) {
+      console.error("AI Pipeline error:", err);
+      return "Failed to generate AI summary. Ensure Python server is running on port 8000.";
+    }
+  }
 
   function switchProvider(p: Provider) {
     setProvider(p);
@@ -112,8 +135,16 @@ const Popup: React.FC = () => {
     const msgResp = await fetch(`${BACKEND_BASE}/message/${id}`);
     if (!msgResp.ok) { setError(`Failed to fetch message: ${msgResp.status}`); return; }
     const msgData = await msgResp.json();
-    setMessage(msgData.plainBody || msgData.message?.snippet || "");
-    setSubject(msgData.subject || msgData.message?.snippet || null);
+    
+    const rawSubject = msgData.subject || msgData.message?.snippet || "No Subject";
+    const rawBody = msgData.plainBody || msgData.message?.snippet || "";
+    
+    setSubject(rawSubject);
+    setMessage("🤖 Generating AI Summary..."); // Shows the user the AI is thinking!
+    
+    // Send to Python and wait for the summary
+    const summary = await processWithAI(rawSubject, rawBody, id);
+    setMessage(summary);
   }
 
   async function fetchOutlookLatest() {
@@ -141,8 +172,16 @@ const Popup: React.FC = () => {
     const msgResp = await fetch(`${BACKEND_BASE}/outlook/message/${encodeURIComponent(id)}`);
     if (!msgResp.ok) { setError(`Failed to fetch message: ${msgResp.status}`); return; }
     const msgData = await msgResp.json();
-    setMessage(msgData.plainBody || msgData.message?.bodyPreview || "");
-    setSubject(msgData.subject || msgData.message?.bodyPreview || null);
+    
+    const rawSubject = msgData.subject || msgData.message?.bodyPreview || "No Subject";
+    const rawBody = msgData.plainBody || msgData.message?.bodyPreview || "";
+    
+    setSubject(rawSubject);
+    setMessage("🤖 Generating AI Summary..."); 
+
+    // Send to Python and wait for the summary
+    const summary = await processWithAI(rawSubject, rawBody, id);
+    setMessage(summary);
   }
 
   // ── Add to Google Calendar ─────────────────────────────────────────────────
