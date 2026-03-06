@@ -8,8 +8,8 @@ const CalendarPage: React.FC = () => {
       <div className="flex min-h-[calc(100vh-2rem)] w-full items-stretch rounded-3xl bg-[#FFFBF8]">
         <AppNavbar />
 
-        {/* Main content */}
-        <main className="flex-1 px-8 py-6">
+        {/* Main content: same header strip as other pages */}
+        <main className="flex-1 flex flex-col overflow-auto px-8 py-6">
           <DateHeader />
 
           {/* Calendar Events */}
