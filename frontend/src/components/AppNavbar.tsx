@@ -13,8 +13,7 @@ const AppNavbar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  /* Active item uses a visible background so Today, Mail, etc. all light up
-     consistently when selected. */
+  /* Active item changes only icon color (no background highlight). */
   return (
     <nav className="flex w-20 flex-col items-center justify-between border-r border-[#F7C9AA] bg-[#FFF9F4] py-8">
       <div className="mt-16 flex flex-col items-center gap-32">
@@ -27,11 +26,16 @@ const AppNavbar: React.FC = () => {
               type="button"
               aria-label={label}
               aria-current={isActive ? "page" : undefined}
-              onClick={() => navigate(path)}
+              onClick={() =>
+                navigate({
+                  pathname: path,
+                  search: location.search,
+                })
+              }
               className={`flex h-16 w-16 items-center justify-center rounded-xl cursor-pointer transition-colors focus:outline-none focus:ring-0 ${
                 isActive
-                  ? "bg-[rgba(210,78,0,0.35)] text-[#A34712] shadow-[0_2px_6px_rgba(109,47,18,0.2)]"
-                  : "bg-transparent text-[#8B6F60] hover:bg-[#FFEFE4] hover:text-[#A34712]"
+                  ? "bg-transparent text-[#A34712]"
+                  : "bg-transparent text-[#8B6F60] hover:text-[#A34712]"
               }`}
             >
               <span className="material-symbols-outlined text-[64px]">{icon}</span>

@@ -1,119 +1,198 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
-/**
- * Props for the reusable date header component.
- *
- * `date` and `dayName` are kept for backwards-compatibility and can
- * provide an initial value, but the component now manages its own
- * internal date state and will update when the user clicks the arrows.
- */
 interface DateHeaderProps {
+  /**
+   * Optional initial date in MM/DD/YYYY format.
+   * If omitted, the component starts from today's date.
+   */
   date?: string;
-  dayName?: string;
+  /**
+   * Optional callback used by pages that need to react to date changes
+   * (for example, a week-based tasks view).
+   */
+  onDateChange?: (nextDate: Date) => void;
 }
 
-/**
- * Utility to parse a date string in MM/DD/YYYY format.
- * Returns `null` if parsing fails so we can safely fall back.
- */
 const parseMmDdYyyy = (raw?: string): Date | null => {
   if (!raw) return null;
 
-  const parts = raw.split("/");
-  if (parts.length !== 3) return null;
+  const [monthRaw, dayRaw, yearRaw] = raw.split("/");
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const year = Number(yearRaw);
 
-  const [month, day, year] = parts.map(Number);
   if (!month || !day || !year) return null;
-
   return new Date(year, month - 1, day);
 };
 
-/**
- * Formats a JavaScript `Date` as MM/DD/YYYY, matching the Figma design.
- */
 const formatMmDdYyyy = (date: Date): string => {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   const year = date.getFullYear();
-
   return `${month}/${day}/${year}`;
 };
 
+const formatIsoDate = (date: Date): string => {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${year}-${month}-${day}`;
+};
+
+const parseIsoDate = (raw: string | null): Date | null => {
+  if (!raw) return null;
+  const [yearRaw, monthRaw, dayRaw] = raw.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
 /**
- * Header that shows the currently selected date and day of week.
- *
- * The component owns its own `currentDate` state so that clicking the
- * left/right arrows moves backward/forward by one day and automatically
- * refreshes both the numeric date and weekday label.
+ * Shared date header used across app pages.
+ * It supports:
+ * - Day-by-day navigation with left/right arrows.
+ * - Clicking the date to open a popup calendar and jump to any date.
  */
-const DateHeader: React.FC<DateHeaderProps> = ({ date }) => {
-  // Initialise the header date either from the provided prop
-  // (e.g. the design's 02/18/2026) or from the user's current date.
+const DateHeader: React.FC<DateHeaderProps> = ({ date, onDateChange }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const initialPropDate = parseMmDdYyyy(date);
+  const initialQueryDate = parseIsoDate(
+    new URLSearchParams(location.search).get("date"),
+  );
+
   const [currentDate, setCurrentDate] = useState<Date>(() => {
-    const parsed = parseMmDdYyyy(date);
-    return parsed ?? new Date();
+    return initialQueryDate ?? initialPropDate ?? new Date();
   });
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const popupRef = useRef<HTMLDivElement | null>(null);
 
-  // Human‑readable pieces derived from the internal date.
-  const formattedDate = formatMmDdYyyy(currentDate);
-  const dayName = currentDate.toLocaleDateString(undefined, {
-    weekday: "long",
-  });
+  const formattedDate = useMemo(() => formatMmDdYyyy(currentDate), [currentDate]);
+  const dayName = useMemo(
+    () =>
+      currentDate.toLocaleDateString(undefined, {
+        weekday: "long",
+      }),
+    [currentDate],
+  );
 
-  // Move the header one day backward.
-  const handlePreviousDay = () => {
-    setCurrentDate((prev) => {
-      const next = new Date(prev);
-      next.setDate(prev.getDate() - 1);
-      return next;
-    });
+  useEffect(() => {
+    onDateChange?.(currentDate);
+  }, [currentDate, onDateChange]);
+
+  useEffect(() => {
+    const queryDate = parseIsoDate(new URLSearchParams(location.search).get("date"));
+    if (!queryDate) {
+      const params = new URLSearchParams(location.search);
+      params.set("date", formatIsoDate(currentDate));
+      navigate(
+        {
+          pathname: location.pathname,
+          search: `?${params.toString()}`,
+        },
+        { replace: true },
+      );
+    }
+  }, [currentDate, location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (!isPickerOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        popupRef.current &&
+        event.target instanceof Node &&
+        !popupRef.current.contains(event.target)
+      ) {
+        setIsPickerOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isPickerOpen]);
+
+  const commitDate = (nextDate: Date) => {
+    setCurrentDate(nextDate);
+    const params = new URLSearchParams(location.search);
+    params.set("date", formatIsoDate(nextDate));
+    navigate(
+      {
+        pathname: location.pathname,
+        search: `?${params.toString()}`,
+      },
+      { replace: true },
+    );
   };
 
-  // Move the header one day forward.
-  const handleNextDay = () => {
-    setCurrentDate((prev) => {
-      const next = new Date(prev);
-      next.setDate(prev.getDate() + 1);
-      return next;
-    });
+  const shiftDay = (delta: number) => {
+    const nextDate = new Date(currentDate);
+    nextDate.setDate(currentDate.getDate() + delta);
+    commitDate(nextDate);
   };
 
-  /* Shared page-header strip: same top/bottom padding and border on every page
-     so the header location is consistent (Today, Mail, Calendar, Tasks). */
+  const handleCalendarDateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.value) return;
+    const picked = parseIsoDate(event.target.value);
+    if (!picked) return;
+    commitDate(picked);
+    setIsPickerOpen(false);
+  };
+
   return (
     <header className="page-header border-b border-[#F3C5A5] px-8 pb-4 pt-6 text-[#913c14]">
-      <div className="flex items-center justify-center gap-10">
-        {/* Navigate to the previous day */}
-        <button
-          type="button"
-          className="cursor-pointer text-[#913c14]"
-          aria-label="Previous day"
-          onClick={handlePreviousDay}
-        >
-          <span className="material-symbols-outlined text-[40px]">
-            arrow_back
-          </span>
-        </button>
+      <div className="relative">
+        <div className="flex items-center justify-center gap-10">
+          <button
+            type="button"
+            className="cursor-pointer text-[#913c14]"
+            aria-label="Previous day"
+            onClick={() => shiftDay(-1)}
+          >
+            <span className="material-symbols-outlined text-[40px]">arrow_back</span>
+          </button>
 
-        {/* Centered date in MM/DD/YYYY format */}
-        <span className="text-[40px] leading-none tracking-[0.08em]">
-          {formattedDate}
-        </span>
+          <button
+            type="button"
+            onClick={() => setIsPickerOpen((previous) => !previous)}
+            className="cursor-pointer text-[40px] leading-none tracking-[0.08em] text-[#913c14]"
+            aria-label="Choose date from calendar"
+          >
+            {formattedDate}
+          </button>
 
-        {/* Navigate to the next day */}
-        <button
-          type="button"
-          className="cursor-pointer text-[#913c14]"
-          aria-label="Next day"
-          onClick={handleNextDay}
-        >
-          <span className="material-symbols-outlined text-[40px]">
-            arrow_forward
-          </span>
-        </button>
+          <button
+            type="button"
+            className="cursor-pointer text-[#913c14]"
+            aria-label="Next day"
+            onClick={() => shiftDay(1)}
+          >
+            <span className="material-symbols-outlined text-[40px]">arrow_forward</span>
+          </button>
+        </div>
+
+        {isPickerOpen && (
+          <div
+            ref={popupRef}
+            className="absolute left-1/2 top-[calc(100%+10px)] z-20 w-64 -translate-x-1/2 rounded-xl border border-[#F3C5A5] bg-[#FFF9F4] p-3 shadow-lg"
+          >
+            <label className="mb-2 block text-xs font-semibold text-[#913c14]">
+              Jump to date
+            </label>
+            <input
+              type="date"
+              value={formatIsoDate(currentDate)}
+              onChange={handleCalendarDateChange}
+              className="w-full rounded-md border border-[#E6C7B3] bg-white px-3 py-2 text-sm text-[#5A3A2A] focus:outline-none focus:ring-2 focus:ring-[#D3753D]"
+            />
+          </div>
+        )}
       </div>
 
-      {/* Day of week label underneath the date */}
       <p className="mt-1 text-center text-[15px]">{dayName}</p>
     </header>
   );

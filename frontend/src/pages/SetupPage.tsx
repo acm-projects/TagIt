@@ -40,7 +40,7 @@ const SetupPage: React.FC = () => {
   const handleDrop = () => setDragId(null);
 
   return (
-    <div className="min-h-full bg-[#F8E7DD] p-4">
+    <div className="min-h-screen bg-[#F8E7DD] p-4">
       <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center rounded-3xl bg-[#FFF9F4] px-8">
         <div className="w-full max-w-3xl space-y-8 text-center">
           <h1 className="text-4xl font-semibold tracking-wide text-[#A34712]">Setup</h1>

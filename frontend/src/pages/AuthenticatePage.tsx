@@ -43,7 +43,7 @@ const AuthenticatePage: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-full bg-[#F8E7DD] p-4">
+    <div className="relative min-h-screen bg-[#F8E7DD] p-4">
       <PageTopBar
         back={{ label: "Back", to: "/signup" }}
         right={

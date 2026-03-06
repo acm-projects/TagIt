@@ -210,13 +210,13 @@ const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-full bg-[#FFF2E9] p-4">
-      <div className="flex min-h-[calc(100vh-2rem)] w-full rounded-3xl bg-[#FFFBF8]">
+    <div className="min-h-screen bg-[#FFF2E9] p-4">
+      <div className="flex min-h-[calc(100vh-2rem)] w-full overflow-hidden rounded-[30px] bg-[#FFFBF8]">
         {/* Left-hand navigation rail shared with the rest of the app */}
         <AppNavbar />
 
         {/* Main settings column */}
-        <main className="flex-1 px-8 py-6 text-[#A34712]">
+        <main className="flex-1 overflow-auto px-8 py-6 text-[#A34712]">
           {/* Same header strip as other pages so title aligns with date header */}
           <header className="page-header flex flex-col items-center justify-center border-b border-[#F3C5A5] px-8 pb-4 pt-6 text-center">
             <h1 className="text-4xl font-semibold tracking-[0.12em] text-[#913c14]">
