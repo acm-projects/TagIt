@@ -1,15 +1,20 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import DateHeader from "../components/DateHeader";
+import {
+  getTaskProgress,
+  loadTasks,
+  subscribeToTaskUpdates,
+} from "../services/taskProgress";
 
 /**
- * A single actionable task item for the Today page.
- * This shape is backend-ready: API responses can map directly into it.
+ * Important email preview shown on Today.
+ * Backend can map directly into this shape once endpoint is ready.
  */
-type TodayTask = {
-  id: number;
-  title: string;
-  completed: boolean;
+type ImportantEmailPreview = {
+  id: string;
+  sender: string;
+  source: "gmail" | "handshake";
 };
 
 /**
@@ -21,17 +26,27 @@ type TodayEvent = {
   title: string;
 };
 
-const INITIAL_TASK_TITLES: string[] = [
-  "GOV 2306 review",
-  "PHYS review",
-  "Math Ch.2 practice",
-  "Bash scripting exercises",
-  "Next GOVT 2306 chapter",
-  "Group project work",
-  "Check/reply emails",
-  "Return library book",
-  "Organize notes",
-  "Attend ACM meeting",
+const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
+  {
+    id: "mail-1",
+    sender: "John Mathew @Verizon @Handshake",
+    source: "gmail",
+  },
+  {
+    id: "mail-2",
+    sender: "John Mathew @Toyota @Handshake",
+    source: "handshake",
+  },
+  {
+    id: "mail-3",
+    sender: "John Mathew @ACM",
+    source: "handshake",
+  },
+  {
+    id: "mail-4",
+    sender: "John Dollinger @CS 3377",
+    source: "gmail",
+  },
 ];
 
 const EVENTS: TodayEvent[] = [
@@ -41,35 +56,30 @@ const EVENTS: TodayEvent[] = [
 ];
 
 const TodayPage: React.FC = () => {
-  const [tasks, setTasks] = useState<TodayTask[]>(() =>
-    INITIAL_TASK_TITLES.map((title, index) => ({
-      id: index,
-      title,
-      completed: false,
-    })),
-  );
+  const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
 
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter((task) => task.completed).length;
-  const progressPercentage =
-    totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+  useEffect(() => {
+    const refreshProgress = () => {
+      setProgress(getTaskProgress(loadTasks()));
+    };
 
-  /**
-   * Task container grows/shrinks based on the number of tasks so the box
-   * naturally fits the list length while still keeping sane min/max bounds.
-   */
-  const taskCardHeightRem = useMemo(() => {
-    const rowHeightRem = 1.7;
-    const basePaddingRem = 2.5;
-    const computedHeight = tasks.length * rowHeightRem + basePaddingRem;
-    return Math.min(Math.max(computedHeight, 11), 23);
-  }, [tasks.length]);
+    refreshProgress();
+    return subscribeToTaskUpdates(refreshProgress);
+  }, []);
 
-  const handleToggleTaskCompletion = (taskId: number) => {
-    setTasks((previousTasks) =>
-      previousTasks.map((task) =>
-        task.id === taskId ? { ...task, completed: !task.completed } : task,
-      ),
+  const getSourceIcon = (source: ImportantEmailPreview["source"]) => {
+    if (source === "gmail") {
+      return (
+        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#D14836] text-[10px] font-bold text-white">
+          M
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-[#1E70C1] text-[10px] font-bold text-white">
+        H
+      </span>
     );
   };
 
@@ -93,52 +103,44 @@ const TodayPage: React.FC = () => {
               <div className="relative h-2 flex-1 rounded-full bg-[#FFF0E5]">
                 <div
                   className="h-2 rounded-full bg-[#BA4500] transition-[width] duration-200 ease-out"
-                  style={{ width: `${progressPercentage}%` }}
+                  style={{ width: `${progress.progressPercentage}%` }}
                 />
               </div>
               <span className="text-sm font-semibold text-[#BA4500]">
-                {progressPercentage}%
+                {progress.progressPercentage}%
               </span>
             </div>
+
+            <p className="mt-2 text-xs text-[#A34712]">
+              {progress.completedTasks}/{progress.totalTasks} tasks completed
+            </p>
           </section>
 
           <section className="mt-8 max-w-xl">
-            <div className="flex items-baseline gap-2 text-sm font-medium">
+            <div className="flex items-center gap-2 text-sm font-semibold">
               <span className="material-symbols-outlined text-[18px] text-[#913c14]">
-                done_all
+                star
               </span>
-              <span>Tasks</span>
-              <span className="ml-4 text-xs text-[#BA4500]">completed</span>
-              <span className="ml-1 text-base font-semibold text-[#BA4500]">
-                {completedTasks}/{totalTasks}
-              </span>
+              <span>Important Emails</span>
             </div>
 
-            <div
-              className="mt-3 overflow-y-auto rounded-xl bg-[#FFD6B8] px-4 py-3 shadow-sm"
-              style={{ height: `${taskCardHeightRem}rem` }}
-            >
-              <ul className="space-y-1.5">
-                {tasks.map((task) => (
-                  <li
-                    key={task.id}
-                    className="flex items-center gap-3 text-sm text-[#6D2F12]"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={task.completed}
-                      onChange={() => handleToggleTaskCompletion(task.id)}
-                      className="h-4 w-4 flex-none rounded-[3px] border border-[#6D2F12] accent-[#BA4500]"
-                      aria-label={`Mark "${task.title}" as completed`}
-                    />
-                    <span
-                      className={task.completed ? "line-through opacity-70" : ""}
-                    >
-                      {task.title}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+            <div className="mt-3 space-y-2">
+              {IMPORTANT_EMAILS_FILLER.map((mail) => (
+                <button
+                  key={mail.id}
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-xl bg-[#F3E2D5] px-4 py-2 text-left shadow-sm"
+                >
+                  <div className="flex items-center gap-3 text-base text-[#33261F]">
+                    {getSourceIcon(mail.source)}
+                    <span>{mail.sender}</span>
+                  </div>
+
+                  <span className="inline-flex h-7 min-w-[60px] items-center justify-center rounded-full bg-[#D75B00] px-4 text-sm font-semibold text-white">
+                    Open
+                  </span>
+                </button>
+              ))}
             </div>
           </section>
 

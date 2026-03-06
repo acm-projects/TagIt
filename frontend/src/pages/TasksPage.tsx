@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import DateHeader from "../components/DateHeader";
+import { loadTasks, saveTasks } from "../services/taskProgress";
 
 /**
  * Represents a single task on the Tasks page.
@@ -21,18 +22,6 @@ type DeadlineItem = {
   dueDate: string;
   displayDate: string;
 };
-
-const initialTasks: TaskItem[] = [
-  { id: 1, label: "GOV 2306 review", done: false },
-  { id: 2, label: "PHYS review", done: false },
-  { id: 3, label: "Math Ch.2 practice", done: false },
-  { id: 4, label: "Bash scripting exercises", done: false },
-  { id: 5, label: "Next GOVT 2306 chapter", done: false },
-  { id: 6, label: "Group project work", done: false },
-  { id: 7, label: "Check/reply emails", done: false },
-  { id: 8, label: "Return library book", done: false },
-  { id: 9, label: "Organize notes", done: false },
-];
 
 const initialDeadlines: DeadlineItem[] = [
   { id: "phys-lab-1", title: "PHYS 2425 - Lab", dueDate: "2026-02-20", displayDate: "02/20" },
@@ -67,8 +56,12 @@ const getDeadlinePriorityColor = (deadline: DeadlineItem): string => {
 };
 
 const TasksPage: React.FC = () => {
-  const [tasks, setTasks] = useState<TaskItem[]>(initialTasks);
+  const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
   const [deadlines] = useState<DeadlineItem[]>(initialDeadlines);
+
+  useEffect(() => {
+    saveTasks(tasks);
+  }, [tasks]);
 
   const toggleTask = (taskId: number) => {
     setTasks((previousTasks) =>
