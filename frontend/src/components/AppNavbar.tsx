@@ -13,22 +13,32 @@ const AppNavbar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  /* Active item changes only icon color (no background highlight). */
   return (
     <nav className="flex w-20 flex-col items-center justify-between border-r border-[#F7C9AA] bg-[#FFF9F4] py-8">
-      <div className="flex flex-col items-center gap-6 mt-1000">
+      <div className="mt-16 flex flex-col items-center gap-32">
         {NAV_ITEMS.map(({ path, icon, label }) => {
           const isActive = location.pathname === path;
+
           return (
             <button
               key={path}
               type="button"
               aria-label={label}
-              onClick={() => navigate(path)}
-              className={`flex h-11 w-11 items-center justify-center rounded-xl transition-colors cursor-pointer ${
-                isActive ? "bg-[#F7C9AA] text-[#A34712]" : "text-[#8B6F60] hover:bg-[#F7C9AA]/50 hover:text-[#A34712]"
+              aria-current={isActive ? "page" : undefined}
+              onClick={() =>
+                navigate({
+                  pathname: path,
+                  search: location.search,
+                })
+              }
+              className={`flex h-16 w-16 items-center justify-center rounded-xl cursor-pointer transition-colors focus:outline-none focus:ring-0 ${
+                isActive
+                  ? "bg-transparent text-[#A34712]"
+                  : "bg-transparent text-[#8B6F60] hover:text-[#A34712]"
               }`}
             >
-              <span className="material-symbols-outlined text-[28px]">{icon}</span>
+              <span className="material-symbols-outlined text-[64px]">{icon}</span>
             </button>
           );
         })}

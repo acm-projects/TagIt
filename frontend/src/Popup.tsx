@@ -5,7 +5,7 @@ const Popup: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-full bg-[#FFF2E9] p-4">
+    <div className="min-h-screen bg-[#FFF2E9] p-4">
       <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center rounded-3xl bg-[#FDC3A1] px-8 text-center">
         <h1 className="font-instrument text-6xl italic text-black">TagIt</h1>
 

@@ -6,7 +6,7 @@ const SignupPage: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="relative min-h-full bg-[#F8E7DD] p-4">
+    <div className="relative min-h-screen bg-[#F8E7DD] p-4">
       <PageTopBar back={{ label: "Back", to: "/" }} />
       <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center rounded-3xl bg-[#FDE5D1] px-10 pt-16">
         <h1 className="mb-10 font-instrument text-5xl font-normal text-[#A34712]">

@@ -4,17 +4,17 @@ import DateHeader from "../components/DateHeader";
 
 const CalendarPage: React.FC = () => {
   return (
-    <div className="min-h-full bg-[#F8E7DD] p-4">
-      <div className="flex min-h-[calc(100vh-2rem)] w-full items-stretch rounded-3xl bg-[#FFFBF8]">
+    <div className="min-h-screen bg-[#F8E7DD] p-4">
+      <div className="flex min-h-[calc(100vh-2rem)] w-full items-stretch overflow-hidden rounded-[30px] bg-[#FFFBF8]">
         <AppNavbar />
 
-        {/* Main content */}
-        <main className="flex-1 px-8 py-6">
+        {/* Main content: same header strip as other pages */}
+        <main className="flex flex-1 flex-col overflow-auto px-8 py-6">
           <DateHeader />
 
           {/* Calendar Events */}
           <section className="mt-8">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-[#A34712] border-b border-[#F3C5A5] pb-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-[#A34712]">
               <span className="text-base">🗓</span>
               <span>Calendar Events</span>
             </h2>
