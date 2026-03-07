@@ -9,7 +9,7 @@ from AI_Summary import analyze_email_with_gemini
 
 
 load_dotenv()
-app = Flask(__name__) 
+app = Flask(__name__)
 MONGO_URI = os.getenv("MONGO_URI")
 CORS(app)
 
