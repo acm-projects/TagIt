@@ -6,14 +6,24 @@ type Priority = {
   label: string;
 };
 
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <span className={className} aria-hidden>
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="3 6 5 6 21 6" />
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        <line x1="10" y1="11" x2="10" y2="17" />
+        <line x1="14" y1="11" x2="14" y2="17" />
+      </svg>
+    </span>
+  );
+}
+
 const initialPriorities: Priority[] = [
   { id: "1", label: "Club Events" },
   { id: "2", label: "Class/Assignment Notifications" },
   { id: "3", label: "Job/Internship Opportunities" },
   { id: "4", label: "Deadlines" },
-  { id: "5", label: "High Priority" },
-  { id: "6", label: "Medium Priority" },
-  { id: "7", label: "Low Priority" },
 ];
 
 const SetupPage: React.FC = () => {
@@ -21,10 +31,18 @@ const SetupPage: React.FC = () => {
   const [priorities, setPriorities] = useState<Priority[]>(initialPriorities);
   const [dragId, setDragId] = useState<string | null>(null);
 
-  const handleDragStart = (id: string) => setDragId(id);
+  const handleDragStart = (id: string, e: React.DragEvent<HTMLDivElement>) => {
+    setDragId(id);
+    // Remove default drag preview (non-rounded box) and green plus by using a transparent image
+    const img = new Image();
+    img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+    e.dataTransfer.setDragImage(img, 0, 0);
+    e.dataTransfer.effectAllowed = "move";
+  };
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>, overId: string) => {
     event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
     if (dragId === null || dragId === overId) return;
 
     const draggedIndex = priorities.findIndex((p) => p.id === dragId);
@@ -39,11 +57,15 @@ const SetupPage: React.FC = () => {
 
   const handleDrop = () => setDragId(null);
 
+  const handleRemovePriority = (id: string) => {
+    setPriorities((prev) => prev.filter((p) => p.id !== id));
+  };
+
   return (
-    <div className="min-h-screen bg-[#F8E7DD] p-4">
+    <div className="min-h-full bg-[#F8E7DD] p-4">
       <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center rounded-3xl bg-[#FFF9F4] px-8">
         <div className="w-full max-w-3xl space-y-8 text-center">
-          <h1 className="text-4xl font-semibold tracking-wide text-[#A34712]">Setup</h1>
+          <h1 className="mb-4 font-instrument text-5xl font-normal text-[#A34712]">Setup</h1>
 
           <div className="text-left">
             <p className="mb-4 text-lg font-medium text-[#A34712]">Order Priorities:</p>
@@ -52,7 +74,7 @@ const SetupPage: React.FC = () => {
                 <div
                   key={priority.id}
                   draggable
-                  onDragStart={() => handleDragStart(priority.id)}
+                  onDragStart={(e) => handleDragStart(priority.id, e)}
                   onDragOver={(e) => handleDragOver(e, priority.id)}
                   onDrop={handleDrop}
                   className="flex items-center justify-between rounded-full bg-[#F8B98C] px-4 py-2.5 text-[#3F2A1E] shadow-sm"
@@ -63,9 +85,14 @@ const SetupPage: React.FC = () => {
                     </span>
                     <span>{priority.label}</span>
                   </div>
-                  <span className="text-lg text-[#3F2A1E]" aria-hidden>
-                    🗑️
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePriority(priority.id)}
+                    className="shrink-0 rounded-full p-2 text-[#7A4A2D] hover:bg-[#F7C9AA]/50 transition-colors"
+                    aria-label={`Remove ${priority.label}`}
+                  >
+                    <TrashIcon />
+                  </button>
                 </div>
               ))}
             </div>
@@ -78,7 +105,7 @@ const SetupPage: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => navigate("/calendar")}
+              onClick={() => navigate("/today")}
               className="mx-auto block w-52 rounded-md bg-[#A34712] py-3 text-base font-medium text-white"
             >
               Finish setup
@@ -91,3 +118,5 @@ const SetupPage: React.FC = () => {
 };
 
 export default SetupPage;
+
+
