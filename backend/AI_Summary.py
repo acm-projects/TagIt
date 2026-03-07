@@ -28,8 +28,9 @@ def analyze_email_with_gemini(subject, body):
     3. "priorityLevel": Integer 1-4 (1=Critical, 4=Low).
     4. "uiBadges": Array of 1-2 short tags (e.g. ["Internship", "Resume"]).
     5. "tasks": Array of actionable tasks.
-    6. "deadlines": Array of deadline statements.
+    6. "deadlines": Array of deadline statements that includes a date and time.
     7. "events": Array of event statements.
+    
 
     Input Email: 
     Subject: {subject} 
