@@ -117,30 +117,39 @@ const TodayPage: React.FC = () => {
           </section>
 
           <section className="mt-8 max-w-xl">
-            <div className="flex items-center gap-2 text-sm font-semibold">
+            <div className="flex items-center gap-2 text-sm font-medium">
               <span className="material-symbols-outlined text-[18px] text-[#913c14]">
                 star
               </span>
               <span>Important Emails</span>
             </div>
 
-            <div className="mt-3 space-y-2">
-              {IMPORTANT_EMAILS_FILLER.map((mail) => (
-                <button
-                  key={mail.id}
-                  type="button"
-                  className="flex w-full items-center justify-between rounded-xl bg-[#F3E2D5] px-4 py-2 text-left shadow-sm"
-                >
-                  <div className="flex items-center gap-3 text-base text-[#33261F]">
-                    {getSourceIcon(mail.source)}
-                    <span>{mail.sender}</span>
-                  </div>
+            <div className="mt-3 space-y-3">
+              {IMPORTANT_EMAILS_FILLER.map((mail, index) => {
+                const background =
+                  index === 0
+                    ? "bg-[#FFF0E5]"
+                    : index === 1
+                    ? "bg-[#FAE6D9]"
+                    : "bg-[#FED3B4]";
 
-                  <span className="inline-flex h-7 min-w-[60px] items-center justify-center rounded-full bg-[#D75B00] px-4 text-sm font-semibold text-white">
-                    Open
-                  </span>
-                </button>
-              ))}
+                return (
+                  <button
+                    key={mail.id}
+                    type="button"
+                    className={`flex w-full items-center justify-between rounded-xl px-4 py-2 text-left text-sm text-[#6D2F12] ${background}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {getSourceIcon(mail.source)}
+                      <span>{mail.sender}</span>
+                    </div>
+
+                    <span className="inline-flex h-7 min-w-[60px] items-center justify-center rounded-full bg-[#D75B00] px-4 text-sm font-semibold text-white">
+                      Open
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </section>
 
@@ -166,7 +175,7 @@ const TodayPage: React.FC = () => {
                     key={event.title}
                     className={`flex items-center justify-between rounded-xl px-4 py-2 text-sm text-[#6D2F12] ${background}`}
                   >
-                    <span className="text-xs font-medium">{event.time}</span>
+                    <span className="text-sm font-medium">{event.time}</span>
                     <span className="ml-6 flex-1 text-right md:text-left">
                       {event.title}
                     </span>
