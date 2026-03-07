@@ -150,7 +150,10 @@ app.get('/oauth2callback', async (req, res) => {
     try {
         const { tokens } = await oauth2Client.getToken(code);
         oauth2Client.setCredentials(tokens);
-        if (tokens.refresh_token) writeEnvKey('REFRESH_TOKEN', tokens.refresh_token);
+        if (tokens.refresh_token) {
+            writeEnvKey('REFRESH_TOKEN', tokens.refresh_token);
+            process.env.REFRESH_TOKEN = tokens.refresh_token; 
+        }
         res.send(successHtml());
     } catch (err) {
         console.error(err);
