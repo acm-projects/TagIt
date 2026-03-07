@@ -18,6 +18,7 @@ const {
     MS_CLIENT_SECRET,
     MS_TENANT_ID = 'common',
     MS_REDIRECT_URI = 'http://localhost:3000/auth/microsoft/callback',
+    FLASK_API_URL = 'http://localhost:8000/api/emails',
     PORT = 3000,
 } = process.env;
 
@@ -32,7 +33,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-//Google OAuth
+// ─── Google OAuth ────────────────────────────────────────────────────────────
 
 const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
 if (REFRESH_TOKEN) oauth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
@@ -45,7 +46,8 @@ function base64UrlToUtf8(b64url = '') {
 }
 
 function writeEnvKey(key, value) {
-    const envPath = path.resolve('.env');
+    const envPath = path.join(__dirname, '.env');  // ← __dirname instead of relative path
+    console.log('Writing token to:', envPath);
     let content = '';
     try { content = fs.readFileSync(envPath, 'utf8'); } catch (_) {}
     const regex = new RegExp(`^${key}=.*$`, 'm');
@@ -54,7 +56,7 @@ function writeEnvKey(key, value) {
     fs.writeFileSync(envPath, content, 'utf8');
 }
 
-// Microsoft OAuth helpers
+// ─── Microsoft OAuth helpers ─────────────────────────────────────────────────
 
 const MS_SCOPES = [
     'offline_access',
@@ -110,7 +112,28 @@ async function graphGet(path, token) {
     return data;
 }
 
-// Google routes
+// ─── Helper: forward a parsed email to Flask → AI → MongoDB ─────────────────
+
+async function forwardToFlask(payload) {
+    const resp = await fetch(FLASK_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+
+    // Check content type before parsing JSON
+    const contentType = resp.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        const text = await resp.text();
+        throw new Error(`Flask returned non-JSON (status ${resp.status}): ${text.slice(0, 200)}`);
+    }
+
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `Flask error ${resp.status}`);
+    return data;
+}
+
+// ─── Google Auth routes ───────────────────────────────────────────────────────
 
 app.get('/auth/url', (req, res) => {
     const scopes = [
@@ -135,22 +158,39 @@ app.get('/oauth2callback', async (req, res) => {
     }
 });
 
+// ─── Gmail routes ─────────────────────────────────────────────────────────────
+
+// GET /latest — fetch the single most recent Gmail message and forward to Flask
 app.get('/latest', async (req, res) => {
     if (!REFRESH_TOKEN) return res.status(400).json({ error: 'REFRESH_TOKEN not set.' });
     try {
         const list = await gmail.users.messages.list({ userId: 'me', maxResults: 1 });
         if (!list.data?.messages?.length) return res.status(404).json({ error: 'No messages found' });
+
         const id = list.data.messages[0].id;
         const msgResp = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
         const message = msgResp.data;
-        let plainBody = extractPlainBody(message);
-        res.json({ id, snippet: message.snippet, plainBody });
+        const plainBody = extractPlainBody(message);
+        const subjectHeader = message.payload?.headers?.find(h => h.name.toLowerCase() === 'subject');
+
+        const payload = {
+            id,
+            subject: subjectHeader?.value || '(no subject)',
+            body: plainBody || message.snippet || '',
+            snippet: message.snippet,
+        };
+
+        // Forward to Flask → Gemini → MongoDB
+        const flaskResult = await forwardToFlask(payload);
+
+        res.json({ id, snippet: message.snippet, plainBody, flaskResult });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }
 });
 
+// GET /messages — list Gmail messages (no forwarding, listing only)
 app.get('/messages', async (req, res) => {
     try {
         const { q, maxResults = 10 } = req.query;
@@ -162,6 +202,7 @@ app.get('/messages', async (req, res) => {
     }
 });
 
+// GET /message/:id — fetch a single Gmail message and forward to Flask
 app.get('/message/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -171,16 +212,72 @@ app.get('/message/:id', async (req, res) => {
         const plainBody = extractPlainBody(message);
         const subjectHeader = message.payload?.headers?.find(h => h.name.toLowerCase() === 'subject');
         const subject = subjectHeader?.value || message.snippet || '(no subject)';
-        res.json({ message, plainBody, subject });
+
+        const payload = {
+            id,
+            subject,
+            body: plainBody || message.snippet || '',
+            snippet: message.snippet,
+        };
+
+        // Forward to Flask → Gemini → MongoDB
+        const flaskResult = await forwardToFlask(payload);
+
+        res.json({ message, plainBody, subject, flaskResult });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }
 });
 
-// Microsoft / Outlook routes ───────────────────────────────────────────────
+// POST /fetch-and-process — bulk fetch Gmail messages and forward each to Flask
+app.post('/fetch-and-process', async (req, res) => {
+    try {
+        const { maxResults = 10, q } = req.body;
 
-// GET /auth/microsoft/url
+        const list = await gmail.users.messages.list({
+            userId: 'me',
+            maxResults: parseInt(maxResults, 10),
+            ...(q && { q }),
+        });
+
+        if (!list.data?.messages?.length) {
+            return res.status(404).json({ error: 'No messages found' });
+        }
+
+        const results = [];
+
+        for (const { id } of list.data.messages) {
+            const msgResp = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
+            const message = msgResp.data;
+            const plainBody = extractPlainBody(message);
+            const subjectHeader = message.payload?.headers?.find(h => h.name.toLowerCase() === 'subject');
+
+            const payload = {
+                id,
+                subject: subjectHeader?.value || '(no subject)',
+                body: plainBody || message.snippet || '',
+                snippet: message.snippet,
+            };
+
+            try {
+                const flaskResult = await forwardToFlask(payload);
+                results.push({ id, status: 'ok', flaskResult });
+            } catch (flaskErr) {
+                console.error(`Flask error for message ${id}:`, flaskErr.message);
+                results.push({ id, status: 'error', error: flaskErr.message });
+            }
+        }
+
+        res.json({ processed: results.length, results });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message || String(err) });
+    }
+});
+
+// ─── Microsoft / Outlook routes ───────────────────────────────────────────────
+
 app.get('/auth/microsoft/url', (req, res) => {
     if (!MS_CLIENT_ID) return res.status(500).json({ error: 'MS_CLIENT_ID not configured on server.' });
     const params = new URLSearchParams({
@@ -195,7 +292,6 @@ app.get('/auth/microsoft/url', (req, res) => {
     res.json({ url });
 });
 
-// GET /auth/microsoft/callback
 app.get('/auth/microsoft/callback', async (req, res) => {
     const { code, error, error_description } = req.query;
     if (error) return res.status(400).send(`Auth error: ${error_description || error}`);
@@ -232,12 +328,11 @@ app.get('/auth/microsoft/callback', async (req, res) => {
     }
 });
 
-// GET /auth/microsoft/status — check if MS token is available
 app.get('/auth/microsoft/status', (req, res) => {
     res.json({ authenticated: !!MS_REFRESH_TOKEN || (!!msAccessToken && Date.now() < msTokenExpiry - 30_000) });
 });
 
-// GET /outlook/messages?maxResults=10&q=filter
+// GET /outlook/messages — list Outlook messages (no forwarding, listing only)
 app.get('/outlook/messages', async (req, res) => {
     try {
         const token = await getMsAccessToken();
@@ -245,7 +340,6 @@ app.get('/outlook/messages', async (req, res) => {
         let url = `/me/messages?$top=${maxResults}&$select=id,subject,snippet,bodyPreview,receivedDateTime`;
         if (q) url += `&$search="${encodeURIComponent(q)}"`;
         const data = await graphGet(url, token);
-        // Normalize to same shape as Gmail list: { messages: [{id}] }
         res.json({ messages: (data.value || []).map(m => ({ id: m.id, subject: m.subject, snippet: m.bodyPreview })) });
     } catch (err) {
         console.error(err);
@@ -253,7 +347,7 @@ app.get('/outlook/messages', async (req, res) => {
     }
 });
 
-// GET /outlook/message/:id
+// GET /outlook/message/:id — fetch a single Outlook message and forward to Flask
 app.get('/outlook/message/:id', async (req, res) => {
     try {
         const token = await getMsAccessToken();
@@ -262,14 +356,70 @@ app.get('/outlook/message/:id', async (req, res) => {
         const plainBody = msg.body?.contentType === 'text'
             ? msg.body.content
             : msg.bodyPreview || '';
-        res.json({ message: msg, plainBody, subject: msg.subject || msg.bodyPreview || '(no subject)' });
+        const subject = msg.subject || msg.bodyPreview || '(no subject)';
+
+        const payload = {
+            id,
+            subject,
+            body: plainBody,
+            snippet: msg.bodyPreview || '',
+        };
+
+        // Forward to Flask → Gemini → MongoDB
+        const flaskResult = await forwardToFlask(payload);
+
+        res.json({ message: msg, plainBody, subject, flaskResult });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }
 });
 
-// Google Calendar (shared — works for email from either provider)
+// POST /outlook/fetch-and-process — bulk fetch Outlook messages and forward each to Flask
+app.post('/outlook/fetch-and-process', async (req, res) => {
+    try {
+        const token = await getMsAccessToken();
+        const { maxResults = 10, q } = req.body;
+
+        let url = `/me/messages?$top=${maxResults}&$select=id,subject,bodyPreview,body,receivedDateTime`;
+        if (q) url += `&$search="${encodeURIComponent(q)}"`;
+        const data = await graphGet(url, token);
+
+        if (!data.value?.length) {
+            return res.status(404).json({ error: 'No messages found' });
+        }
+
+        const results = [];
+
+        for (const msg of data.value) {
+            const plainBody = msg.body?.contentType === 'text'
+                ? msg.body.content
+                : msg.bodyPreview || '';
+
+            const payload = {
+                id: msg.id,
+                subject: msg.subject || '(no subject)',
+                body: plainBody,
+                snippet: msg.bodyPreview || '',
+            };
+
+            try {
+                const flaskResult = await forwardToFlask(payload);
+                results.push({ id: msg.id, status: 'ok', flaskResult });
+            } catch (flaskErr) {
+                console.error(`Flask error for message ${msg.id}:`, flaskErr.message);
+                results.push({ id: msg.id, status: 'error', error: flaskErr.message });
+            }
+        }
+
+        res.json({ processed: results.length, results });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message || String(err) });
+    }
+});
+
+// ─── Google Calendar ──────────────────────────────────────────────────────────
 
 app.post('/calendar/add-event', async (req, res) => {
     const { title, date } = req.body;
@@ -290,6 +440,8 @@ app.post('/calendar/add-event', async (req, res) => {
         res.status(500).json({ error: err.message || String(err) });
     }
 });
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function extractPlainBody(message) {
     function findPlain(parts = []) {

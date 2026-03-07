@@ -8,16 +8,17 @@ from AI_Summary import analyze_email_with_gemini
 
 
 load_dotenv()
-app = Flask(name) 
+app = Flask(__name__)
 MONGO_URI = os.getenv("MONGO_URI")
 
 try:
-    client = MongoClient(MONGO_URI)
-    db = client.get_database()
-    client.admin.command('ping') 
-    print("Connected to MongoDB and pinged")
-except Exception as e: 
-    print(f"Error connecting to MongoDB: {e}")
+    mongo_client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
+    db = mongo_client.get_database("tagit")
+    mongo_client.admin.command('ping')
+    print("Connected to MongoDB")
+except Exception as e:
+    print(f"MongoDB connection failed: {e}")
+    raise SystemExit(1)
 
 
 
@@ -49,5 +50,5 @@ def add_email():
         "ai_summary": ai_results["summary"]
     }), 201
 
-if name == "main":
+if __name__ == "__main__":
     app.run(debug=True, port=8000)

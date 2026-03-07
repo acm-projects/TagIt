@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 from flask import json
-from google import genai
+import google.generativeai as genai
 import requests
 import os 
 
@@ -26,9 +26,9 @@ import os
 
 load_dotenv()
 api = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=api) 
+client = genai.configure(api_key=api)
 
-Tags = ["Internship", "Job Offer", "Meeting Request", "Assigments/Deadlines", "Newsletter", "Other"]; 
+TAGS = ["Internship", "Job Offer", "Meeting Request", "Assignments/Deadlines", "Newsletter", "Other"]
 
 
 def analyze_email_with_gemini(subject, body):
