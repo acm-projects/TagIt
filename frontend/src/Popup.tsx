@@ -4,7 +4,7 @@ const BACKEND_BASE = "http://localhost:3000";
 
 type Provider = "gmail" | "outlook";
 
-const Popup: React.FC = () => {
+const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
   const [provider, setProvider] = useState<Provider>("gmail");
   const [loading, setLoading] = useState(false);
   const [calLoading, setCalLoading] = useState(false);
@@ -30,7 +30,8 @@ const Popup: React.FC = () => {
     setSubject(null);
     setCalStatus(null);
   }
-  // ── Send to Python AI Pipeline ─────────────────────────────────────────────
+
+  // Send to Python AI Pipeline
   async function processWithAI(emailSubject: string, emailBody: string, emailId: string) {
     try {
       const res = await fetch("http://127.0.0.1:8000/api/emails", {
@@ -46,7 +47,7 @@ const Popup: React.FC = () => {
       if (!res.ok) throw new Error("Python server error");
       
       const data = await res.json();
-      return data.ai_summary; // Matches the key from your Python backend
+      return data.ai_summary;
 
     } catch (err) {
       console.error("AI Pipeline error:", err);
@@ -59,8 +60,7 @@ const Popup: React.FC = () => {
     resetState();
   }
 
-  // ── Open OAuth popup and wait for success message ──────────────────────────
-
+  // Open OAuth popup and wait for success message
   function openAuthPopup(url: string): Promise<void> {
     return new Promise((resolve) => {
       const win = window.open(url, "_blank", "width=500,height=700");
@@ -77,8 +77,7 @@ const Popup: React.FC = () => {
     });
   }
 
-  // ── Sign in to Microsoft ───────────────────────────────────────────────────
-
+  // Sign in to Microsoft
   async function signInMicrosoft() {
     setLoading(true);
     resetState();
@@ -98,8 +97,7 @@ const Popup: React.FC = () => {
     }
   }
 
-  // ── Fetch latest email (Gmail or Outlook) ──────────────────────────────────
-
+  // Fetch latest email (Gmail or Outlook)
   async function showLatestEmail() {
     setLoading(true);
     resetState();
@@ -117,7 +115,6 @@ const Popup: React.FC = () => {
   async function fetchGmailLatest() {
     const listResp = await fetch(`${BACKEND_BASE}/messages?maxResults=1`);
     if (!listResp.ok) {
-      // Trigger Google auth
       const authUrlResp = await fetch(`${BACKEND_BASE}/auth/url`);
       if (authUrlResp.ok) {
         const { url } = await authUrlResp.json();
@@ -140,9 +137,8 @@ const Popup: React.FC = () => {
     const rawBody = msgData.plainBody || msgData.message?.snippet || "";
     
     setSubject(rawSubject);
-    setMessage("🤖 Generating AI Summary..."); // Shows the user the AI is thinking!
+    setMessage("Generating AI Summary...");
     
-    // Send to Python and wait for the summary
     const summary = await processWithAI(rawSubject, rawBody, id);
     setMessage(summary);
   }
@@ -156,7 +152,6 @@ const Popup: React.FC = () => {
     const listResp = await fetch(`${BACKEND_BASE}/outlook/messages?maxResults=1`);
     if (!listResp.ok) {
       const data = await listResp.json().catch(() => ({}));
-      // If unauthorized, re-auth
       if (listResp.status === 500 && data.error?.toLowerCase().includes('token')) {
         setMsAuthed(false);
         setError("Microsoft session expired. Please sign in again.");
@@ -177,15 +172,13 @@ const Popup: React.FC = () => {
     const rawBody = msgData.plainBody || msgData.message?.bodyPreview || "";
     
     setSubject(rawSubject);
-    setMessage("🤖 Generating AI Summary..."); 
+    setMessage("Generating AI Summary...");
 
-    // Send to Python and wait for the summary
     const summary = await processWithAI(rawSubject, rawBody, id);
     setMessage(summary);
   }
 
-  // ── Add to Google Calendar ─────────────────────────────────────────────────
-
+  // Add to Google Calendar
   async function addToCalendar() {
     if (!subject) return;
     setCalLoading(true);
@@ -219,11 +212,20 @@ const Popup: React.FC = () => {
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <div className="p-4 min-w-[320px]">
-      <h1 className="text-3xl font-bold mb-4">TagIt</h1>
+      {/* Header with logout */}
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-3xl font-bold">TagIt</h1>
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="text-xs text-gray-400 hover:text-gray-600 underline"
+          >
+            Log out
+          </button>
+        )}
+      </div>
 
       {/* Provider toggle */}
       <div className="flex gap-2 mb-4">
@@ -258,7 +260,7 @@ const Popup: React.FC = () => {
             disabled={loading}
             className="bg-blue-700 text-white px-3 py-1.5 rounded hover:bg-blue-800 disabled:opacity-50"
           >
-            {loading ? "Opening sign-in…" : "Sign in with Microsoft"}
+            {loading ? "Opening sign-in..." : "Sign in with Microsoft"}
           </button>
         </div>
       )}
@@ -283,7 +285,7 @@ const Popup: React.FC = () => {
         onClick={showLatestEmail}
         disabled={loading}
       >
-        {loading ? "Loading…" : `Show latest ${provider === "gmail" ? "Gmail" : "Outlook"} email`}
+        {loading ? "Loading..." : `Show latest ${provider === "gmail" ? "Gmail" : "Outlook"} email`}
       </button>
 
       {error && (
@@ -306,7 +308,7 @@ const Popup: React.FC = () => {
             onClick={addToCalendar}
             disabled={calLoading || !subject}
           >
-            {calLoading ? "Adding…" : "Add email title to today's calendar"}
+            {calLoading ? "Adding..." : "Add email title to today's calendar"}
           </button>
 
           {calStatus && (

@@ -64,7 +64,3 @@ def analyze_email_with_gemini(subject, body):
             "deadlines": [],
             "events": []
         }
-
-
-
-
