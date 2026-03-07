@@ -1,44 +1,50 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import todayIcon from "../assets/nav-buttons/today.png";
+import mailIcon from "../assets/nav-buttons/mail.png";
+import calendarIcon from "../assets/nav-buttons/calender.png";
+import tasksIcon from "../assets/nav-buttons/tasks.png";
+import settingsIcon from "../assets/nav-buttons/settings.png";
 
-const NAV_ITEMS: { path: string; icon: string; label: string }[] = [
-  { path: "/today", icon: "today", label: "Today" },
-  { path: "/mail", icon: "mail", label: "Mail" },
-  { path: "/calendar", icon: "calendar_month", label: "Calendar" },
-  { path: "/tasks", icon: "task_alt", label: "Tasks" },
-  { path: "/settings", icon: "settings", label: "Settings" },
+const NAV_ITEMS: { path: string; iconSrc: string; label: string }[] = [
+  { path: "/today", iconSrc: todayIcon, label: "Today" },
+  { path: "/mail", iconSrc: mailIcon, label: "Mail" },
+  { path: "/calendar", iconSrc: calendarIcon, label: "Calendar" },
+  { path: "/tasks", iconSrc: tasksIcon, label: "Tasks" },
+  { path: "/settings", iconSrc: settingsIcon, label: "Settings" },
 ];
 
 const AppNavbar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  /* Active item changes only icon color (no background highlight). */
   return (
     <nav className="sticky top-0 flex h-full min-h-0 w-20 shrink-0 flex-col items-center border-r border-[#F7C9AA] bg-[#FFF9F4] py-8">
       <div className="flex flex-1 flex-col items-center justify-evenly">
         {NAV_ITEMS.map(({ path, icon, label }) => {
           const isActive = location.pathname === path;
-
           return (
             <button
               key={path}
               type="button"
               aria-label={label}
-              aria-current={isActive ? "page" : undefined}
-              onClick={() =>
-                navigate({
-                  pathname: path,
-                  search: location.search,
-                })
-              }
-              className={`flex h-16 w-16 items-center justify-center rounded-xl cursor-pointer transition-colors focus:outline-none focus:ring-0 ${
-                isActive
-                  ? "bg-transparent text-[#A34712]"
-                  : "bg-transparent text-[#8B6F60] hover:text-[#A34712]"
-              }`}
+              onClick={() => navigate(path)}
+              className="flex h-11 w-11 items-center justify-center rounded-xl transition-colors cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[64px]">{icon}</span>
+              <span
+                aria-hidden="true"
+                className={`h-7 w-7 ${isActive ? "bg-[#A34712]" : "bg-[#8B6F60]"}`}
+                style={{
+                  WebkitMaskImage: `url(${iconSrc})`,
+                  maskImage: `url(${iconSrc})`,
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                  WebkitMaskSize: "contain",
+                  maskSize: "contain",
+                }}
+              />
             </button>
           );
         })}

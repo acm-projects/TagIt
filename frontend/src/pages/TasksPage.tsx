@@ -58,6 +58,7 @@ const getDeadlinePriorityColor = (deadline: DeadlineItem): string => {
 const TasksPage: React.FC = () => {
   const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
   const [deadlines] = useState<DeadlineItem[]>(initialDeadlines);
+  const [activeTab, setActiveTab] = useState<"deadlines" | "tasks">("deadlines");
 
   useEffect(() => {
     saveTasks(tasks);
@@ -84,71 +85,96 @@ const TasksPage: React.FC = () => {
           <DateHeader date="02/18/2026" />
 
           <section className="mt-6">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <span className="material-symbols-outlined text-[18px]">hourglass_bottom</span>
-              <span>Deadlines</span>
+            <div className="inline-flex rounded-full bg-[#FBE7D7] p-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab("deadlines")}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                  activeTab === "deadlines" ? "bg-[#D3753D] text-white" : "text-[#A34712]"
+                }`}
+              >
+                Deadlines
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("tasks")}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                  activeTab === "tasks" ? "bg-[#D3753D] text-white" : "text-[#A34712]"
+                }`}
+              >
+                Tasks
+              </button>
             </div>
+          </section>
 
-            <div className="mt-3 space-y-3">
-              {deadlines.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-stretch gap-3 rounded-xl bg-[#FBE7D7] px-3 py-2 shadow-sm"
-                >
-                  <span
-                    className="mt-1 w-1 rounded-full"
-                    style={{ backgroundColor: getDeadlinePriorityColor(item) }}
-                  />
+          {activeTab === "deadlines" ? (
+            <section className="mt-6">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <span className="material-symbols-outlined text-[18px]">hourglass_bottom</span>
+                <span>Deadlines</span>
+              </div>
 
-                  <div className="flex flex-1 items-center justify-between text-sm text-[#4E3C34]">
-                    <span className="pr-3">{item.title}</span>
-                    <span className="text-xs font-medium text-[#7A4A2D]">
-                      {item.displayDate}
-                    </span>
+              <div className="mt-3 space-y-3">
+                {deadlines.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-stretch gap-3 rounded-xl bg-[#FBE7D7] px-3 py-2 shadow-sm"
+                  >
+                    <span
+                      className="mt-1 w-1 rounded-full"
+                      style={{ backgroundColor: getDeadlinePriorityColor(item) }}
+                    />
+
+                    <div className="flex flex-1 items-center justify-between text-sm text-[#4E3C34]">
+                      <span className="pr-3">{item.title}</span>
+                      <span className="text-xs font-medium text-[#7A4A2D]">
+                        {item.displayDate}
+                      </span>
+                    </div>
+
+                    <button className="ml-2 inline-flex items-center justify-center rounded-full bg-[#D3753D] px-3 py-1 text-xs font-semibold text-white">
+                      Done
+                    </button>
                   </div>
+                ))}
+              </div>
+            </section>
+          ) : (
+            <section className="mt-6">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <span className="material-symbols-outlined text-[18px]">task_alt</span>
+                <span>Tasks</span>
+              </div>
 
-                  <button className="ml-2 inline-flex items-center justify-center rounded-full bg-[#D3753D] px-3 py-1 text-xs font-semibold text-white">
-                    Done
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
+              <div className="mt-3 space-y-2 text-sm text-[#5A3A2A]">
+                {tasks.map((task) => (
+                  <label
+                    key={task.id}
+                    className="flex cursor-pointer items-center gap-3"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={task.done}
+                      onChange={() => toggleTask(task.id)}
+                      className="h-4 w-4 rounded-[3px] border border-[#6D2F12] accent-[#BA4500]"
+                      aria-label={`Mark "${task.label}" as completed`}
+                    />
+                    <span className={task.done ? "line-through opacity-70" : ""}>
+                      {task.label}
+                    </span>
+                  </label>
+                ))}
+              </div>
 
-          <section className="mt-8">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <span className="material-symbols-outlined text-[18px]">task_alt</span>
-              <span>Tasks</span>
-            </div>
-
-            <div className="mt-3 space-y-2 text-sm text-[#5A3A2A]">
-              {tasks.map((task) => (
-                <label
-                  key={task.id}
-                  className="flex cursor-pointer items-center gap-3"
-                >
-                  <input
-                    type="checkbox"
-                    checked={task.done}
-                    onChange={() => toggleTask(task.id)}
-                    className="h-4 w-4 rounded-[3px] border border-[#6D2F12] accent-[#BA4500]"
-                    aria-label={`Mark "${task.label}" as completed`}
-                  />
-                  <span className={task.done ? "line-through opacity-70" : ""}>
-                    {task.label}
-                  </span>
-                </label>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={removeCompletedTasks}
-              className="mt-6 inline-flex items-center justify-center rounded-full bg-[#D3753D] px-6 py-2 text-sm font-semibold text-white"
-            >
-              Done
-            </button>
-          </section>
+              <button
+                type="button"
+                onClick={removeCompletedTasks}
+                className="mt-6 inline-flex items-center justify-center rounded-full bg-[#D3753D] px-6 py-2 text-sm font-semibold text-white"
+              >
+                Done
+              </button>
+            </section>
+          )}
         </main>
       </div>
     </div>
