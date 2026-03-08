@@ -1,8 +1,8 @@
-import bcrypt
-import jwt
 import os
 import certifi
 from datetime import datetime, timezone, timedelta
+import bcrypt
+import jwt
 from flask import Blueprint, jsonify, request
 from pymongo import MongoClient
 from dotenv import load_dotenv
