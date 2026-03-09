@@ -106,18 +106,20 @@ const TodayWeeklyHeader: React.FC<TodayWeeklyHeaderProps> = ({
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
 
   return (
-    <header className="border-b border-[#F3C5A5] px-8 pb-4 pt-6 text-[#913c14]">
-      <div className="flex items-center justify-center gap-10">
+    <header className="border-b border-[#F3C5A5] px-4 pb-4 pt-4 text-[#913c14] sm:px-6 sm:pt-5 lg:px-8 lg:pt-6">
+      <div className="flex items-center justify-center gap-3 sm:gap-6 lg:gap-10">
         <button
           type="button"
           className="cursor-pointer text-[#913c14]"
           aria-label="Previous week"
           onClick={() => onShiftWeek(-1)}
         >
-          <span className="material-symbols-outlined text-[40px]">arrow_back</span>
+          <span className="material-symbols-outlined text-[28px] sm:text-[34px] lg:text-[40px]">
+            arrow_back
+          </span>
         </button>
 
-        <p className="text-center text-[40px] leading-none tracking-[0.08em]">
+        <p className="whitespace-nowrap text-center text-lg leading-none tracking-[0.02em] sm:text-2xl sm:tracking-[0.04em] lg:text-[34px] lg:tracking-[0.06em] xl:text-[40px] xl:tracking-[0.08em]">
           {formatDate(weekStart)} - {formatDate(weekEnd)}
         </p>
 
@@ -127,7 +129,9 @@ const TodayWeeklyHeader: React.FC<TodayWeeklyHeaderProps> = ({
           aria-label="Next week"
           onClick={() => onShiftWeek(1)}
         >
-          <span className="material-symbols-outlined text-[40px]">arrow_forward</span>
+          <span className="material-symbols-outlined text-[28px] sm:text-[34px] lg:text-[40px]">
+            arrow_forward
+          </span>
         </button>
       </div>
     </header>
@@ -185,10 +189,10 @@ const TodayPage: React.FC = () => {
       <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-[30px] bg-[#FFFBF8]">
         <AppNavbar />
 
-        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-8 py-6 text-[#913c14]">
+        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-4 py-4 text-[#913c14] sm:px-6 sm:py-5 lg:px-8 lg:py-6">
           <TodayWeeklyHeader weekStart={weekStart} onShiftWeek={shiftWeek} />
 
-          <section className="mt-8 max-w-xl">
+          <section className="mt-6 w-full max-w-4xl sm:mt-8">
             <div className="flex items-center gap-2 text-sm font-medium">
               <span className="material-symbols-outlined text-[18px] text-[#913c14]">
                 workspace_premium
@@ -213,7 +217,7 @@ const TodayPage: React.FC = () => {
             </p>
           </section>
 
-          <section className="mt-8 max-w-xl">
+          <section className="mt-6 w-full max-w-4xl sm:mt-8">
             <div className="flex items-center gap-2 text-sm font-medium">
               <span className="material-symbols-outlined text-[18px] text-[#913c14]">
                 star
@@ -270,7 +274,7 @@ const TodayPage: React.FC = () => {
             </div>
           </section>
 
-          <section className="mt-10 max-w-xl">
+          <section className="mt-8 w-full max-w-4xl sm:mt-10">
             <div className="flex items-center gap-2 text-sm font-medium">
               <span className="material-symbols-outlined text-[18px] text-[#913c14]">
                 event_note
