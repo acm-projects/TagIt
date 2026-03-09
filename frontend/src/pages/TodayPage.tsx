@@ -75,7 +75,7 @@ const addDays = (date: Date, days: number): Date => {
 const formatDate = (date: Date): string => {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-  const year = date.getFullYear();
+  const year = String(date.getFullYear() % 100).padStart(2, "0");
   return `${month}/${day}/${year}`;
 };
 
@@ -106,20 +106,20 @@ const TodayWeeklyHeader: React.FC<TodayWeeklyHeaderProps> = ({
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
 
   return (
-    <header className="border-b border-[#F3C5A5] px-4 pb-3 pt-3 text-[#913c14] sm:px-6 sm:pb-4 sm:pt-4 lg:px-8 lg:pb-4 lg:pt-5">
-      <div className="flex items-center justify-center gap-1 sm:gap-3 lg:gap-5">
+    <header className="border-b border-[#F3C5A5] px-4 pb-4 pt-4 text-[#913c14] sm:px-6 sm:pb-5 sm:pt-5 lg:px-8 lg:pb-5 lg:pt-6">
+      <div className="flex items-center justify-center gap-1.5 sm:gap-3.5 lg:gap-6">
         <button
           type="button"
           className="cursor-pointer text-[#913c14]"
           aria-label="Previous week"
           onClick={() => onShiftWeek(-1)}
         >
-          <span className="material-symbols-outlined text-[28px] sm:text-[34px] lg:text-[38px]">
+          <span className="material-symbols-outlined text-[30px] sm:text-[35px] lg:text-[40px]">
             arrow_back
           </span>
         </button>
 
-        <p className="whitespace-nowrap text-center text-[24px] leading-none tracking-[0.03em] sm:text-[30px] sm:tracking-[0.05em] lg:text-[36px] lg:tracking-[0.06em] xl:text-[42px] xl:tracking-[0.07em]">
+        <p className="whitespace-nowrap text-center text-[27px] leading-none tracking-[0.03em] sm:text-[34px] sm:tracking-[0.05em] lg:text-[40px] lg:tracking-[0.06em] xl:text-[46px] xl:tracking-[0.07em]">
           {formatDate(weekStart)} - {formatDate(weekEnd)}
         </p>
 
@@ -129,7 +129,7 @@ const TodayWeeklyHeader: React.FC<TodayWeeklyHeaderProps> = ({
           aria-label="Next week"
           onClick={() => onShiftWeek(1)}
         >
-          <span className="material-symbols-outlined text-[28px] sm:text-[34px] lg:text-[38px]">
+          <span className="material-symbols-outlined text-[30px] sm:text-[35px] lg:text-[40px]">
             arrow_forward
           </span>
         </button>
@@ -286,10 +286,10 @@ const TodayPage: React.FC = () => {
               {EVENTS.map((event, index) => {
                 const background =
                   index === 0
-                    ? "bg-[#FFF0E5]"
+                    ? "bg-[#FED3B4]"
                     : index === 1
                     ? "bg-[#FAE6D9]"
-                    : "bg-[#FED3B4]";
+                    : "bg-[#FFF0E5]";
 
                 return (
                   <div
