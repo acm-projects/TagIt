@@ -88,8 +88,8 @@ const TodayPage: React.FC = () => {
       <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-[30px] bg-[#FFFBF8]">
         <AppNavbar />
 
-        <main className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-8 py-6 text-[#913c14]">
-          <DateHeader date="02/18/2026" />
+        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-8 py-6 text-[#913c14]">
+          <DateHeader mode="week" date="02/18/2026" />
 
           <section className="mt-8 max-w-xl">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -137,16 +137,25 @@ const TodayPage: React.FC = () => {
                   <button
                     key={mail.id}
                     type="button"
-                    className={`flex w-full items-center justify-between rounded-xl px-4 py-2 text-left text-sm text-[#6D2F12] ${background}`}
+                    className={`group relative flex w-full items-center justify-between rounded-xl px-4 py-2.5 text-left text-sm text-[#6D2F12] ${background} transition-all duration-200 ease-out hover:-translate-y-[1px] hover:shadow-sm`}
                   >
                     <div className="flex items-center gap-3">
                       {getSourceIcon(mail.source)}
                       <span>{mail.sender}</span>
                     </div>
 
-                    <span className="inline-flex h-7 min-w-[60px] items-center justify-center rounded-full bg-[#D75B00] px-4 text-sm font-semibold text-white">
-                      Open
-                    </span>
+                    <div
+                      className="absolute right-3 top-1/2 flex -translate-y-1/2 translate-x-2 items-center opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                      title="Mark as read"
+                      aria-label="Mark as read"
+                    >
+                      <span className="material-symbols-outlined text-[18px] text-[#D75B00] drop-shadow-[0_2px_6px_rgba(172,64,0,0.25)] transition-transform duration-200 ease-out group-hover:scale-110">
+                        check
+                      </span>
+                    </div>
                   </button>
                 );
               })}

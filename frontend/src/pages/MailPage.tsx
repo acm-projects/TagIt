@@ -9,7 +9,8 @@ import draftIcon from "../assets/page_buttons/draft.png";
  * Backend message ranking can map directly to `priorityScore`.
  */
 type MailItem = {
-  id: string;
+ id: string;
+  summary: string;
   sender: string;
   body: string;
   extra?: string;
@@ -34,6 +35,7 @@ const MailPage: React.FC = () => {
   const [mails] = useState<MailItem[]>([
     {
       id: "m1",
+      summary: "Transfer Credit",
       sender: "Joshua Montogermy",
       body: "Requesting a screenshot of current off-campus enrollment (with courses and college) to grant temporary credit while awaiting transfer.",
       tags: ["Temporary Credit"],
@@ -41,6 +43,7 @@ const MailPage: React.FC = () => {
     },
     {
       id: "m2",
+      summary: "Internship Offer",
       sender: "John Mathew @Verizon @Handshake",
       body: "Internship offer. Respond with your resume and portfolio.",
       extra: "Deadline : March 15, 2026",
@@ -49,11 +52,21 @@ const MailPage: React.FC = () => {
     },
     {
       id: "m3",
+      summary: "Resume Request",
       sender: "John Mathew @Verizon @Handshake",
       body: "Internship offer. Respond with your resume and portfolio.",
       extra: "Deadline : March 15, 2026",
       tags: [],
       priorityScore: 6,
+    },
+    {
+      id: "m4",
+      summary: "Deadline Reminder",
+      sender: "Registrar Office",
+      body: "Reminder to submit your semester enrollment confirmation before the stated deadline.",
+      extra: "Due: March 20, 2026",
+      tags: ["Enrollment", "Reminder"],
+      priorityScore: 7,
     },
   ]);
 
@@ -72,15 +85,15 @@ const MailPage: React.FC = () => {
   const getTagStyles = (tag: string): { backgroundColor: string; color: string } => {
     const normalized = tag.toLowerCase();
     if (normalized.includes("temporary")) {
-      return { backgroundColor: "#F8A7B4", color: "#5A3A2A" };
+      return { backgroundColor: "#DCD6B2", color: "#7A4A2F" };
     }
     if (normalized.includes("internship")) {
-      return { backgroundColor: "#E8C2D5", color: "#5A3A2A" };
+      return { backgroundColor: "#EBC7B2", color: "#7A4A2F" };
     }
     if (normalized.includes("resume")) {
-      return { backgroundColor: "#FFF08C", color: "#5A3A2A" };
+      return { backgroundColor: "#F4E1C8", color: "#7A4A2F" };
     }
-    return { backgroundColor: "#FFE1CF", color: "#5A3A2A" };
+    return { backgroundColor: "#EFD9BE", color: "#7A4A2F" };
   };
 
   return (
@@ -88,10 +101,10 @@ const MailPage: React.FC = () => {
       <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-[30px] bg-[#FFFBF8]">
         <AppNavbar />
 
-        <main className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-8 py-6 text-[#A34712]">
-          <DateHeader />
+        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-8 py-6 text-[#A34712]">
+          <DateHeader mode="week" />
 
-          <section className="mt-8">
+          <section className="mt-6">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-[#A34712]">
               <span
                 className="inline-block h-5 w-5 shrink-0 bg-[#A34712] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]"
@@ -104,50 +117,66 @@ const MailPage: React.FC = () => {
               <span>Mails</span>
             </h2>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-3 space-y-2">
               {sortedMails.map((mail) => (
                 <button
                   key={mail.id}
                   type="button"
-                  className="flex w-full flex-col items-stretch rounded-2xl bg-[#FFE1CF] px-5 py-4 text-left text-sm text-[#3F2A1E] shadow-sm"
+                  className="group relative flex w-full flex-col items-stretch rounded-xl border border-[#FFE0C7] bg-[#FFF3EA] px-4 py-2 text-left text-sm text-[#3F2A1E] shadow-sm transition-all duration-150 ease-out hover:-translate-y-[1px] hover:shadow-md"
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 pr-10">
                     <div className="flex-1">
-                      <p className="font-semibold text-[#3F2A1E]">{mail.sender}</p>
-                      <p className="mt-1 text-xs leading-snug text-[#5A3A2A]">
+                      <p className="text-[13px] font-semibold leading-tight text-[#3B210F]">
+                        {mail.summary}
+                      </p>
+                      <p className="mt-0.5 text-[10.5px] font-medium text-[#8A4B2D]/80">
+                        {mail.sender}
+                      </p>
+                      <p
+                        className="mt-1 text-[12px] leading-snug text-[#5A3A2A]"
+                        style={{
+                          display: "-webkit-box",
+                          WebkitLineClamp: 1,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
                         {mail.body}
                       </p>
                       {mail.extra && (
-                        <p className="mt-1 text-xs text-[#5A3A2A]">{mail.extra}</p>
+                        <p className="mt-1 text-[10.5px] text-[#8A4B2D]">{mail.extra}</p>
                       )}
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2">
-                      <span className="inline-flex h-7 min-w-[64px] items-center justify-center rounded-full bg-[#D24E00] px-4 text-xs font-semibold text-white">
-                        Read
-                      </span>
-                      <span className="inline-flex h-7 min-w-[84px] items-center justify-center rounded-full bg-[#A23C00] px-4 text-xs font-semibold text-white">
-                        Draft Reply
-                      </span>
+                      {mail.tags.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {mail.tags.map((tag) => {
+                            const { backgroundColor, color } = getTagStyles(tag);
+                            return (
+                              <span
+                                key={tag}
+                                className="inline-block rounded-full px-2 py-[3px] text-[9px] font-medium tracking-tight shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
+                                style={{ backgroundColor, color }}
+                              >
+                                {tag}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {mail.tags.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {mail.tags.map((tag) => {
-                        const { backgroundColor, color } = getTagStyles(tag);
-                        return (
-                          <span
-                            key={tag}
-                            className="inline-block rounded-full px-4 py-1 text-xs font-semibold"
-                            style={{ backgroundColor, color }}
-                          >
-                            {tag}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <div
+                    className="absolute right-4 top-1/2 flex -translate-y-1/2 translate-x-2 items-center opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                    title="Mark as read"
+                    aria-label="Mark as read"
+                  >
+                    <span className="material-symbols-outlined text-[20px] text-[#D75B00] drop-shadow-[0_2px_6px_rgba(172,64,0,0.25)] transition-transform duration-200 ease-out group-hover:scale-110">
+                      check
+                    </span>
+                  </div>
                 </button>
               ))}
             </div>
@@ -166,17 +195,27 @@ const MailPage: React.FC = () => {
               <span>Drafted Replies</span>
             </h2>
 
-            <div className="mt-3 space-y-3">
+            <div className="mt-3 space-y-2.5">
               {draftReplies.map((draft) => (
                 <button
                   key={draft.id}
                   type="button"
-                  className="flex w-full items-center justify-between rounded-2xl bg-[#FFE1CF] px-5 py-3 text-left text-sm text-[#3F2A1E] shadow-sm"
+                  className="group relative flex w-full items-center justify-between rounded-2xl border border-[#FFE0C7] bg-[#FFF3EA] px-4 py-2.5 text-left text-sm text-[#3F2A1E] shadow-sm transition-all duration-200 ease-out hover:-translate-y-[1px] hover:shadow-md"
                 >
                   <span>{draft.sender}</span>
-                  <span className="inline-flex h-7 min-w-[72px] items-center justify-center rounded-full bg-[#D24E00] px-4 text-xs font-semibold text-white">
-                    Open
-                  </span>
+
+                  <div
+                    className="absolute right-4 top-1/2 flex -translate-y-1/2 translate-x-2 items-center opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                    title="Mark as read"
+                    aria-label="Mark as read"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-[#D75B00] drop-shadow-[0_2px_6px_rgba(172,64,0,0.25)] transition-transform duration-200 ease-out group-hover:scale-110">
+                      check
+                    </span>
+                  </div>
                 </button>
               ))}
             </div>
