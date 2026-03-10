@@ -10,7 +10,7 @@ const CalendarPage: React.FC = () => {
 
         {/* Main content: same header strip as other pages */}
         <main className="min-h-0 flex flex-1 flex-col overflow-auto px-8 py-6">
-          <DateHeader />
+          <DateHeader mode="week" />
 
           {/* Calendar Events */}
           <section className="mt-8">

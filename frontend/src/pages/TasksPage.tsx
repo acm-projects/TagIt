@@ -82,7 +82,7 @@ const TasksPage: React.FC = () => {
         <AppNavbar />
 
         <main className="min-h-0 flex flex-1 flex-col overflow-auto px-8 py-6 text-[#A34712]">
-          <DateHeader date="02/18/2026" />
+          <DateHeader mode="week" date="02/18/2026" />
 
           <section className="mt-6">
             <div className="inline-flex rounded-full bg-[#FBE7D7] p-1">
