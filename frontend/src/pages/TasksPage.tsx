@@ -81,7 +81,7 @@ const TasksPage: React.FC = () => {
       <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-[30px] bg-[#FFFBF8]">
         <AppNavbar />
 
-        <main className="min-h-0 flex flex-1 flex-col overflow-auto px-8 py-6 text-[#A34712]">
+        <main className="min-h-0 flex flex-1 flex-col overflow-x-hidden overflow-y-auto px-8 py-6 text-[#A34712]">
           <DateHeader date="02/18/2026" />
 
           <section className="mt-6">
