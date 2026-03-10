@@ -1,11 +1,8 @@
 import React from "react";
 import AppNavbar from "../components/AppNavbar";
 import DateHeader from "../components/DateHeader";
-import calendarEventsIcon from "../assets/page_buttons/calendar_events.png";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
-import googleCalendarLogo from "../assets/Logos/google_calendar.png";
-import outlookCalendarLogo from "../assets/Logos/outlook_calendar.webp";
 
 const CalendarPage: React.FC = () => {
   return (
@@ -20,14 +17,6 @@ const CalendarPage: React.FC = () => {
           {/* Calendar Events */}
           <section className="mt-8 w-full min-w-0">
             <h2 className="flex w-full items-center gap-2 text-left text-sm font-semibold text-[#A34712]">
-              <span
-                className="inline-block h-5 w-5 shrink-0 bg-[#A34712] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]"
-                style={{
-                  maskImage: `url(${calendarEventsIcon})`,
-                  WebkitMaskImage: `url(${calendarEventsIcon})`,
-                }}
-                aria-hidden
-              />
               <span>Calendar Events</span>
             </h2>
 
@@ -68,17 +57,10 @@ const CalendarPage: React.FC = () => {
               ].map((event, index) => (
                 <div
                   key={event.title + index}
-                  className="grid min-w-0 grid-cols-[1fr_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-1 border-b border-[#F3C5A5] bg-[#FFF6EE] px-3 py-3 last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)_4.5rem_2rem_5.5rem_auto] sm:grid-rows-[auto] sm:gap-y-0"
+                  className="grid min-w-0 grid-cols-[1fr_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-1 border-b border-[#F3C5A5] bg-[#FFF6EE] px-3 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_4.5rem_2rem_5.5rem_auto] sm:grid-rows-[auto] sm:gap-y-0"
                 >
-                  {/* Narrow: row 1 = icon + title (full width). Sm: contents → icon, title */}
+                  {/* Narrow: row 1 = title (full width). Sm: contents → title */}
                   <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 sm:contents">
-                    <div className="flex shrink-0 items-center sm:block">
-                      <img
-                        src={event.source === "google" ? googleCalendarLogo : outlookCalendarLogo}
-                        alt={event.source === "google" ? "Google Calendar" : "Outlook Calendar"}
-                        className="h-4 w-4 object-contain"
-                      />
-                    </div>
                     <div className="min-w-0 sm:block">
                       <p className="break-words font-semibold">{event.title}</p>
                     </div>
