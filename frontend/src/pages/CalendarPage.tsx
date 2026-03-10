@@ -68,38 +68,37 @@ const CalendarPage: React.FC = () => {
               ].map((event, index) => (
                 <div
                   key={event.title + index}
-                  className="grid min-w-0 grid-cols-[1fr_auto] grid-rows-[auto_auto] items-start gap-x-2 gap-y-1 border-b border-[#F3C5A5] bg-[#FFF6EE] px-3 py-3 last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)_4.5rem_2rem_5.5rem_auto] sm:grid-rows-[auto] sm:gap-x-2 sm:gap-y-0"
+                  className="grid min-w-0 grid-cols-[1fr_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-1 border-b border-[#F3C5A5] bg-[#FFF6EE] px-3 py-3 last:border-b-0 sm:grid-cols-[auto_minmax(0,10rem)_4.5rem_2rem_5.5rem_auto] sm:grid-rows-[auto] sm:gap-y-0"
                 >
-                  {/* Narrow: two rows (icon+title, date/day/time). Sm: contents → 5 grid cells */}
-                  <div className="flex min-w-0 flex-col gap-1 sm:contents">
-                    <div className="flex min-w-0 items-start gap-2 sm:contents">
-                      <div className="flex shrink-0 items-center pt-0.5 sm:block">
-                        <img
-                          src={event.source === "google" ? googleCalendarLogo : outlookCalendarLogo}
-                          alt={event.source === "google" ? "Google Calendar" : "Outlook Calendar"}
-                          className="h-4 w-4 object-contain"
-                        />
-                      </div>
-                      <div className="min-w-0 sm:block">
-                        <p className="break-words font-semibold">{event.title}</p>
-                      </div>
+                  {/* Narrow: row 1 = icon + title (full width). Sm: contents → icon, title */}
+                  <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 sm:contents">
+                    <div className="flex shrink-0 items-center sm:block">
+                      <img
+                        src={event.source === "google" ? googleCalendarLogo : outlookCalendarLogo}
+                        alt={event.source === "google" ? "Google Calendar" : "Outlook Calendar"}
+                        className="h-4 w-4 object-contain"
+                      />
                     </div>
-                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0 text-xs leading-snug text-[#5A3A2A] sm:contents">
-                      <div className="text-xs leading-snug text-[#5A3A2A] sm:block">
-                        <p>{event.date1}</p>
-                        {event.date2 && <p>{event.date2}</p>}
-                      </div>
-                      <div className="text-xs leading-snug text-[#5A3A2A] sm:block">
-                        <p>{event.day1}</p>
-                        {event.day2 && <p>{event.day2}</p>}
-                      </div>
-                      <div className="whitespace-pre text-xs leading-snug text-[#5A3A2A] sm:block">
-                        {event.time}
-                      </div>
+                    <div className="min-w-0 flex-1 sm:block">
+                      <p className="break-words font-semibold">{event.title}</p>
                     </div>
                   </div>
-                  {/* Narrow: right column, vertical add/delete. Sm: one grid cell, horizontal */}
-                  <div className="col-start-2 row-span-2 flex flex-col gap-0.5 self-center sm:col-auto sm:row-auto sm:flex-row sm:gap-1">
+                  {/* Narrow: row 2 = date, day, time. Sm: contents → date, day, time */}
+                  <div className="col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-x-2 text-xs leading-snug text-[#5A3A2A] sm:contents">
+                    <div className="text-xs leading-snug text-[#5A3A2A] sm:block">
+                      <p>{event.date1}</p>
+                      {event.date2 && <p>{event.date2}</p>}
+                    </div>
+                    <div className="text-xs leading-snug text-[#5A3A2A] sm:block">
+                      <p>{event.day1}</p>
+                      {event.day2 && <p>{event.day2}</p>}
+                    </div>
+                    <div className="whitespace-pre text-xs leading-snug text-[#5A3A2A] sm:block">
+                      {event.time}
+                    </div>
+                  </div>
+                  {/* Narrow: right column, vertical + and x. Sm: one grid cell */}
+                  <div className="col-start-2 row-span-2 row-start-1 flex shrink-0 flex-col items-center justify-center gap-0.5 self-center sm:col-auto sm:row-auto sm:flex-row sm:gap-1">
                     <button type="button" aria-label="Add" className="rounded p-1 hover:opacity-80">
                       <span
                         className="inline-block h-5 w-5 bg-[#A34712] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]"
