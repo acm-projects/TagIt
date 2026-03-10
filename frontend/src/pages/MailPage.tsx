@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import DateHeader from "../components/DateHeader";
+import mailOpenIcon from "../assets/page_buttons/mail_open.png";
+import draftIcon from "../assets/page_buttons/draft.png";
 
 /**
  * A prioritized mail card item.
@@ -91,7 +93,14 @@ const MailPage: React.FC = () => {
 
           <section className="mt-8">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-[#A34712]">
-              <span className="text-base">✉️</span>
+              <span
+                className="inline-block h-5 w-5 shrink-0 bg-[#A34712] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]"
+                style={{
+                  maskImage: `url(${mailOpenIcon})`,
+                  WebkitMaskImage: `url(${mailOpenIcon})`,
+                }}
+                aria-hidden
+              />
               <span>Mails</span>
             </h2>
 
@@ -146,7 +155,14 @@ const MailPage: React.FC = () => {
 
           <section className="mt-8">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-[#A34712]">
-              <span className="text-base">✏️</span>
+              <span
+                className="inline-block h-5 w-5 shrink-0 bg-[#A34712] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]"
+                style={{
+                  maskImage: `url(${draftIcon})`,
+                  WebkitMaskImage: `url(${draftIcon})`,
+                }}
+                aria-hidden
+              />
               <span>Drafted Replies</span>
             </h2>
 
