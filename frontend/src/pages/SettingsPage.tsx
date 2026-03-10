@@ -216,7 +216,7 @@ const SettingsPage: React.FC = () => {
         <AppNavbar />
 
         {/* Main settings column */}
-        <main className="min-h-0 flex-1 overflow-auto px-8 py-6 text-[#A34712]">
+        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-8 py-6 text-[#A34712]">
           {/* Same header strip as other pages so title aligns with date header */}
           <header className="page-header flex flex-col items-center justify-center border-b border-[#F3C5A5] px-8 pb-4 pt-6 text-center">
             <h1 className="text-4xl font-semibold tracking-[0.12em] text-[#913c14]">
