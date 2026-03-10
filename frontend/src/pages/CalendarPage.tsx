@@ -1,6 +1,9 @@
 import React from "react";
 import AppNavbar from "../components/AppNavbar";
 import DateHeader from "../components/DateHeader";
+import calendarEventsIcon from "../assets/page_buttons/calendar_events.png";
+import googleCalendarLogo from "../assets/Logos/google_calendar.png";
+import outlookCalendarLogo from "../assets/Logos/outlook_calendar.webp";
 
 const CalendarPage: React.FC = () => {
   return (
@@ -15,7 +18,14 @@ const CalendarPage: React.FC = () => {
           {/* Calendar Events */}
           <section className="mt-8">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-[#A34712]">
-              <span className="text-base">🗓</span>
+              <span
+                className="inline-block h-5 w-5 shrink-0 bg-[#A34712] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]"
+                style={{
+                  maskImage: `url(${calendarEventsIcon})`,
+                  WebkitMaskImage: `url(${calendarEventsIcon})`,
+                }}
+                aria-hidden
+              />
               <span>Calendar Events</span>
             </h2>
 
@@ -26,6 +36,7 @@ const CalendarPage: React.FC = () => {
                   date1: "02/21/2026",
                   day1: "Sat",
                   time: "07:00 - 10:00",
+                  source: "google" as const,
                 },
                 {
                   title: "WeHack - Hackathon",
@@ -34,12 +45,14 @@ const CalendarPage: React.FC = () => {
                   date2: "03/02/2026",
                   day2: "Sun",
                   time: "09:00 - 24:00\n00:00 - 05:30",
+                  source: "outlook" as const,
                 },
                 {
                   title: "ACM Social Night #1",
                   date1: "02/21/2026",
                   day1: "Sat",
                   time: "07:00 - 10:00",
+                  source: "google" as const,
                 },
                 {
                   title: "WeHack - Hackathon",
@@ -48,6 +61,7 @@ const CalendarPage: React.FC = () => {
                   date2: "03/02/2026",
                   day2: "Sun",
                   time: "09:00 - 24:00\n00:00 - 05:30",
+                  source: "outlook" as const,
                 },
               ].map((event, index) => (
                 <div
@@ -56,7 +70,11 @@ const CalendarPage: React.FC = () => {
                   style={{ width: "calc(100% - 12px)" }}
                 >
                   <div className="mr-4 flex items-center">
-                    <span className="text-xl">📅</span>
+                    <img
+                      src={event.source === "google" ? googleCalendarLogo : outlookCalendarLogo}
+                      alt={event.source === "google" ? "Google Calendar" : "Outlook Calendar"}
+                      className="h-4 w-4 object-contain"
+                    />
                   </div>
                   <div className="flex-1">
                     <p className="font-semibold">{event.title}</p>
