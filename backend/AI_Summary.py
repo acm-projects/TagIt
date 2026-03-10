@@ -30,6 +30,7 @@ def analyze_email_with_gemini(subject, body):
     5. "tasks": Array of actionable tasks.
     6. "deadlines": Array of deadline statements that includes a date and time.
     7. "events": Array of event statements.
+    8. "location": The physical room number, address, or virtual link for the event. If there is no location mentioned, output an empty string "".
     
 
     Input Email: 

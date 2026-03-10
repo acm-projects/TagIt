@@ -425,7 +425,7 @@ app.post('/outlook/fetch-and-process', async (req, res) => {
 // ─── Google Calendar ──────────────────────────────────────────────────────────
 
 app.post('/calendar/add-event', async (req, res) => {
-    const { title, date } = req.body;
+    const { title, date, location } = req.body;
     if (!title) return res.status(400).json({ error: 'title is required' });
     const eventDate = date || new Date().toISOString().split('T')[0];
     try {
@@ -433,6 +433,7 @@ app.post('/calendar/add-event', async (req, res) => {
             calendarId: 'primary',
             requestBody: {
                 summary: title,
+                location: location || '',
                 start: { date: eventDate },
                 end: { date: eventDate },
             },
