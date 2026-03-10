@@ -90,11 +90,6 @@ const CalendarPage: React.FC = () => {
                   <div className="mr-4 whitespace-pre text-xs leading-snug text-[#5A3A2A]">
                     {event.time}
                   </div>
-                  <div className="flex items-center">
-                    <button className="inline-flex h-7 w-12 items-center justify-center rounded-full bg-[#F3C5A5] text-xs font-semibold text-[#A34712]">
-                      add
-                    </button>
-                  </div>
                 </div>
               ))}
             </div>
