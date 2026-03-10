@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import DateHeader from "../components/DateHeader";
 import { loadTasks, saveTasks } from "../services/taskProgress";
+import deadlineIcon from "../assets/page_buttons/deadline.png";
 
 /**
  * Represents a single task on the Tasks page.
@@ -109,8 +110,15 @@ const TasksPage: React.FC = () => {
 
           {activeTab === "deadlines" ? (
             <section className="mt-6">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <span className="material-symbols-outlined text-[18px]">hourglass_bottom</span>
+              <div className="flex items-center gap-2 text-sm font-semibold text-[#A34712]">
+                <span
+                  className="inline-block h-5 w-5 shrink-0 bg-[#A34712] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]"
+                  style={{
+                    maskImage: `url(${deadlineIcon})`,
+                    WebkitMaskImage: `url(${deadlineIcon})`,
+                  }}
+                  aria-hidden
+                />
                 <span>Deadlines</span>
               </div>
 
