@@ -68,7 +68,7 @@ const CalendarPage: React.FC = () => {
               ].map((event, index) => (
                 <div
                   key={event.title + index}
-                  className="grid min-w-0 grid-cols-[1fr_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-1 border-b border-[#F3C5A5] bg-[#FFF6EE] px-3 py-3 last:border-b-0 sm:grid-cols-[auto_minmax(0,10rem)_4.5rem_2rem_5.5rem_auto] sm:grid-rows-[auto] sm:gap-y-0"
+                  className="grid min-w-0 grid-cols-[1fr_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-1 border-b border-[#F3C5A5] bg-[#FFF6EE] px-3 py-3 last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)_4.5rem_2rem_5.5rem_auto] sm:grid-rows-[auto] sm:gap-y-0"
                 >
                   {/* Narrow: row 1 = icon + title (full width). Sm: contents → icon, title */}
                   <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 sm:contents">
@@ -79,7 +79,7 @@ const CalendarPage: React.FC = () => {
                         className="h-4 w-4 object-contain"
                       />
                     </div>
-                    <div className="min-w-0 flex-1 sm:block">
+                    <div className="min-w-0 sm:block">
                       <p className="break-words font-semibold">{event.title}</p>
                     </div>
                   </div>
@@ -131,4 +131,3 @@ const CalendarPage: React.FC = () => {
 };
 
 export default CalendarPage;
-
