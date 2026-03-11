@@ -84,12 +84,6 @@ const formatWeekRange = (start: Date, end: Date): string => {
   return `${fmt(start)} – ${fmt(end)}`;
 };
 
-const isSameWeek = (first: Date, second: Date) => {
-  const firstStart = getWeekRange(first).start.getTime();
-  const secondStart = getWeekRange(second).start.getTime();
-  return firstStart === secondStart;
-};
-
 /**
  * Shared date header used across app pages.
  * It supports:
@@ -121,17 +115,6 @@ const DateHeader: React.FC<DateHeaderProps> = ({
   const formattedWeekRange = useMemo(
     () => formatWeekRange(weekRange.start, weekRange.end),
     [weekRange.end, weekRange.start],
-  );
-  const dayName = useMemo(
-    () =>
-      currentDate.toLocaleDateString(undefined, {
-        weekday: "long",
-      }),
-    [currentDate],
-  );
-  const isCurrentWeek = useMemo(
-    () => isSameWeek(currentDate, new Date()),
-    [currentDate],
   );
 
   const primaryLabel = mode === "week" ? formattedWeekRange : formattedDate;
