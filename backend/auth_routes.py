@@ -27,6 +27,19 @@ def make_token(username: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
+def get_username_from_request() -> str | None:
+    """Extract and verify the username from the Bearer token in the request."""
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.removeprefix("Bearer ").strip()
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        return payload["username"]
+    except jwt.InvalidTokenError:
+        return None
+
+
 @auth_bp.route("/auth/signup", methods=["POST"])
 def signup():
     data = request.json
@@ -79,3 +92,44 @@ def verify():
         return jsonify({"error": "Token expired."}), 401
     except jwt.InvalidTokenError:
         return jsonify({"error": "Invalid token."}), 401
+
+
+# OAuth token storage routes
+
+@auth_bp.route("/auth/oauth-tokens", methods=["POST"])
+def save_oauth_tokens():
+    """Node backend calls this to save a user's OAuth refresh tokens."""
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    data = request.json
+    # Accepts: { googleRefreshToken, msRefreshToken } — either or both
+    update = {}
+    if "googleRefreshToken" in data:
+        update["googleRefreshToken"] = data["googleRefreshToken"]
+    if "msRefreshToken" in data:
+        update["msRefreshToken"] = data["msRefreshToken"]
+
+    if not update:
+        return jsonify({"error": "No tokens provided."}), 400
+
+    users_col.update_one({"username": username}, {"$set": update})
+    return jsonify({"message": "Tokens saved."}), 200
+
+
+@auth_bp.route("/auth/oauth-tokens", methods=["GET"])
+def get_oauth_tokens():
+    """Node backend calls this to retrieve a user's stored OAuth refresh tokens."""
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    user = users_col.find_one({"username": username}, {"googleRefreshToken": 1, "msRefreshToken": 1})
+    if not user:
+        return jsonify({"error": "User not found."}), 404
+
+    return jsonify({
+        "googleRefreshToken": user.get("googleRefreshToken"),
+        "msRefreshToken": user.get("msRefreshToken"),
+    }), 200

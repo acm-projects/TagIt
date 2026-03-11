@@ -4,6 +4,14 @@ const BACKEND_BASE = "http://localhost:3000";
 
 type Provider = "gmail" | "outlook";
 
+function getToken(): string {
+  return localStorage.getItem("tagit_token") || "";
+}
+
+function authHeaders(): HeadersInit {
+  return { Authorization: `Bearer ${getToken()}` };
+}
+
 const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
   const [provider, setProvider] = useState<Provider>("gmail");
   const [loading, setLoading] = useState(false);
@@ -17,7 +25,7 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
   // Check Microsoft auth status on mount / provider switch
   useEffect(() => {
     if (provider === "outlook") {
-      fetch(`${BACKEND_BASE}/auth/microsoft/status`)
+      fetch(`${BACKEND_BASE}/auth/microsoft/status`, { headers: authHeaders() })
         .then(r => r.json())
         .then(d => setMsAuthed(!!d.authenticated))
         .catch(() => setMsAuthed(false));
@@ -31,24 +39,20 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
     setCalStatus(null);
   }
 
-  // Send to Python AI Pipeline
   async function processWithAI(emailSubject: string, emailBody: string, emailId: string) {
     try {
       const res = await fetch("http://127.0.0.1:8000/api/emails", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-            subject: emailSubject, 
-            body: emailBody, 
-            originalId: emailId 
-        })
+        body: JSON.stringify({
+          subject: emailSubject,
+          body: emailBody,
+          originalId: emailId,
+        }),
       });
-      
       if (!res.ok) throw new Error("Python server error");
-      
       const data = await res.json();
       return data.ai_summary;
-
     } catch (err) {
       console.error("AI Pipeline error:", err);
       return "Failed to generate AI summary. Ensure Python server is running on port 8000.";
@@ -72,17 +76,15 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
         }
       };
       window.addEventListener("message", handler);
-      // Fallback: resolve after 2 min regardless
       setTimeout(() => { window.removeEventListener("message", handler); resolve(); }, 120_000);
     });
   }
 
-  // Sign in to Microsoft
   async function signInMicrosoft() {
     setLoading(true);
     resetState();
     try {
-      const resp = await fetch(`${BACKEND_BASE}/auth/microsoft/url`);
+      const resp = await fetch(`${BACKEND_BASE}/auth/microsoft/url`, { headers: authHeaders() });
       if (!resp.ok) {
         setError("Could not get Microsoft auth URL. Is MS_CLIENT_ID set on the server?");
         return;
@@ -97,7 +99,6 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
     }
   }
 
-  // Fetch latest email (Gmail or Outlook)
   async function showLatestEmail() {
     setLoading(true);
     resetState();
@@ -113,32 +114,46 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
   }
 
   async function fetchGmailLatest() {
-    const listResp = await fetch(`${BACKEND_BASE}/messages?maxResults=1`);
-    if (!listResp.ok) {
-      const authUrlResp = await fetch(`${BACKEND_BASE}/auth/url`);
-      if (authUrlResp.ok) {
-        const { url } = await authUrlResp.json();
-        await openAuthPopup(url);
-        setError("Signed in! Click the button again to load your email.");
-      } else {
-        setError(`Auth URL error: ${listResp.status}`);
+    const listResp = await fetch(`${BACKEND_BASE}/messages?maxResults=1`, {
+      headers: authHeaders(),
+    });
+
+    if (listResp.status === 401) {
+      const data = await listResp.json().catch(() => ({}));
+      if (data.error === "NO_GOOGLE_TOKEN") {
+        // User hasn't linked Google yet — kick off OAuth
+        const authUrlResp = await fetch(`${BACKEND_BASE}/auth/url`, { headers: authHeaders() });
+        if (authUrlResp.ok) {
+          const { url } = await authUrlResp.json();
+          await openAuthPopup(url);
+          setError("Google account linked! Click the button again to load your email.");
+        } else {
+          setError(`Could not get Google auth URL: ${authUrlResp.status}`);
+        }
+        return;
       }
+      setError("Session expired. Please log in again.");
       return;
     }
+
+    if (!listResp.ok) {
+      setError(`Failed to list messages: ${listResp.status}`);
+      return;
+    }
+
     const listData = await listResp.json();
     if (!listData?.messages?.length) { setError("No messages found."); return; }
 
     const id = listData.messages[0].id;
-    const msgResp = await fetch(`${BACKEND_BASE}/message/${id}`);
+    const msgResp = await fetch(`${BACKEND_BASE}/message/${id}`, { headers: authHeaders() });
     if (!msgResp.ok) { setError(`Failed to fetch message: ${msgResp.status}`); return; }
     const msgData = await msgResp.json();
-    
+
     const rawSubject = msgData.subject || msgData.message?.snippet || "No Subject";
     const rawBody = msgData.plainBody || msgData.message?.snippet || "";
-    
+
     setSubject(rawSubject);
     setMessage("Generating AI Summary...");
-    
     const summary = await processWithAI(rawSubject, rawBody, id);
     setMessage(summary);
   }
@@ -149,36 +164,48 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
       setError("Signed in! Click the button again to load your email.");
       return;
     }
-    const listResp = await fetch(`${BACKEND_BASE}/outlook/messages?maxResults=1`);
-    if (!listResp.ok) {
+
+    const listResp = await fetch(`${BACKEND_BASE}/outlook/messages?maxResults=1`, {
+      headers: authHeaders(),
+    });
+
+    if (listResp.status === 401) {
       const data = await listResp.json().catch(() => ({}));
-      if (listResp.status === 500 && data.error?.toLowerCase().includes('token')) {
+      if (data.error === "NO_MS_TOKEN") {
         setMsAuthed(false);
-        setError("Microsoft session expired. Please sign in again.");
+        await signInMicrosoft();
+        setError("Signed in! Click the button again to load your email.");
       } else {
-        setError(`Outlook error: ${data.error || listResp.status}`);
+        setError("Session expired. Please log in again.");
       }
       return;
     }
+
+    if (!listResp.ok) {
+      const data = await listResp.json().catch(() => ({}));
+      setError(`Outlook error: ${data.error || listResp.status}`);
+      return;
+    }
+
     const listData = await listResp.json();
     if (!listData?.messages?.length) { setError("No messages found."); return; }
 
     const id = listData.messages[0].id;
-    const msgResp = await fetch(`${BACKEND_BASE}/outlook/message/${encodeURIComponent(id)}`);
+    const msgResp = await fetch(`${BACKEND_BASE}/outlook/message/${encodeURIComponent(id)}`, {
+      headers: authHeaders(),
+    });
     if (!msgResp.ok) { setError(`Failed to fetch message: ${msgResp.status}`); return; }
     const msgData = await msgResp.json();
-    
+
     const rawSubject = msgData.subject || msgData.message?.bodyPreview || "No Subject";
     const rawBody = msgData.plainBody || msgData.message?.bodyPreview || "";
-    
+
     setSubject(rawSubject);
     setMessage("Generating AI Summary...");
-
     const summary = await processWithAI(rawSubject, rawBody, id);
     setMessage(summary);
   }
 
-  // Add to Google Calendar
   async function addToCalendar() {
     if (!subject) return;
     setCalLoading(true);
@@ -187,17 +214,17 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
     try {
       const resp = await fetch(`${BACKEND_BASE}/calendar/add-event`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ title: subject }),
       });
       const data = await resp.json();
       if (!resp.ok) {
-        if (resp.status === 500 && data.error?.includes("invalid_grant")) {
-          const authUrlResp = await fetch(`${BACKEND_BASE}/auth/url`);
+        if (resp.status === 401 && data.error === "NO_GOOGLE_TOKEN") {
+          const authUrlResp = await fetch(`${BACKEND_BASE}/auth/url`, { headers: authHeaders() });
           if (authUrlResp.ok) {
             const { url } = await authUrlResp.json();
             await openAuthPopup(url);
-            setError("Re-authorized Google. Try adding to calendar again.");
+            setError("Google account linked. Try adding to calendar again.");
           }
         } else {
           setError(`Calendar error: ${data.error}`);

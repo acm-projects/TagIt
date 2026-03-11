@@ -1,5 +1,5 @@
-// set CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN in environment for Google
-// set MS_CLIENT_ID, MS_CLIENT_SECRET, MS_TENANT_ID, MS_REFRESH_TOKEN for Microsoft/Outlook
+// set CLIENT_ID, CLIENT_SECRET for Google in environment
+// set MS_CLIENT_ID, MS_CLIENT_SECRET, MS_TENANT_ID for Microsoft/Outlook
 // (.env supported)
 const express = require('express');
 const cors = require('cors');
@@ -12,17 +12,15 @@ const {
     CLIENT_ID,
     CLIENT_SECRET,
     REDIRECT_URI = 'http://localhost:3000/oauth2callback',
-    REFRESH_TOKEN,
     // Microsoft / Outlook
     MS_CLIENT_ID,
     MS_CLIENT_SECRET,
     MS_TENANT_ID = 'common',
     MS_REDIRECT_URI = 'http://localhost:3000/auth/microsoft/callback',
     FLASK_API_URL = 'http://localhost:8000/api/emails',
+    FLASK_BASE_URL = 'http://localhost:8000',
     PORT = 3000,
 } = process.env;
-
-let MS_REFRESH_TOKEN = process.env.MS_REFRESH_TOKEN || null;
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
     console.error('Please set CLIENT_ID and CLIENT_SECRET in environment.');
@@ -33,30 +31,64 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ─── Google OAuth ────────────────────────────────────────────────────────────
+// Auth middleware 
 
-const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
-if (REFRESH_TOKEN) oauth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
-const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-
-function base64UrlToUtf8(b64url = '') {
-    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
-    return Buffer.from(b64, 'base64').toString('utf8');
+/**
+ * Reads the Bearer token from Authorization header.
+ * Attaches req.userToken for downstream use.
+ */
+function requireAuth(req, res, next) {
+    const auth = req.headers['authorization'] || '';
+    const token = auth.replace(/^Bearer\s+/i, '').trim();
+    if (!token) return res.status(401).json({ error: 'Missing Authorization header.' });
+    req.userToken = token;
+    next();
 }
 
-function writeEnvKey(key, value) {
-    const envPath = path.join(__dirname, '.env');  // ← __dirname instead of relative path
-    console.log('Writing token to:', envPath);
-    let content = '';
-    try { content = fs.readFileSync(envPath, 'utf8'); } catch (_) {}
-    const regex = new RegExp(`^${key}=.*$`, 'm');
-    const line = `${key}=${value}`;
-    content = regex.test(content) ? content.replace(regex, line) : content + `\n${line}\n`;
-    fs.writeFileSync(envPath, content, 'utf8');
+// Per-user OAuth token helpers
+
+/**
+ * Fetch this user's stored OAuth refresh tokens from the Python backend.
+ */
+async function getUserOAuthTokens(userToken) {
+    const resp = await fetch(`${FLASK_BASE_URL}/auth/oauth-tokens`, {
+        headers: { Authorization: `Bearer ${userToken}` },
+    });
+    if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to fetch tokens: ${resp.status}`);
+    }
+    return resp.json(); // { googleRefreshToken, msRefreshToken }
 }
 
-// ─── Microsoft OAuth helpers ─────────────────────────────────────────────────
+/**
+ * Save updated OAuth refresh tokens back to the Python backend for this user.
+ */
+async function saveUserOAuthTokens(userToken, tokens) {
+    await fetch(`${FLASK_BASE_URL}/auth/oauth-tokens`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify(tokens),
+    });
+}
+
+/**
+ * Build a Google OAuth2 client using this user's stored refresh token.
+ */
+async function getGoogleClientForUser(userToken) {
+    const tokens = await getUserOAuthTokens(userToken);
+    if (!tokens.googleRefreshToken) {
+        throw new Error('NO_GOOGLE_TOKEN');
+    }
+    const client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
+    client.setCredentials({ refresh_token: tokens.googleRefreshToken });
+    return client;
+}
+
+// Microsoft OAuth helpers
 
 const MS_SCOPES = [
     'offline_access',
@@ -66,12 +98,15 @@ const MS_SCOPES = [
 const MS_TOKEN_URL = `https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`;
 const MS_AUTH_URL_BASE = `https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/authorize`;
 
-let msAccessToken = null;
-let msTokenExpiry = 0;
+// In-memory access token cache per user: { [userToken]: { accessToken, expiry } }
+const msAccessTokenCache = {};
 
-async function getMsAccessToken() {
-    if (msAccessToken && Date.now() < msTokenExpiry - 30_000) return msAccessToken;
-    if (!MS_REFRESH_TOKEN) throw new Error('MS_REFRESH_TOKEN not set. Please authenticate with Microsoft first.');
+async function getMsAccessTokenForUser(userToken) {
+    const cached = msAccessTokenCache[userToken];
+    if (cached && Date.now() < cached.expiry - 30_000) return cached.accessToken;
+
+    const tokens = await getUserOAuthTokens(userToken);
+    if (!tokens.msRefreshToken) throw new Error('NO_MS_TOKEN');
 
     if (!MS_CLIENT_ID || !MS_CLIENT_SECRET) {
         throw new Error('MS_CLIENT_ID and MS_CLIENT_SECRET must be set in environment.');
@@ -80,7 +115,7 @@ async function getMsAccessToken() {
     const params = new URLSearchParams({
         client_id: MS_CLIENT_ID,
         client_secret: MS_CLIENT_SECRET,
-        refresh_token: MS_REFRESH_TOKEN,
+        refresh_token: tokens.msRefreshToken,
         grant_type: 'refresh_token',
         scope: MS_SCOPES,
     });
@@ -94,13 +129,17 @@ async function getMsAccessToken() {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error_description || data.error || 'Failed to refresh MS token');
 
-    msAccessToken = data.access_token;
-    msTokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+    msAccessTokenCache[userToken] = {
+        accessToken: data.access_token,
+        expiry: Date.now() + (data.expires_in || 3600) * 1000,
+    };
+
+    // If Microsoft rotated the refresh token, save the new one
     if (data.refresh_token) {
-        MS_REFRESH_TOKEN = data.refresh_token;
-        writeEnvKey('MS_REFRESH_TOKEN', data.refresh_token);
+        await saveUserOAuthTokens(userToken, { msRefreshToken: data.refresh_token });
     }
-    return msAccessToken;
+
+    return data.access_token;
 }
 
 async function graphGet(path, token) {
@@ -112,7 +151,7 @@ async function graphGet(path, token) {
     return data;
 }
 
-// ─── Helper: forward a parsed email to Flask → AI → MongoDB ─────────────────
+// Helper: forward a parsed email to Flask to ai to mongodb
 
 async function forwardToFlask(payload) {
     const resp = await fetch(FLASK_API_URL, {
@@ -121,7 +160,6 @@ async function forwardToFlask(payload) {
         body: JSON.stringify(payload),
     });
 
-    // Check content type before parsing JSON
     const contentType = resp.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
         const text = await resp.text();
@@ -133,27 +171,43 @@ async function forwardToFlask(payload) {
     return data;
 }
 
-// ─── Google Auth routes ───────────────────────────────────────────────────────
+// Google Auth routes
 
-app.get('/auth/url', (req, res) => {
+/**
+ * GET /auth/url
+ * Returns the Google OAuth URL. Frontend passes its JWT so we can
+ * tie the callback back to this user via a short-lived `state` param.
+ * For simplicity we encode the userToken directly in state —
+ * in production use a signed, expiring state value instead.
+ */
+app.get('/auth/url', requireAuth, (req, res) => {
     const scopes = [
         'https://www.googleapis.com/auth/gmail.readonly',
         'https://www.googleapis.com/auth/calendar.events',
     ];
-    const url = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: scopes, prompt: 'select_account' });
+    const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
+    const url = oauth2Client.generateAuthUrl({
+        access_type: 'offline',
+        scope: scopes,
+        prompt: 'consent',
+        state: req.userToken, // carry userToken through OAuth round-trip
+    });
     res.json({ url });
 });
 
 app.get('/oauth2callback', async (req, res) => {
-    const code = req.query.code;
+    const { code, state: userToken } = req.query;
     if (!code) return res.status(400).send('Missing code');
+    if (!userToken) return res.status(400).send('Missing state/userToken');
+
     try {
+        const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
         const { tokens } = await oauth2Client.getToken(code);
-        oauth2Client.setCredentials(tokens);
+
         if (tokens.refresh_token) {
-            writeEnvKey('REFRESH_TOKEN', tokens.refresh_token);
-            process.env.REFRESH_TOKEN = tokens.refresh_token; 
+            await saveUserOAuthTokens(userToken, { googleRefreshToken: tokens.refresh_token });
         }
+
         res.send(successHtml());
     } catch (err) {
         console.error(err);
@@ -161,12 +215,13 @@ app.get('/oauth2callback', async (req, res) => {
     }
 });
 
-// ─── Gmail routes ─────────────────────────────────────────────────────────────
+// Gmail routes
 
-// GET /latest — fetch the single most recent Gmail message and forward to Flask
-app.get('/latest', async (req, res) => {
-    if (!REFRESH_TOKEN) return res.status(400).json({ error: 'REFRESH_TOKEN not set.' });
+app.get('/latest', requireAuth, async (req, res) => {
     try {
+        const authClient = await getGoogleClientForUser(req.userToken);
+        const gmail = google.gmail({ version: 'v1', auth: authClient });
+
         const list = await gmail.users.messages.list({ userId: 'me', maxResults: 1 });
         if (!list.data?.messages?.length) return res.status(404).json({ error: 'No messages found' });
 
@@ -183,31 +238,39 @@ app.get('/latest', async (req, res) => {
             snippet: message.snippet,
         };
 
-        // Forward to Flask → Gemini → MongoDB
         const flaskResult = await forwardToFlask(payload);
-
         res.json({ id, snippet: message.snippet, plainBody, flaskResult });
     } catch (err) {
+        if (err.message === 'NO_GOOGLE_TOKEN') {
+            return res.status(401).json({ error: 'NO_GOOGLE_TOKEN' });
+        }
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }
 });
 
-// GET /messages — list Gmail messages (no forwarding, listing only)
-app.get('/messages', async (req, res) => {
+app.get('/messages', requireAuth, async (req, res) => {
     try {
+        const authClient = await getGoogleClientForUser(req.userToken);
+        const gmail = google.gmail({ version: 'v1', auth: authClient });
+
         const { q, maxResults = 10 } = req.query;
         const resp = await gmail.users.messages.list({ userId: 'me', q, maxResults: parseInt(maxResults, 10) });
         res.json(resp.data);
     } catch (err) {
+        if (err.message === 'NO_GOOGLE_TOKEN') {
+            return res.status(401).json({ error: 'NO_GOOGLE_TOKEN' });
+        }
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }
 });
 
-// GET /message/:id — fetch a single Gmail message and forward to Flask
-app.get('/message/:id', async (req, res) => {
+app.get('/message/:id', requireAuth, async (req, res) => {
     try {
+        const authClient = await getGoogleClientForUser(req.userToken);
+        const gmail = google.gmail({ version: 'v1', auth: authClient });
+
         const { id } = req.params;
         const { format = 'full' } = req.query;
         const resp = await gmail.users.messages.get({ userId: 'me', id, format });
@@ -223,21 +286,23 @@ app.get('/message/:id', async (req, res) => {
             snippet: message.snippet,
         };
 
-        // Forward to Flask → Gemini → MongoDB
         const flaskResult = await forwardToFlask(payload);
-
         res.json({ message, plainBody, subject, flaskResult });
     } catch (err) {
+        if (err.message === 'NO_GOOGLE_TOKEN') {
+            return res.status(401).json({ error: 'NO_GOOGLE_TOKEN' });
+        }
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }
 });
 
-// POST /fetch-and-process — bulk fetch Gmail messages and forward each to Flask
-app.post('/fetch-and-process', async (req, res) => {
+app.post('/fetch-and-process', requireAuth, async (req, res) => {
     try {
-        const { maxResults = 10, q } = req.body;
+        const authClient = await getGoogleClientForUser(req.userToken);
+        const gmail = google.gmail({ version: 'v1', auth: authClient });
 
+        const { maxResults = 10, q } = req.body;
         const list = await gmail.users.messages.list({
             userId: 'me',
             maxResults: parseInt(maxResults, 10),
@@ -249,7 +314,6 @@ app.post('/fetch-and-process', async (req, res) => {
         }
 
         const results = [];
-
         for (const { id } of list.data.messages) {
             const msgResp = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
             const message = msgResp.data;
@@ -267,21 +331,23 @@ app.post('/fetch-and-process', async (req, res) => {
                 const flaskResult = await forwardToFlask(payload);
                 results.push({ id, status: 'ok', flaskResult });
             } catch (flaskErr) {
-                console.error(`Flask error for message ${id}:`, flaskErr.message);
                 results.push({ id, status: 'error', error: flaskErr.message });
             }
         }
 
         res.json({ processed: results.length, results });
     } catch (err) {
+        if (err.message === 'NO_GOOGLE_TOKEN') {
+            return res.status(401).json({ error: 'NO_GOOGLE_TOKEN' });
+        }
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }
 });
 
-// ─── Microsoft / Outlook routes ───────────────────────────────────────────────
+// Microsoft / Outlook routes
 
-app.get('/auth/microsoft/url', (req, res) => {
+app.get('/auth/microsoft/url', requireAuth, (req, res) => {
     if (!MS_CLIENT_ID) return res.status(500).json({ error: 'MS_CLIENT_ID not configured on server.' });
     const params = new URLSearchParams({
         client_id: MS_CLIENT_ID,
@@ -290,15 +356,16 @@ app.get('/auth/microsoft/url', (req, res) => {
         scope: MS_SCOPES,
         response_mode: 'query',
         prompt: 'consent',
+        state: req.userToken, // carry userToken through OAuth round-trip
     });
-    const url = `${MS_AUTH_URL_BASE}?${params.toString()}`;
-    res.json({ url });
+    res.json({ url: `${MS_AUTH_URL_BASE}?${params.toString()}` });
 });
 
 app.get('/auth/microsoft/callback', async (req, res) => {
-    const { code, error, error_description } = req.query;
+    const { code, state: userToken, error, error_description } = req.query;
     if (error) return res.status(400).send(`Auth error: ${error_description || error}`);
     if (!code) return res.status(400).send('Missing code');
+    if (!userToken) return res.status(400).send('Missing state/userToken');
 
     const params = new URLSearchParams({
         client_id: MS_CLIENT_ID,
@@ -318,12 +385,16 @@ app.get('/auth/microsoft/callback', async (req, res) => {
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error_description || data.error || 'Token exchange failed');
 
-        msAccessToken = data.access_token;
-        msTokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
         if (data.refresh_token) {
-            MS_REFRESH_TOKEN = data.refresh_token;
-            writeEnvKey('MS_REFRESH_TOKEN', data.refresh_token);
+            await saveUserOAuthTokens(userToken, { msRefreshToken: data.refresh_token });
         }
+
+        // Cache the access token for this user right away
+        msAccessTokenCache[userToken] = {
+            accessToken: data.access_token,
+            expiry: Date.now() + (data.expires_in || 3600) * 1000,
+        };
+
         res.send(successHtml());
     } catch (err) {
         console.error(err);
@@ -331,104 +402,102 @@ app.get('/auth/microsoft/callback', async (req, res) => {
     }
 });
 
-app.get('/auth/microsoft/status', (req, res) => {
-    res.json({ authenticated: !!MS_REFRESH_TOKEN || (!!msAccessToken && Date.now() < msTokenExpiry - 30_000) });
+app.get('/auth/microsoft/status', requireAuth, async (req, res) => {
+    try {
+        const tokens = await getUserOAuthTokens(req.userToken);
+        const cached = msAccessTokenCache[req.userToken];
+        const hasLiveToken = cached && Date.now() < cached.expiry - 30_000;
+        res.json({ authenticated: !!tokens.msRefreshToken || hasLiveToken });
+    } catch {
+        res.json({ authenticated: false });
+    }
 });
 
-// GET /outlook/messages — list Outlook messages (no forwarding, listing only)
-app.get('/outlook/messages', async (req, res) => {
+app.get('/outlook/messages', requireAuth, async (req, res) => {
     try {
-        const token = await getMsAccessToken();
+        const token = await getMsAccessTokenForUser(req.userToken);
         const { maxResults = 10, q } = req.query;
-        let url = `/me/messages?$top=${maxResults}&$select=id,subject,snippet,bodyPreview,receivedDateTime`;
+        let url = `/me/messages?$top=${maxResults}&$select=id,subject,bodyPreview,receivedDateTime`;
         if (q) url += `&$search="${encodeURIComponent(q)}"`;
         const data = await graphGet(url, token);
         res.json({ messages: (data.value || []).map(m => ({ id: m.id, subject: m.subject, snippet: m.bodyPreview })) });
     } catch (err) {
+        if (err.message === 'NO_MS_TOKEN') {
+            return res.status(401).json({ error: 'NO_MS_TOKEN' });
+        }
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }
 });
 
-// GET /outlook/message/:id — fetch a single Outlook message and forward to Flask
-app.get('/outlook/message/:id', async (req, res) => {
+app.get('/outlook/message/:id', requireAuth, async (req, res) => {
     try {
-        const token = await getMsAccessToken();
+        const token = await getMsAccessTokenForUser(req.userToken);
         const { id } = req.params;
         const msg = await graphGet(`/me/messages/${encodeURIComponent(id)}?$select=id,subject,bodyPreview,body,receivedDateTime,from`, token);
-        const plainBody = msg.body?.contentType === 'text'
-            ? msg.body.content
-            : msg.bodyPreview || '';
+        const plainBody = msg.body?.contentType === 'text' ? msg.body.content : msg.bodyPreview || '';
         const subject = msg.subject || msg.bodyPreview || '(no subject)';
 
-        const payload = {
-            id,
-            subject,
-            body: plainBody,
-            snippet: msg.bodyPreview || '',
-        };
-
-        // Forward to Flask → Gemini → MongoDB
+        const payload = { id, subject, body: plainBody, snippet: msg.bodyPreview || '' };
         const flaskResult = await forwardToFlask(payload);
-
         res.json({ message: msg, plainBody, subject, flaskResult });
     } catch (err) {
+        if (err.message === 'NO_MS_TOKEN') {
+            return res.status(401).json({ error: 'NO_MS_TOKEN' });
+        }
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }
 });
 
-// POST /outlook/fetch-and-process — bulk fetch Outlook messages and forward each to Flask
-app.post('/outlook/fetch-and-process', async (req, res) => {
+app.post('/outlook/fetch-and-process', requireAuth, async (req, res) => {
     try {
-        const token = await getMsAccessToken();
+        const token = await getMsAccessTokenForUser(req.userToken);
         const { maxResults = 10, q } = req.body;
-
         let url = `/me/messages?$top=${maxResults}&$select=id,subject,bodyPreview,body,receivedDateTime`;
         if (q) url += `&$search="${encodeURIComponent(q)}"`;
         const data = await graphGet(url, token);
 
-        if (!data.value?.length) {
-            return res.status(404).json({ error: 'No messages found' });
-        }
+        if (!data.value?.length) return res.status(404).json({ error: 'No messages found' });
 
         const results = [];
-
         for (const msg of data.value) {
-            const plainBody = msg.body?.contentType === 'text'
-                ? msg.body.content
-                : msg.bodyPreview || '';
-
+            const plainBody = msg.body?.contentType === 'text' ? msg.body.content : msg.bodyPreview || '';
             const payload = {
                 id: msg.id,
                 subject: msg.subject || '(no subject)',
                 body: plainBody,
                 snippet: msg.bodyPreview || '',
             };
-
             try {
                 const flaskResult = await forwardToFlask(payload);
                 results.push({ id: msg.id, status: 'ok', flaskResult });
             } catch (flaskErr) {
-                console.error(`Flask error for message ${msg.id}:`, flaskErr.message);
                 results.push({ id: msg.id, status: 'error', error: flaskErr.message });
             }
         }
 
         res.json({ processed: results.length, results });
     } catch (err) {
+        if (err.message === 'NO_MS_TOKEN') {
+            return res.status(401).json({ error: 'NO_MS_TOKEN' });
+        }
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }
 });
 
-// ─── Google Calendar ──────────────────────────────────────────────────────────
+// Google Calendar
 
-app.post('/calendar/add-event', async (req, res) => {
+app.post('/calendar/add-event', requireAuth, async (req, res) => {
     const { title, date, location } = req.body;
     if (!title) return res.status(400).json({ error: 'title is required' });
-    const eventDate = date || new Date().toISOString().split('T')[0];
+
     try {
+        const authClient = await getGoogleClientForUser(req.userToken);
+        const calendar = google.calendar({ version: 'v3', auth: authClient });
+
+        const eventDate = date || new Date().toISOString().split('T')[0];
         const event = await calendar.events.insert({
             calendarId: 'primary',
             requestBody: {
@@ -440,12 +509,15 @@ app.post('/calendar/add-event', async (req, res) => {
         });
         res.json({ success: true, eventId: event.data.id, htmlLink: event.data.htmlLink });
     } catch (err) {
+        if (err.message === 'NO_GOOGLE_TOKEN') {
+            return res.status(401).json({ error: 'NO_GOOGLE_TOKEN' });
+        }
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }
 });
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 function extractPlainBody(message) {
     function findPlain(parts = []) {
@@ -459,6 +531,11 @@ function extractPlainBody(message) {
     if (message.payload.body?.data) return base64UrlToUtf8(message.payload.body.data);
     if (message.payload.parts) return findPlain(message.payload.parts);
     return null;
+}
+
+function base64UrlToUtf8(b64url = '') {
+    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    return Buffer.from(b64, 'base64').toString('utf8');
 }
 
 function successHtml() {
