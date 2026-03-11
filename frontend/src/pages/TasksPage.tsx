@@ -1,65 +1,61 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import DateHeader from "../components/DateHeader";
-import { loadTasks, saveTasks } from "../services/taskProgress";
+import {
+  loadTasks,
+  saveTasks,
+  type SharedTask,
+} from "../services/taskProgress";
 import deadlineIcon from "../assets/page_buttons/deadline.png";
 
 /**
  * Represents a single task on the Tasks page.
  * These will eventually come from backend email/task extraction.
  */
-type TaskItem = {
-  id: number;
-  label: string;
-  done: boolean;
+type TaskItem = SharedTask;
+
+const formatIsoDate = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
-/**
- * Represents a deadline entry in the "Deadlines" section.
- */
-type DeadlineItem = {
-  id: string;
-  title: string;
-  dueDate: string;
-  displayDate: string;
-};
-
-const initialDeadlines: DeadlineItem[] = [
-  { id: "phys-lab-1", title: "PHYS 2425 - Lab", dueDate: "2026-02-20", displayDate: "02/20" },
-  { id: "gov-test", title: "GOV Unit Test", dueDate: "2026-02-22", displayDate: "02/22" },
-  { id: "phys-lab-2", title: "PHYS 2425 - Lab", dueDate: "2026-02-25", displayDate: "02/25" },
-  { id: "math-test", title: "MATH Test", dueDate: "2026-03-04", displayDate: "03/04" },
-  { id: "cs-midterm", title: "CS Midterm", dueDate: "2026-03-20", displayDate: "03/20" },
-  { id: "interview", title: "Interview", dueDate: "2026-03-22", displayDate: "03/22" },
-];
-
-const parseDateString = (value: string): Date | null => {
+const parseIsoDate = (value?: string): Date | null => {
+  if (!value) return null;
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day);
 };
 
-/**
- * Priority colors by due-date proximity.
- */
-const getDeadlinePriorityColor = (deadline: DeadlineItem): string => {
-  const due = parseDateString(deadline.dueDate);
-  if (!due) return "#A34712";
+const formatDisplayTime = (value?: string): string => {
+  if (!value) return "9:00 AM";
 
-  const today = new Date();
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const diffInMs = due.getTime() - today.getTime();
-  const diffInDays = Math.floor(diffInMs / msPerDay);
+  const [hoursRaw, minutes] = value.split(":").map(Number);
+  if (Number.isNaN(hoursRaw) || Number.isNaN(minutes)) return "9:00 AM";
 
-  if (diffInDays <= 3) return "#CC635A";
-  if (diffInDays <= 7) return "#E3B13E";
-  return "#4DA86C";
+  const period = hoursRaw >= 12 ? "PM" : "AM";
+  const hours = hoursRaw % 12 || 12;
+  return `${hours}:${String(minutes).padStart(2, "0")} ${period}`;
+};
+
+const formatDisplayDate = (date: Date): string => {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}/${day}`;
 };
 
 const TasksPage: React.FC = () => {
+  const editingTimeInputRef = useRef<HTMLInputElement | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
-  const [deadlines] = useState<DeadlineItem[]>(initialDeadlines);
-  const [activeTab, setActiveTab] = useState<"deadlines" | "tasks">("deadlines");
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date(2026, 1, 18));
+  const [isAddingTask, setIsAddingTask] = useState(false);
+  const [newTaskLabel, setNewTaskLabel] = useState("");
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const [editingLabel, setEditingLabel] = useState("");
+  const [editingDate, setEditingDate] = useState("");
+  const [editingTime, setEditingTime] = useState("");
+  const [isEditingTimeEnabled, setIsEditingTimeEnabled] = useState(true);
 
   useEffect(() => {
     saveTasks(tasks);
@@ -77,112 +73,307 @@ const TasksPage: React.FC = () => {
     setTasks((previousTasks) => previousTasks.filter((task) => !task.done));
   };
 
+  const startAddingTask = () => {
+    setIsAddingTask(true);
+    setNewTaskLabel("");
+    setEditingTaskId(null);
+    setEditingLabel("");
+    setEditingDate("");
+    setEditingTime("");
+    setIsEditingTimeEnabled(true);
+  };
+
+  const addTask = () => {
+    const trimmedLabel = newTaskLabel.trim();
+    if (!trimmedLabel) return;
+
+    const nextId =
+      tasks.length === 0 ? 1 : Math.max(...tasks.map((task) => task.id)) + 1;
+
+    setTasks((previousTasks) => [
+      ...previousTasks,
+      {
+        id: nextId,
+        label: trimmedLabel,
+        done: false,
+        date: formatIsoDate(selectedDate),
+        time: "09:00",
+      },
+    ]);
+    setIsAddingTask(false);
+    setNewTaskLabel("");
+  };
+
+  const cancelAddingTask = () => {
+    setIsAddingTask(false);
+    setNewTaskLabel("");
+  };
+
+  const startEditingTask = (task: TaskItem) => {
+    setEditingTaskId(task.id);
+    setEditingLabel(task.label);
+    setEditingDate(task.date ?? formatIsoDate(selectedDate));
+    setEditingTime(task.time ?? "09:00");
+    setIsEditingTimeEnabled(Boolean(task.time));
+    setIsAddingTask(false);
+    setNewTaskLabel("");
+  };
+
+  const saveEditedTask = (taskId: number) => {
+    const trimmedLabel = editingLabel.trim();
+    if (!trimmedLabel || !editingDate) return;
+
+    setTasks((previousTasks) =>
+      previousTasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              label: trimmedLabel,
+              date: editingDate,
+              time: isEditingTimeEnabled ? editingTime : undefined,
+            }
+          : task,
+      ),
+    );
+    setEditingTaskId(null);
+    setEditingLabel("");
+    setEditingDate("");
+    setEditingTime("");
+    setIsEditingTimeEnabled(true);
+  };
+
+  const cancelEditingTask = () => {
+    setEditingTaskId(null);
+    setEditingLabel("");
+    setEditingDate("");
+    setEditingTime("");
+    setIsEditingTimeEnabled(true);
+  };
+
+  const deleteTask = (taskId: number) => {
+    setTasks((previousTasks) => previousTasks.filter((task) => task.id !== taskId));
+    if (editingTaskId === taskId) {
+      setEditingTaskId(null);
+      setEditingLabel("");
+      setEditingDate("");
+      setEditingTime("");
+      setIsEditingTimeEnabled(true);
+    }
+  };
+
+  const openTimePicker = () => {
+    const input = editingTimeInputRef.current;
+    if (!input) return;
+
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+      return;
+    }
+
+    input.focus();
+    input.click();
+  };
+
+  const toggleEditingTime = (enabled: boolean) => {
+    if (!enabled) {
+      setIsEditingTimeEnabled(false);
+      setEditingTime("");
+      return;
+    }
+
+    setIsEditingTimeEnabled(true);
+    setEditingTime((previous) => previous || "09:00");
+
+    window.requestAnimationFrame(() => {
+      openTimePicker();
+    });
+  };
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#FFF2E9] p-4">
       <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-[30px] bg-[#FFFBF8]">
         <AppNavbar />
 
         <main className="min-h-0 flex flex-1 flex-col overflow-auto px-8 py-6 text-[#A34712]">
-          <DateHeader mode="week" date="02/18/2026" />
+          <DateHeader date="02/18/2026" onDateChange={setSelectedDate} />
 
           <section className="mt-6">
-            <div className="inline-flex rounded-full bg-[#FBE7D7] p-1">
-              <button
-                type="button"
-                onClick={() => setActiveTab("deadlines")}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
-                  activeTab === "deadlines" ? "bg-[#D3753D] text-white" : "text-[#A34712]"
-                }`}
-              >
-                Deadlines
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("tasks")}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
-                  activeTab === "tasks" ? "bg-[#D3753D] text-white" : "text-[#A34712]"
-                }`}
-              >
-                Tasks
-              </button>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <span className="material-symbols-outlined text-[18px]">task_alt</span>
+              <span>Tasks</span>
             </div>
-          </section>
 
-          {activeTab === "deadlines" ? (
-            <section className="mt-6">
-              <div className="flex items-center gap-2 text-sm font-semibold text-[#A34712]">
-                <span
-                  className="inline-block h-5 w-5 shrink-0 bg-[#A34712] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]"
-                  style={{
-                    maskImage: `url(${deadlineIcon})`,
-                    WebkitMaskImage: `url(${deadlineIcon})`,
-                  }}
-                  aria-hidden
-                />
-                <span>Deadlines</span>
-              </div>
+            <div className="mt-3 space-y-3">
+              {tasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="rounded-xl bg-[#FBE7D7] px-4 py-2 shadow-sm"
+                >
+                  {editingTaskId === task.id ? (
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        value={editingLabel}
+                        onChange={(event) => setEditingLabel(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") saveEditedTask(task.id);
+                          if (event.key === "Escape") cancelEditingTask();
+                        }}
+                        className="w-full rounded-md border border-[#D8B29A] bg-[#FFF8F2] px-3 py-2 text-sm text-[#4E3C34] focus:outline-none focus:ring-2 focus:ring-[#D3753D]"
+                        aria-label={`Edit task ${task.label}`}
+                        autoFocus
+                      />
 
-              <div className="mt-3 space-y-3">
-                {deadlines.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-stretch gap-3 rounded-xl bg-[#FBE7D7] px-3 py-2 shadow-sm"
-                  >
-                    <span
-                      className="mt-1 w-1 rounded-full"
-                      style={{ backgroundColor: getDeadlinePriorityColor(item) }}
-                    />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="date"
+                          value={editingDate}
+                          onChange={(event) => setEditingDate(event.target.value)}
+                          className="rounded-md border border-[#D8B29A] bg-[#FFF8F2] px-3 py-2 text-sm text-[#4E3C34] focus:outline-none focus:ring-2 focus:ring-[#D3753D]"
+                          aria-label={`Edit date for ${task.label}`}
+                        />
+                        <label className="inline-flex items-center gap-2 rounded-md border border-[#D8B29A] bg-[#FFF8F2] px-3 py-2 text-sm text-[#4E3C34]">
+                          <input
+                            type="checkbox"
+                            checked={isEditingTimeEnabled}
+                            onChange={(event) => toggleEditingTime(event.target.checked)}
+                            className="h-4 w-4 rounded-[3px] border border-[#6D2F12] accent-[#BA4500]"
+                          />
+                          <span>
+                            {isEditingTimeEnabled ? formatDisplayTime(editingTime) : "Show time"}
+                          </span>
+                        </label>
+                        <input
+                          ref={editingTimeInputRef}
+                          type="time"
+                          value={editingTime}
+                          onChange={(event) => {
+                            setEditingTime(event.target.value);
+                            setIsEditingTimeEnabled(true);
+                          }}
+                          className="sr-only"
+                          tabIndex={-1}
+                          aria-label={`Edit time for ${task.label}`}
+                        />
+                      </div>
 
-                    <div className="flex flex-1 items-center justify-between text-sm text-[#4E3C34]">
-                      <span className="pr-3">{item.title}</span>
-                      <span className="text-xs font-medium text-[#7A4A2D]">
-                        {item.displayDate}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => saveEditedTask(task.id)}
+                          className="inline-flex h-8 items-center justify-center rounded-full bg-[#D3753D] px-3 text-xs font-semibold text-white"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEditingTask}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#E8D3C4] text-[#7A4023]"
+                          aria-label={`Cancel editing ${task.label}`}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">close</span>
+                        </button>
+                      </div>
                     </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3 text-sm text-[#4E3C34]">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={task.done}
+                          onChange={() => toggleTask(task.id)}
+                          className="h-4 w-4 rounded-[3px] border border-[#6D2F12] accent-[#BA4500]"
+                          aria-label={`Mark "${task.label}" as completed`}
+                        />
+                        <span className={`truncate pr-3 ${task.done ? "line-through opacity-70" : ""}`}>
+                          {task.label}
+                        </span>
+                      </div>
 
-                    <button className="ml-2 inline-flex items-center justify-center rounded-full bg-[#D3753D] px-3 py-1 text-xs font-semibold text-white">
-                      Done
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : (
-            <section className="mt-6">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <span className="material-symbols-outlined text-[18px]">task_alt</span>
-                <span>Tasks</span>
-              </div>
+                      <div className="ml-3 flex shrink-0 items-center gap-2">
+                        <span className="text-xs font-medium text-[#7A4A2D]">
+                          {formatDisplayDate(parseIsoDate(task.date) ?? selectedDate)}
+                          {task.time ? `, ${formatDisplayTime(task.time)}` : ""}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditingTask(task)}
+                            className="inline-flex h-8 w-8 items-center justify-center text-[#7A4023] hover:text-[#A34712]"
+                            aria-label={`Edit ${task.label}`}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">edit</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteTask(task.id)}
+                            className="inline-flex h-8 w-8 items-center justify-center text-[#7A4023] hover:text-[#A34712]"
+                            aria-label={`Delete ${task.label}`}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
 
-              <div className="mt-3 space-y-2 text-sm text-[#5A3A2A]">
-                {tasks.map((task) => (
-                  <label
-                    key={task.id}
-                    className="flex cursor-pointer items-center gap-3"
+            {isAddingTask ? (
+              <div className="mt-6 rounded-2xl bg-[#FBE7D7] p-4 shadow-sm">
+                <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-[#7A4A2D]">
+                  New Task
+                </label>
+                <input
+                  type="text"
+                  value={newTaskLabel}
+                  onChange={(event) => setNewTaskLabel(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") addTask();
+                    if (event.key === "Escape") cancelAddingTask();
+                  }}
+                  className="mt-2 w-full rounded-xl border border-[#D8B29A] bg-[#FFF8F2] px-4 py-3 text-sm text-[#4E3C34] focus:outline-none focus:ring-2 focus:ring-[#D3753D]"
+                  placeholder="Add a task"
+                  aria-label="Add a task"
+                  autoFocus
+                />
+                <div className="mt-3 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={addTask}
+                    className="inline-flex items-center justify-center rounded-full bg-[#D3753D] px-5 py-2 text-sm font-semibold text-white"
                   >
-                    <input
-                      type="checkbox"
-                      checked={task.done}
-                      onChange={() => toggleTask(task.id)}
-                      className="h-4 w-4 rounded-[3px] border border-[#6D2F12] accent-[#BA4500]"
-                      aria-label={`Mark "${task.label}" as completed`}
-                    />
-                    <span className={task.done ? "line-through opacity-70" : ""}>
-                      {task.label}
-                    </span>
-                  </label>
-                ))}
+                    Save Task
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelAddingTask}
+                    className="inline-flex items-center justify-center rounded-full bg-[#E8D3C4] px-5 py-2 text-sm font-semibold text-[#7A4023]"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-
-              <button
-                type="button"
-                onClick={removeCompletedTasks}
-                className="mt-6 inline-flex items-center justify-center rounded-full bg-[#D3753D] px-6 py-2 text-sm font-semibold text-white"
-              >
-                Done
-              </button>
-            </section>
-          )}
+            ) : (
+              <div className="mt-6 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={startAddingTask}
+                  className="inline-flex items-center justify-center rounded-full bg-[#D3753D] px-6 py-2 text-sm font-semibold text-white"
+                >
+                  Add Task
+                </button>
+                <button
+                  type="button"
+                  onClick={removeCompletedTasks}
+                  className="inline-flex items-center justify-center rounded-full bg-[#E8D3C4] px-6 py-2 text-sm font-semibold text-[#7A4023]"
+                >
+                  Clear Completed
+                </button>
+              </div>
+            )}
+          </section>
         </main>
       </div>
     </div>

@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
-import DateHeader from "../components/DateHeader";
 import {
   getTaskProgress,
   loadTasks,
@@ -15,6 +14,7 @@ type ImportantEmailPreview = {
   id: string;
   sender: string;
   source: "gmail" | "handshake";
+  tone: "urgent" | "soon" | "done";
 };
 
 /**
@@ -29,23 +29,27 @@ type TodayEvent = {
 const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
   {
     id: "mail-1",
-    sender: "John Mathew @Verizon @Handshake",
+    sender: "Internship Application Update @Amazon",
     source: "gmail",
+    tone: "urgent",
   },
   {
     id: "mail-2",
-    sender: "John Mathew @Toyota @Handshake",
-    source: "handshake",
+    sender: "Club meeting today",
+    source: "gmail",
+    tone: "soon",
   },
   {
     id: "mail-3",
-    sender: "John Mathew @ACM",
-    source: "handshake",
+    sender: "Tution deadline reminder",
+    source: "gmail",
+    tone: "done",
   },
   {
     id: "mail-4",
     sender: "John Dollinger @CS 3377",
     source: "gmail",
+    tone: "soon",
   },
 ];
 
@@ -55,8 +59,93 @@ const EVENTS: TodayEvent[] = [
   { time: "08:30 - 10:00", title: "ACM Meeting @ SLC" },
 ];
 
+const startOfWeekSunday = (date: Date): Date => {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - start.getDay());
+  return start;
+};
+
+const addDays = (date: Date, days: number): Date => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
+const formatDate = (date: Date): string => {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = String(date.getFullYear() % 100).padStart(2, "0");
+  return `${month}/${day}/${year}`;
+};
+
+const EMAIL_TONE_STYLES: Record<
+  ImportantEmailPreview["tone"],
+  { leftStrip: string }
+> = {
+  urgent: {
+    leftStrip: "bg-[#D84A5D]",
+  },
+  soon: {
+    leftStrip: "bg-[#E8C24C]",
+  },
+  done: {
+    leftStrip: "bg-[#62AE87]",
+  },
+};
+
+type TodayWeeklyHeaderProps = {
+  weekStart: Date;
+  onShiftWeek: (delta: number) => void;
+};
+
+const TodayWeeklyHeader: React.FC<TodayWeeklyHeaderProps> = ({
+  weekStart,
+  onShiftWeek,
+}) => {
+  const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
+
+  return (
+    <header className="border-b border-[#F3C5A5] px-4 pb-4 pt-4 text-[#913c14] sm:px-6 sm:pb-5 sm:pt-5 lg:px-8 lg:pb-5 lg:pt-6">
+      <div className="flex items-center justify-center gap-1.5 sm:gap-3.5 lg:gap-6">
+        <button
+          type="button"
+          className="cursor-pointer text-[#913c14]"
+          aria-label="Previous week"
+          onClick={() => onShiftWeek(-1)}
+        >
+          <span className="material-symbols-outlined text-[30px] sm:text-[35px] lg:text-[40px]">
+            arrow_back
+          </span>
+        </button>
+
+        <p className="whitespace-nowrap text-center text-[27px] leading-none tracking-[0.03em] sm:text-[34px] sm:tracking-[0.05em] lg:text-[40px] lg:tracking-[0.06em] xl:text-[46px] xl:tracking-[0.07em]">
+          {formatDate(weekStart)} - {formatDate(weekEnd)}
+        </p>
+
+        <button
+          type="button"
+          className="cursor-pointer text-[#913c14]"
+          aria-label="Next week"
+          onClick={() => onShiftWeek(1)}
+        >
+          <span className="material-symbols-outlined text-[30px] sm:text-[35px] lg:text-[40px]">
+            arrow_forward
+          </span>
+        </button>
+      </div>
+    </header>
+  );
+};
+
 const TodayPage: React.FC = () => {
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
+  const [anchorDate, setAnchorDate] = useState<Date>(() => new Date());
+  const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(
+    () => IMPORTANT_EMAILS_FILLER,
+  );
+
+  const weekStart = useMemo(() => startOfWeekSunday(anchorDate), [anchorDate]);
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -83,15 +172,27 @@ const TodayPage: React.FC = () => {
     );
   };
 
+  const shiftWeek = (delta: number) => {
+    setAnchorDate((previous) => addDays(previous, delta * 7));
+  };
+
+  const handleOpenEmail = (_email: ImportantEmailPreview) => {
+    // Placeholder until mail detail/open workflow is wired.
+  };
+
+  const handleDismissEmail = (emailId: string) => {
+    setImportantEmails((previous) => previous.filter((email) => email.id !== emailId));
+  };
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F8E7DD] p-4">
       <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-[30px] bg-[#FFFBF8]">
         <AppNavbar />
 
-        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-8 py-6 text-[#913c14]">
-          <DateHeader mode="week" date="02/18/2026" />
+        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-4 py-3 text-[#913c14] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
+          <TodayWeeklyHeader weekStart={weekStart} onShiftWeek={shiftWeek} />
 
-          <section className="mt-8 max-w-xl">
+          <section className="mt-5 w-full max-w-4xl sm:mt-6">
             <div className="flex items-center gap-2 text-sm font-medium">
               <span className="material-symbols-outlined text-[18px] text-[#913c14]">
                 workspace_premium
@@ -99,7 +200,7 @@ const TodayPage: React.FC = () => {
               <span>Progress</span>
             </div>
 
-            <div className="mt-3 flex items-center gap-3">
+            <div className="mt-2 flex items-center gap-3">
               <div className="relative h-2 flex-1 rounded-full bg-[#FFF0E5]">
                 <div
                   className="h-2 rounded-full bg-[#BA4500] transition-[width] duration-200 ease-out"
@@ -116,7 +217,7 @@ const TodayPage: React.FC = () => {
             </p>
           </section>
 
-          <section className="mt-8 max-w-xl">
+          <section className="mt-5 w-full max-w-4xl sm:mt-6">
             <div className="flex items-center gap-2 text-sm font-medium">
               <span className="material-symbols-outlined text-[18px] text-[#913c14]">
                 star
@@ -124,45 +225,56 @@ const TodayPage: React.FC = () => {
               <span>Important Emails</span>
             </div>
 
-            <div className="mt-3 space-y-3">
-              {IMPORTANT_EMAILS_FILLER.map((mail, index) => {
-                const background =
-                  index === 0
-                    ? "bg-[#FFF0E5]"
-                    : index === 1
-                    ? "bg-[#FAE6D9]"
-                    : "bg-[#FED3B4]";
+            <div className="mt-2 space-y-2">
+              {importantEmails.map((mail) => {
+                const toneStyles = EMAIL_TONE_STYLES[mail.tone];
 
                 return (
-                  <button
+                  <div
                     key={mail.id}
-                    type="button"
-                    className={`group relative flex w-full items-center justify-between rounded-xl px-4 py-2.5 text-left text-sm text-[#6D2F12] ${background} transition-all duration-200 ease-out hover:-translate-y-[1px] hover:shadow-sm`}
+                    className="group relative w-full overflow-visible"
                   >
-                    <div className="flex items-center gap-3">
-                      {getSourceIcon(mail.source)}
-                      <span>{mail.sender}</span>
-                    </div>
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute -left-1 inset-y-0 right-1 rounded-xl ${toneStyles.leftStrip}`}
+                    />
 
-                    <div
-                      className="absolute right-3 top-1/2 flex -translate-y-1/2 translate-x-2 items-center opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                      title="Mark as read"
-                      aria-label="Mark as read"
-                    >
-                      <span className="material-symbols-outlined text-[18px] text-[#D75B00] drop-shadow-[0_2px_6px_rgba(172,64,0,0.25)] transition-transform duration-200 ease-out group-hover:scale-110">
-                        check
-                      </span>
+                    <div className="relative z-10 flex w-full items-center justify-between rounded-xl bg-[#FFF0E5] px-4 py-2 pl-5 text-left text-sm text-[#6D2F12]">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEmail(mail)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      >
+                        {getSourceIcon(mail.source)}
+                        <span className="truncate">{mail.sender}</span>
+                      </button>
+
+                      <div className="ml-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEmail(mail)}
+                          className="inline-flex h-8 items-center justify-center rounded-full bg-[#D75B00] px-4 text-xs font-semibold text-white opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                          aria-label={`Open email from ${mail.sender}`}
+                        >
+                          Open
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDismissEmail(mail.id)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#E8D3C4] text-[#7A4023] opacity-0 transition-opacity duration-150 ease-out hover:bg-[#DFBFA9] group-hover:opacity-100 group-focus-within:opacity-100"
+                          aria-label={`Dismiss email from ${mail.sender}`}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">close</span>
+                        </button>
+                      </div>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
           </section>
 
-          <section className="mt-10 max-w-xl">
+          <section className="mt-6 w-full max-w-4xl sm:mt-7">
             <div className="flex items-center gap-2 text-sm font-medium">
               <span className="material-symbols-outlined text-[18px] text-[#913c14]">
                 event_note
@@ -170,14 +282,14 @@ const TodayPage: React.FC = () => {
               <span>Upcoming Events</span>
             </div>
 
-            <div className="mt-3 space-y-3">
+            <div className="mt-2 space-y-2">
               {EVENTS.map((event, index) => {
                 const background =
                   index === 0
-                    ? "bg-[#FFF0E5]"
+                    ? "bg-[#FED3B4]"
                     : index === 1
                     ? "bg-[#FAE6D9]"
-                    : "bg-[#FED3B4]";
+                    : "bg-[#FFF0E5]";
 
                 return (
                   <div
