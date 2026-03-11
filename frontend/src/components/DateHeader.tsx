@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-interface DateHeaderProps {
+export interface DateHeaderProps {
   /**
    * Optional initial date in MM/DD/YYYY format.
    * If omitted, the component starts from today's date.

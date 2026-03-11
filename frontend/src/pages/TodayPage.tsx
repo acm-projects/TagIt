@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
+import WeekHeader from "../components/WeekHeader";
 import {
   getTaskProgress,
   loadTasks,
@@ -59,26 +60,6 @@ const EVENTS: TodayEvent[] = [
   { time: "08:30 - 10:00", title: "ACM Meeting @ SLC" },
 ];
 
-const startOfWeekSunday = (date: Date): Date => {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - start.getDay());
-  return start;
-};
-
-const addDays = (date: Date, days: number): Date => {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-};
-
-const formatDate = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const year = String(date.getFullYear() % 100).padStart(2, "0");
-  return `${month}/${day}/${year}`;
-};
-
 const EMAIL_TONE_STYLES: Record<
   ImportantEmailPreview["tone"],
   { leftStrip: string }
@@ -94,58 +75,11 @@ const EMAIL_TONE_STYLES: Record<
   },
 };
 
-type TodayWeeklyHeaderProps = {
-  weekStart: Date;
-  onShiftWeek: (delta: number) => void;
-};
-
-const TodayWeeklyHeader: React.FC<TodayWeeklyHeaderProps> = ({
-  weekStart,
-  onShiftWeek,
-}) => {
-  const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
-
-  return (
-    <header className="border-b border-[#F3C5A5] px-4 pb-4 pt-4 text-[#913c14] sm:px-6 sm:pb-5 sm:pt-5 lg:px-8 lg:pb-5 lg:pt-6">
-      <div className="flex items-center justify-center gap-1.5 sm:gap-3.5 lg:gap-6">
-        <button
-          type="button"
-          className="cursor-pointer text-[#913c14]"
-          aria-label="Previous week"
-          onClick={() => onShiftWeek(-1)}
-        >
-          <span className="material-symbols-outlined text-[30px] sm:text-[35px] lg:text-[40px]">
-            arrow_back
-          </span>
-        </button>
-
-        <p className="whitespace-nowrap text-center text-[27px] leading-none tracking-[0.03em] sm:text-[34px] sm:tracking-[0.05em] lg:text-[40px] lg:tracking-[0.06em] xl:text-[46px] xl:tracking-[0.07em]">
-          {formatDate(weekStart)} - {formatDate(weekEnd)}
-        </p>
-
-        <button
-          type="button"
-          className="cursor-pointer text-[#913c14]"
-          aria-label="Next week"
-          onClick={() => onShiftWeek(1)}
-        >
-          <span className="material-symbols-outlined text-[30px] sm:text-[35px] lg:text-[40px]">
-            arrow_forward
-          </span>
-        </button>
-      </div>
-    </header>
-  );
-};
-
 const TodayPage: React.FC = () => {
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
-  const [anchorDate, setAnchorDate] = useState<Date>(() => new Date());
   const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(
     () => IMPORTANT_EMAILS_FILLER,
   );
-
-  const weekStart = useMemo(() => startOfWeekSunday(anchorDate), [anchorDate]);
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -172,10 +106,6 @@ const TodayPage: React.FC = () => {
     );
   };
 
-  const shiftWeek = (delta: number) => {
-    setAnchorDate((previous) => addDays(previous, delta * 7));
-  };
-
   const handleOpenEmail = (_email: ImportantEmailPreview) => {
     // Placeholder until mail detail/open workflow is wired.
   };
@@ -190,7 +120,7 @@ const TodayPage: React.FC = () => {
         <AppNavbar />
 
         <main className="flex min-h-0 flex-1 flex-col overflow-auto px-4 py-3 text-[#913c14] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
-          <TodayWeeklyHeader weekStart={weekStart} onShiftWeek={shiftWeek} />
+          <WeekHeader />
 
           <section className="mt-5 w-full max-w-4xl sm:mt-6">
             <div className="flex items-center gap-2 text-sm font-medium">

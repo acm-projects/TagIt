@@ -1,6 +1,6 @@
 import React from "react";
 import AppNavbar from "../components/AppNavbar";
-import DateHeader from "../components/DateHeader";
+import WeekHeader from "../components/WeekHeader";
 import calendarEventsIcon from "../assets/page_buttons/calendar_events.png";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
@@ -13,7 +13,7 @@ const CalendarPage: React.FC = () => {
 
         {/* Main content: same header strip as other pages */}
         <main className="min-h-0 flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-8 py-6">
-          <DateHeader />
+          <WeekHeader />
 
           {/* Calendar Events */}
           <section className="mt-8 w-full min-w-0">

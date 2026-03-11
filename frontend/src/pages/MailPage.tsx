@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
-import DateHeader from "../components/DateHeader";
+import WeekHeader from "../components/WeekHeader";
 import mailOpenIcon from "../assets/page_buttons/mail_open.png";
 import draftIcon from "../assets/page_buttons/draft.png";
 
@@ -82,8 +82,8 @@ const MailPage: React.FC = () => {
     },
   ]);
 
-  const days: MailItem["day"][] = ["mon", "tue", "wed", "thur", "fri", "sat", "sun"];
-  const [selectedDay, setSelectedDay] = useState<MailItem["day"]>("mon");
+  const days: MailItem["day"][] = ["sun", "mon", "tue", "wed", "thur", "fri", "sat"];
+  const [selectedDay, setSelectedDay] = useState<MailItem["day"]>("sun");
 
   const filteredMails = useMemo(
     () => mails.filter((mail) => mail.day === selectedDay),
@@ -115,7 +115,7 @@ const MailPage: React.FC = () => {
         <AppNavbar />
 
         <main className="flex min-h-0 flex-1 flex-col overflow-auto px-8 py-6 text-[#A34712]">
-          <DateHeader mode="week" />
+          <WeekHeader />
 
           <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1">
             {days.map((day) => {
