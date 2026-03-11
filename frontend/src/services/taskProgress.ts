@@ -2,6 +2,7 @@ export type SharedTask = {
   id: number;
   label: string;
   done: boolean;
+  date?: string;
 };
 
 export type TaskProgress = {
@@ -15,11 +16,28 @@ export const DEFAULT_TASKS: SharedTask[] = [
   { id: 2, label: "PHYS review", done: false },
   { id: 3, label: "Math Ch.2 practice", done: false },
   { id: 4, label: "Bash scripting exercises", done: false },
-  { id: 5, label: "Next GOVT 2306 chapter", done: false },
-  { id: 6, label: "Group project work", done: false },
-  { id: 7, label: "Check/reply emails", done: false },
-  { id: 8, label: "Return library book", done: false },
-  { id: 9, label: "Organize notes", done: false },
+];
+
+const LEGACY_DEFAULT_TASK_LABEL_SETS = [
+  [
+    "GOV 2306 review",
+    "PHYS review",
+    "Math Ch.2 practice",
+    "Bash scripting exercises",
+    "Next GOVT 2306 chapter",
+    "Group project work",
+  ],
+  [
+    "GOV 2306 review",
+    "PHYS review",
+    "Math Ch.2 practice",
+    "Bash scripting exercises",
+    "Next GOVT 2306 chapter",
+    "Group project work",
+    "Check/reply emails",
+    "Return library book",
+    "Organize notes",
+  ],
 ];
 
 const TASKS_STORAGE_KEY = "tagit.tasks.v1";
@@ -27,6 +45,20 @@ const TASKS_UPDATED_EVENT = "tagit:tasks-updated";
 
 const cloneTasks = (tasks: SharedTask[]): SharedTask[] =>
   tasks.map((task) => ({ ...task }));
+
+const isIsoDateString = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+const matchesLegacySeedTasks = (tasks: SharedTask[]): boolean =>
+  LEGACY_DEFAULT_TASK_LABEL_SETS.some((labels) => {
+    if (tasks.length !== labels.length) return false;
+
+    return tasks.every(
+      (task, index) =>
+        task.label === labels[index] &&
+        task.id === index + 1 &&
+        task.done === false,
+    );
+  });
 
 const isSharedTaskArray = (value: unknown): value is SharedTask[] => {
   if (!Array.isArray(value)) return false;
@@ -37,7 +69,9 @@ const isSharedTaskArray = (value: unknown): value is SharedTask[] => {
     return (
       typeof candidate.id === "number" &&
       typeof candidate.label === "string" &&
-      typeof candidate.done === "boolean"
+      typeof candidate.done === "boolean" &&
+      (candidate.date === undefined ||
+        (typeof candidate.date === "string" && isIsoDateString(candidate.date)))
     );
   });
 };
@@ -49,6 +83,10 @@ export const loadTasks = (): SharedTask[] => {
 
     const parsed: unknown = JSON.parse(raw);
     if (!isSharedTaskArray(parsed)) return cloneTasks(DEFAULT_TASKS);
+
+    if (matchesLegacySeedTasks(parsed)) {
+      return cloneTasks(DEFAULT_TASKS);
+    }
 
     return cloneTasks(parsed);
   } catch {
