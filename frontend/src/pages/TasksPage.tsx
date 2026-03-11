@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import DateHeader from "../components/DateHeader";
 import {
@@ -27,6 +27,17 @@ const parseIsoDate = (value?: string): Date | null => {
   return new Date(year, month - 1, day);
 };
 
+const formatDisplayTime = (value?: string): string => {
+  if (!value) return "9:00 AM";
+
+  const [hoursRaw, minutes] = value.split(":").map(Number);
+  if (Number.isNaN(hoursRaw) || Number.isNaN(minutes)) return "9:00 AM";
+
+  const period = hoursRaw >= 12 ? "PM" : "AM";
+  const hours = hoursRaw % 12 || 12;
+  return `${hours}:${String(minutes).padStart(2, "0")} ${period}`;
+};
+
 const formatDisplayDate = (date: Date): string => {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -34,6 +45,7 @@ const formatDisplayDate = (date: Date): string => {
 };
 
 const TasksPage: React.FC = () => {
+  const editingTimeInputRef = useRef<HTMLInputElement | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date(2026, 1, 18));
   const [isAddingTask, setIsAddingTask] = useState(false);
@@ -41,6 +53,8 @@ const TasksPage: React.FC = () => {
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [editingDate, setEditingDate] = useState("");
+  const [editingTime, setEditingTime] = useState("");
+  const [isEditingTimeEnabled, setIsEditingTimeEnabled] = useState(true);
 
   useEffect(() => {
     saveTasks(tasks);
@@ -64,6 +78,8 @@ const TasksPage: React.FC = () => {
     setEditingTaskId(null);
     setEditingLabel("");
     setEditingDate("");
+    setEditingTime("");
+    setIsEditingTimeEnabled(true);
   };
 
   const addTask = () => {
@@ -75,7 +91,13 @@ const TasksPage: React.FC = () => {
 
     setTasks((previousTasks) => [
       ...previousTasks,
-      { id: nextId, label: trimmedLabel, done: false, date: formatIsoDate(selectedDate) },
+      {
+        id: nextId,
+        label: trimmedLabel,
+        done: false,
+        date: formatIsoDate(selectedDate),
+        time: "09:00",
+      },
     ]);
     setIsAddingTask(false);
     setNewTaskLabel("");
@@ -90,6 +112,8 @@ const TasksPage: React.FC = () => {
     setEditingTaskId(task.id);
     setEditingLabel(task.label);
     setEditingDate(task.date ?? formatIsoDate(selectedDate));
+    setEditingTime(task.time ?? "09:00");
+    setIsEditingTimeEnabled(Boolean(task.time));
     setIsAddingTask(false);
     setNewTaskLabel("");
   };
@@ -101,19 +125,28 @@ const TasksPage: React.FC = () => {
     setTasks((previousTasks) =>
       previousTasks.map((task) =>
         task.id === taskId
-          ? { ...task, label: trimmedLabel, date: editingDate }
+          ? {
+              ...task,
+              label: trimmedLabel,
+              date: editingDate,
+              time: isEditingTimeEnabled ? editingTime : undefined,
+            }
           : task,
       ),
     );
     setEditingTaskId(null);
     setEditingLabel("");
     setEditingDate("");
+    setEditingTime("");
+    setIsEditingTimeEnabled(true);
   };
 
   const cancelEditingTask = () => {
     setEditingTaskId(null);
     setEditingLabel("");
     setEditingDate("");
+    setEditingTime("");
+    setIsEditingTimeEnabled(true);
   };
 
   const deleteTask = (taskId: number) => {
@@ -122,7 +155,37 @@ const TasksPage: React.FC = () => {
       setEditingTaskId(null);
       setEditingLabel("");
       setEditingDate("");
+      setEditingTime("");
+      setIsEditingTimeEnabled(true);
     }
+  };
+
+  const openTimePicker = () => {
+    const input = editingTimeInputRef.current;
+    if (!input) return;
+
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+      return;
+    }
+
+    input.focus();
+    input.click();
+  };
+
+  const toggleEditingTime = (enabled: boolean) => {
+    if (!enabled) {
+      setIsEditingTimeEnabled(false);
+      setEditingTime("");
+      return;
+    }
+
+    setIsEditingTimeEnabled(true);
+    setEditingTime((previous) => previous || "09:00");
+
+    window.requestAnimationFrame(() => {
+      openTimePicker();
+    });
   };
 
   return (
@@ -145,69 +208,92 @@ const TasksPage: React.FC = () => {
                   key={task.id}
                   className="rounded-xl bg-[#FBE7D7] px-4 py-2 shadow-sm"
                 >
-                  <div className="flex items-center justify-between gap-3 text-sm text-[#4E3C34]">
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                  {editingTaskId === task.id ? (
+                    <div className="space-y-3">
                       <input
-                        type="checkbox"
-                        checked={task.done}
-                        onChange={() => toggleTask(task.id)}
-                        className="h-4 w-4 rounded-[3px] border border-[#6D2F12] accent-[#BA4500]"
-                        aria-label={`Mark "${task.label}" as completed`}
+                        type="text"
+                        value={editingLabel}
+                        onChange={(event) => setEditingLabel(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") saveEditedTask(task.id);
+                          if (event.key === "Escape") cancelEditingTask();
+                        }}
+                        className="w-full rounded-md border border-[#D8B29A] bg-[#FFF8F2] px-3 py-2 text-sm text-[#4E3C34] focus:outline-none focus:ring-2 focus:ring-[#D3753D]"
+                        aria-label={`Edit task ${task.label}`}
+                        autoFocus
                       />
 
-                      {editingTaskId === task.id ? (
-                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="date"
+                          value={editingDate}
+                          onChange={(event) => setEditingDate(event.target.value)}
+                          className="rounded-md border border-[#D8B29A] bg-[#FFF8F2] px-3 py-2 text-sm text-[#4E3C34] focus:outline-none focus:ring-2 focus:ring-[#D3753D]"
+                          aria-label={`Edit date for ${task.label}`}
+                        />
+                        <label className="inline-flex items-center gap-2 rounded-md border border-[#D8B29A] bg-[#FFF8F2] px-3 py-2 text-sm text-[#4E3C34]">
                           <input
-                            type="text"
-                            value={editingLabel}
-                            onChange={(event) => setEditingLabel(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") saveEditedTask(task.id);
-                              if (event.key === "Escape") cancelEditingTask();
-                            }}
-                            className="min-w-0 flex-1 rounded-md border border-[#D8B29A] bg-[#FFF8F2] px-2 py-1 text-sm text-[#4E3C34] focus:outline-none focus:ring-2 focus:ring-[#D3753D]"
-                            aria-label={`Edit task ${task.label}`}
-                            autoFocus
+                            type="checkbox"
+                            checked={isEditingTimeEnabled}
+                            onChange={(event) => toggleEditingTime(event.target.checked)}
+                            className="h-4 w-4 rounded-[3px] border border-[#6D2F12] accent-[#BA4500]"
                           />
-                          <input
-                            type="date"
-                            value={editingDate}
-                            onChange={(event) => setEditingDate(event.target.value)}
-                            className="rounded-md border border-[#D8B29A] bg-[#FFF8F2] px-2 py-1 text-sm text-[#4E3C34] focus:outline-none focus:ring-2 focus:ring-[#D3753D]"
-                            aria-label={`Edit date for ${task.label}`}
-                          />
-                        </div>
-                      ) : (
+                          <span>
+                            {isEditingTimeEnabled ? formatDisplayTime(editingTime) : "Show time"}
+                          </span>
+                        </label>
+                        <input
+                          ref={editingTimeInputRef}
+                          type="time"
+                          value={editingTime}
+                          onChange={(event) => {
+                            setEditingTime(event.target.value);
+                            setIsEditingTimeEnabled(true);
+                          }}
+                          className="sr-only"
+                          tabIndex={-1}
+                          aria-label={`Edit time for ${task.label}`}
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => saveEditedTask(task.id)}
+                          className="inline-flex h-8 items-center justify-center rounded-full bg-[#D3753D] px-3 text-xs font-semibold text-white"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEditingTask}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#E8D3C4] text-[#7A4023]"
+                          aria-label={`Cancel editing ${task.label}`}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">close</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3 text-sm text-[#4E3C34]">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={task.done}
+                          onChange={() => toggleTask(task.id)}
+                          className="h-4 w-4 rounded-[3px] border border-[#6D2F12] accent-[#BA4500]"
+                          aria-label={`Mark "${task.label}" as completed`}
+                        />
                         <span className={`truncate pr-3 ${task.done ? "line-through opacity-70" : ""}`}>
                           {task.label}
                         </span>
-                      )}
-                    </div>
+                      </div>
 
-                    <div className="ml-3 flex shrink-0 items-center gap-2">
-                      <span className="text-xs font-medium text-[#7A4A2D]">
-                        {formatDisplayDate(parseIsoDate(task.date) ?? selectedDate)}
-                      </span>
-
-                      {editingTaskId === task.id ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => saveEditedTask(task.id)}
-                            className="inline-flex h-8 items-center justify-center rounded-full bg-[#D3753D] px-3 text-xs font-semibold text-white"
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            onClick={cancelEditingTask}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#E8D3C4] text-[#7A4023]"
-                            aria-label={`Cancel editing ${task.label}`}
-                          >
-                            <span className="material-symbols-outlined text-[18px]">close</span>
-                          </button>
-                        </>
-                      ) : (
+                      <div className="ml-3 flex shrink-0 items-center gap-2">
+                        <span className="text-xs font-medium text-[#7A4A2D]">
+                          {formatDisplayDate(parseIsoDate(task.date) ?? selectedDate)}
+                          {task.time ? `, ${formatDisplayTime(task.time)}` : ""}
+                        </span>
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
@@ -226,9 +312,9 @@ const TasksPage: React.FC = () => {
                             <span className="material-symbols-outlined text-[18px]">delete</span>
                           </button>
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>

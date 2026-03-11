@@ -3,6 +3,7 @@ export type SharedTask = {
   label: string;
   done: boolean;
   date?: string;
+  time?: string;
 };
 
 export type TaskProgress = {
@@ -47,6 +48,7 @@ const cloneTasks = (tasks: SharedTask[]): SharedTask[] =>
   tasks.map((task) => ({ ...task }));
 
 const isIsoDateString = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value);
+const isTimeString = (value: string): boolean => /^\d{2}:\d{2}$/.test(value);
 
 const matchesLegacySeedTasks = (tasks: SharedTask[]): boolean =>
   LEGACY_DEFAULT_TASK_LABEL_SETS.some((labels) => {
@@ -71,7 +73,9 @@ const isSharedTaskArray = (value: unknown): value is SharedTask[] => {
       typeof candidate.label === "string" &&
       typeof candidate.done === "boolean" &&
       (candidate.date === undefined ||
-        (typeof candidate.date === "string" && isIsoDateString(candidate.date)))
+        (typeof candidate.date === "string" && isIsoDateString(candidate.date))) &&
+      (candidate.time === undefined ||
+        (typeof candidate.time === "string" && isTimeString(candidate.time)))
     );
   });
 };
