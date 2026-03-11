@@ -9,13 +9,14 @@ import draftIcon from "../assets/page_buttons/draft.png";
  * Backend message ranking can map directly to `priorityScore`.
  */
 type MailItem = {
- id: string;
+  id: string;
   summary: string;
   sender: string;
   body: string;
   extra?: string;
   tags: string[];
   priorityScore: number;
+  day: "mon" | "tue" | "wed" | "thur" | "fri" | "sat" | "sun";
 };
 
 /**
@@ -40,6 +41,7 @@ const MailPage: React.FC = () => {
       body: "Requesting a screenshot of current off-campus enrollment (with courses and college) to grant temporary credit while awaiting transfer.",
       tags: ["Temporary Credit"],
       priorityScore: 10,
+      day: "mon",
     },
     {
       id: "m2",
@@ -49,6 +51,7 @@ const MailPage: React.FC = () => {
       extra: "Deadline : March 15, 2026",
       tags: ["Internship", "Resume"],
       priorityScore: 9,
+      day: "tue",
     },
     {
       id: "m3",
@@ -58,6 +61,7 @@ const MailPage: React.FC = () => {
       extra: "Deadline : March 15, 2026",
       tags: [],
       priorityScore: 6,
+      day: "wed",
     },
     {
       id: "m4",
@@ -67,6 +71,7 @@ const MailPage: React.FC = () => {
       extra: "Due: March 20, 2026",
       tags: ["Enrollment", "Reminder"],
       priorityScore: 7,
+      day: "fri",
     },
   ]);
 
@@ -77,9 +82,17 @@ const MailPage: React.FC = () => {
     },
   ]);
 
+  const days: MailItem["day"][] = ["mon", "tue", "wed", "thur", "fri", "sat", "sun"];
+  const [selectedDay, setSelectedDay] = useState<MailItem["day"]>("mon");
+
+  const filteredMails = useMemo(
+    () => mails.filter((mail) => mail.day === selectedDay),
+    [mails, selectedDay],
+  );
+
   const sortedMails = useMemo(
-    () => [...mails].sort((a, b) => b.priorityScore - a.priorityScore),
-    [mails],
+    () => [...filteredMails].sort((a, b) => b.priorityScore - a.priorityScore),
+    [filteredMails],
   );
 
   const getTagStyles = (tag: string): { backgroundColor: string; color: string } => {
@@ -104,6 +117,27 @@ const MailPage: React.FC = () => {
         <main className="flex min-h-0 flex-1 flex-col overflow-auto px-8 py-6 text-[#A34712]">
           <DateHeader mode="week" />
 
+          <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1">
+            {days.map((day) => {
+              const isActive = day === selectedDay;
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => setSelectedDay(day)}
+                  className={`rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                    isActive
+                      ? "border-[#D3753D] bg-[#F4C7A2] text-[#8A4B2D]"
+                      : "border-transparent bg-[#EDEAE6] text-[#5A3A2A]"
+                  }`}
+                  aria-pressed={isActive}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+
           <section className="mt-6">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-[#A34712]">
               <span
@@ -122,7 +156,7 @@ const MailPage: React.FC = () => {
                 <button
                   key={mail.id}
                   type="button"
-                  className="group relative flex w-full flex-col items-stretch rounded-xl border border-[#FFE0C7] bg-[#FFF3EA] px-4 py-2 text-left text-sm text-[#3F2A1E] shadow-sm transition-all duration-150 ease-out hover:-translate-y-[1px] hover:shadow-md"
+                  className="group relative flex w-full flex-col items-stretch rounded-xl border-[1.5px] border-[#FFE0C7] bg-[#FCE6D9] px-4 py-2 text-left text-sm text-[#3F2A1E] shadow-sm transition-all duration-150 ease-out hover:-translate-y-[1px] hover:shadow-md"
                 >
                   <div className="flex items-start gap-3 pr-10">
                     <div className="flex-1">
