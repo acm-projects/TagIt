@@ -6,7 +6,6 @@ import {
   saveTasks,
   type SharedTask,
 } from "../services/taskProgress";
-import deadlineIcon from "../assets/page_buttons/deadline.png";
 
 /**
  * Represents a single task on the Tasks page.

@@ -1,6 +1,7 @@
 import React from "react";
 import AppNavbar from "../components/AppNavbar";
 import DateHeader from "../components/DateHeader";
+import calendarEventsIcon from "../assets/page_buttons/calendar_events.png";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
 
@@ -17,6 +18,14 @@ const CalendarPage: React.FC = () => {
           {/* Calendar Events */}
           <section className="mt-8 w-full min-w-0">
             <h2 className="flex w-full items-center gap-2 text-left text-sm font-semibold text-[#A34712]">
+              <span
+                className="inline-block h-5 w-5 shrink-0 bg-[#A34712] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]"
+                style={{
+                  maskImage: `url(${calendarEventsIcon})`,
+                  WebkitMaskImage: `url(${calendarEventsIcon})`,
+                }}
+                aria-hidden
+              />
               <span>Calendar Events</span>
             </h2>
 
