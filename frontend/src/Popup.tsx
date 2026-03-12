@@ -17,6 +17,7 @@ interface EmailResult {
   location: string;
   time: string;
   mongo_id?: string;
+  cached?: boolean;
 }
 
 function getToken(): string {
@@ -68,10 +69,17 @@ const EmailCard: React.FC<{ email: EmailResult; index: number; onAddCalendar: (e
           </span>
 
           <div className="flex-1 min-w-0">
-            {/* Subject */}
-            <p className="text-sm font-semibold text-gray-800 truncate leading-snug" title={email.subject}>
-              {email.subject}
-            </p>
+            {/* Subject + cached pill */}
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-gray-800 truncate leading-snug flex-1" title={email.subject}>
+                {email.subject}
+              </p>
+              {email.cached && (
+                <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 font-medium border border-gray-200" title="Loaded from database cache">
+                  cached
+                </span>
+              )}
+            </div>
 
             {/* Badges row */}
             <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -309,6 +317,8 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
   });
 
   const priorityCounts = [1,2,3,4].map(p => ({ p, count: emails.filter(e => e.priorityLevel === p).length }));
+  const cachedCount = emails.filter(e => e.cached).length;
+  const newCount = emails.length - cachedCount;
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
@@ -417,8 +427,21 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
         {/* Results */}
         {!loading && emails.length > 0 && (
           <>
+            {/* Cache info */}
+            <div className="mt-5 flex items-center gap-2 text-xs text-gray-500">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-400" />
+                {newCount} newly analysed
+              </span>
+              <span className="text-gray-300">·</span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-gray-300" />
+                {cachedCount} from cache
+              </span>
+            </div>
+
             {/* Stats bar */}
-            <div className="mt-6 mb-4 grid grid-cols-4 gap-2">
+            <div className="mt-3 mb-4 grid grid-cols-4 gap-2">
               {priorityCounts.map(({ p, count }) => {
                 const cfg = PRIORITY_CONFIG[p];
                 return (
