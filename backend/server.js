@@ -345,7 +345,74 @@ app.post('/fetch-and-process', requireAuth, async (req, res) => {
     }
 });
 
-// Microsoft / Outlook routes
+// Helper: forward a batch of emails to Flask in one request
+
+async function forwardBatchToFlask(emails) {
+    const resp = await fetch(`${FLASK_BASE_URL}/api/emails/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(emails),
+    });
+
+    const contentType = resp.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        const text = await resp.text();
+        throw new Error(`Flask returned non-JSON (status ${resp.status}): ${text.slice(0, 200)}`);
+    }
+
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `Flask error ${resp.status}`);
+    return data; // { message, count, results: [...25 summaries] }
+}
+
+// Gmail: fetch last 25 emails and process them in one batch prompt
+
+app.post('/fetch-and-process-batch', requireAuth, async (req, res) => {
+    try {
+        const authClient = await getGoogleClientForUser(req.userToken);
+        const gmail = google.gmail({ version: 'v1', auth: authClient });
+
+        const { q } = req.body;
+        const list = await gmail.users.messages.list({
+            userId: 'me',
+            maxResults: 25,
+            ...(q && { q }),
+        });
+
+        if (!list.data?.messages?.length) {
+            return res.status(404).json({ error: 'No messages found' });
+        }
+
+        // Fetch all message details in parallel
+        const messageDetails = await Promise.all(
+            list.data.messages.map(({ id }) =>
+                gmail.users.messages.get({ userId: 'me', id, format: 'full' }).then(r => ({ id, data: r.data }))
+            )
+        );
+
+        const emails = messageDetails.map(({ id, data }) => {
+            const plainBody = extractPlainBody(data);
+            const subjectHeader = data.payload?.headers?.find(h => h.name.toLowerCase() === 'subject');
+            return {
+                id,
+                subject: subjectHeader?.value || '(no subject)',
+                body: plainBody || data.snippet || '',
+                snippet: data.snippet,
+            };
+        });
+
+        const batchResult = await forwardBatchToFlask(emails);
+        res.json(batchResult);
+    } catch (err) {
+        if (err.message === 'NO_GOOGLE_TOKEN') {
+            return res.status(401).json({ error: 'NO_GOOGLE_TOKEN' });
+        }
+        console.error(err);
+        res.status(500).json({ error: err.message || String(err) });
+    }
+});
+
+
 
 app.get('/auth/microsoft/url', requireAuth, (req, res) => {
     if (!MS_CLIENT_ID) return res.status(500).json({ error: 'MS_CLIENT_ID not configured on server.' });
@@ -487,7 +554,38 @@ app.post('/outlook/fetch-and-process', requireAuth, async (req, res) => {
     }
 });
 
-// Google Calendar
+app.post('/outlook/fetch-and-process-batch', requireAuth, async (req, res) => {
+    try {
+        const token = await getMsAccessTokenForUser(req.userToken);
+        const { q } = req.body;
+        let url = `/me/messages?$top=25&$select=id,subject,bodyPreview,body,receivedDateTime`;
+        if (q) url += `&$search="${encodeURIComponent(q)}"`;
+        const data = await graphGet(url, token);
+
+        if (!data.value?.length) return res.status(404).json({ error: 'No messages found' });
+
+        const emails = data.value.map(msg => {
+            const plainBody = msg.body?.contentType === 'text' ? msg.body.content : msg.bodyPreview || '';
+            return {
+                id: msg.id,
+                subject: msg.subject || '(no subject)',
+                body: plainBody,
+                snippet: msg.bodyPreview || '',
+            };
+        });
+
+        const batchResult = await forwardBatchToFlask(emails);
+        res.json(batchResult);
+    } catch (err) {
+        if (err.message === 'NO_MS_TOKEN') {
+            return res.status(401).json({ error: 'NO_MS_TOKEN' });
+        }
+        console.error(err);
+        res.status(500).json({ error: err.message || String(err) });
+    }
+});
+
+
 
 app.post('/calendar/add-event', requireAuth, async (req, res) => {
     const { title, date, location } = req.body;
