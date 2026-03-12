@@ -111,8 +111,7 @@ const MailPage: React.FC = () => {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F8E7DD] p-4">
-      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-[30px] bg-[#FFFBF8]">
-        <AppNavbar />
+      <div className="flex min-h-0 flex-1 w-full flex-col overflow-hidden rounded-[30px] bg-[#FFFBF8]">
 
         <main className="flex min-h-0 flex-1 flex-col overflow-auto px-8 py-6 text-[#A34712]">
           <WeekHeader />
@@ -255,6 +254,8 @@ const MailPage: React.FC = () => {
             </div>
           </section>
         </main>
+
+        <AppNavbar />
       </div>
     </div>
   );

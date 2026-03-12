@@ -211,9 +211,7 @@ const SettingsPage: React.FC = () => {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#FFF2E9] p-4">
-      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-[30px] bg-[#FFFBF8]">
-        {/* Left-hand navigation rail shared with the rest of the app */}
-        <AppNavbar />
+      <div className="flex min-h-0 flex-1 w-full flex-col overflow-hidden rounded-[30px] bg-[#FFFBF8]">
 
         {/* Main settings column */}
         <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-8 py-6 text-[#A34712]">
@@ -463,6 +461,8 @@ const SettingsPage: React.FC = () => {
             </div>
           </section>
         </main>
+
+        <AppNavbar />
       </div>
     </div>
   );

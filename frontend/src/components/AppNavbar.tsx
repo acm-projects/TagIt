@@ -19,8 +19,8 @@ const AppNavbar: React.FC = () => {
   const location = useLocation();
 
   return (
-    <nav className="sticky top-0 flex h-full min-h-0 w-20 shrink-0 flex-col items-center border-r border-[#F7C9AA] bg-[#FFF9F4] py-8">
-      <div className="flex flex-1 flex-col items-center justify-evenly">
+    <nav className="shrink-0 border-t border-[#F7C9AA] bg-[#FFF9F4] px-4 py-3">
+      <div className="grid grid-cols-5 items-center gap-2">
         {NAV_ITEMS.map(({ path, iconSrc, label }) => {
           const isActive = location.pathname === path;
           return (
@@ -29,7 +29,7 @@ const AppNavbar: React.FC = () => {
               type="button"
               aria-label={label}
               onClick={() => navigate(path)}
-              className="flex h-11 w-11 items-center justify-center rounded-xl transition-colors cursor-pointer"
+              className="flex h-11 w-full items-center justify-center rounded-xl transition-colors cursor-pointer"
             >
               <span
                 aria-hidden="true"

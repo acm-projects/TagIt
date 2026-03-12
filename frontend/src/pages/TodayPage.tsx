@@ -116,8 +116,7 @@ const TodayPage: React.FC = () => {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F8E7DD] p-4">
-      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-[30px] bg-[#FFFBF8]">
-        <AppNavbar />
+      <div className="flex min-h-0 flex-1 w-full flex-col overflow-hidden rounded-[30px] bg-[#FFFBF8]">
 
         <main className="flex min-h-0 flex-1 flex-col overflow-auto px-4 py-3 text-[#913c14] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader />
@@ -236,6 +235,8 @@ const TodayPage: React.FC = () => {
             </div>
           </section>
         </main>
+
+        <AppNavbar />
       </div>
     </div>
   );
