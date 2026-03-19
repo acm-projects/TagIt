@@ -74,14 +74,13 @@ const getWeekRange = (anchor: Date) => {
   return { start, end };
 };
 
-const formatWeekRange = (start: Date, end: Date): string => {
-  const fmt = (date: Date) => {
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const dd = String(date.getDate()).padStart(2, "0");
-    const yy = String(date.getFullYear()).slice(-2);
-    return `${mm}/${dd}/${yy}`;
-  };
-  return `${fmt(start)} – ${fmt(end)}`;
+const getWeekLabelParts = (anchor: Date) => {
+  const { start, end } = getWeekRange(anchor);
+  const startMonth = start.toLocaleString("en-US", { month: "short" });
+  const endMonth = end.toLocaleString("en-US", { month: "short" });
+  const monthPart = startMonth === endMonth ? startMonth : `${startMonth}-${endMonth}`;
+  const dayPart = `${start.getDate()}–${end.getDate()}`;
+  return { monthPart, dayPart };
 };
 
 /**
@@ -111,13 +110,10 @@ const DateHeader: React.FC<DateHeaderProps> = ({
   const popupRef = useRef<HTMLDivElement | null>(null);
 
   const formattedDate = useMemo(() => formatMmDdYyyy(currentDate), [currentDate]);
-  const weekRange = useMemo(() => getWeekRange(currentDate), [currentDate]);
-  const formattedWeekRange = useMemo(
-    () => formatWeekRange(weekRange.start, weekRange.end),
-    [weekRange.end, weekRange.start],
-  );
+  const weekLabelParts = useMemo(() => getWeekLabelParts(currentDate), [currentDate]);
 
-  const primaryLabel = mode === "week" ? formattedWeekRange : formattedDate;
+  const primaryLabel = mode === "week" ? `${weekLabelParts.monthPart} ${weekLabelParts.dayPart}` : formattedDate;
+  const yearLabel = currentDate.getFullYear();
   const secondary = secondaryLabel ?? "";
 
   useEffect(() => {
@@ -185,57 +181,76 @@ const DateHeader: React.FC<DateHeaderProps> = ({
   };
 
   return (
-    <header className="page-header border-b border-[#F3C5A5] px-8 pb-4 pt-6 text-[#913c14]">
-      <div className="relative">
-        <div className="flex items-center justify-center gap-3 whitespace-nowrap">
+    <header className="page-header px-3 pb-5 pt-4 text-[#1F2933] sm:px-8">
+      <div className="relative flex items-center justify-center">
+        <div className="absolute left-0 flex items-center">
           <button
             type="button"
-            className="cursor-pointer text-[#913c14]"
+            className="cursor-pointer text-[#9CA3AF] transition-colors hover:text-[#FFAB87]"
             aria-label={mode === "week" ? "Previous week" : "Previous day"}
             onClick={() => shiftPeriod(-1)}
           >
-            <span className="material-symbols-outlined text-[40px]">arrow_back</span>
+            <span className="material-symbols-outlined text-[34px] leading-none">arrow_back</span>
           </button>
+        </div>
 
+        <div className="flex flex-col items-center gap-1">
           <button
             type="button"
             onClick={() => setIsPickerOpen((previous) => !previous)}
-            className="cursor-pointer text-[30px] leading-none tracking-[0.03em] text-[#913c14] whitespace-nowrap"
+            className="cursor-pointer text-[22px] font-semibold leading-none tracking-[0.01em] text-[#111827] whitespace-nowrap"
             aria-label="Choose date from calendar"
           >
-            {primaryLabel}
+            {mode === "week" ? (
+              <span className="flex items-baseline gap-2">
+                <span className="font-instrument italic text-[22px] leading-none text-black">
+                  {weekLabelParts.monthPart}
+                </span>
+                <span className="text-[22px] font-semibold leading-none text-[#FFAB87]">
+                  {weekLabelParts.dayPart}
+                </span>
+              </span>
+            ) : (
+              primaryLabel
+            )}
           </button>
+          <span className="mt-1 h-px w-12 bg-[#E5E7EB]" aria-hidden="true" />
+          <span className="text-[14px] font-semibold tracking-wide text-[#9CA3AF]">
+            {yearLabel}
+          </span>
+        </div>
 
+        <div className="absolute right-0 flex items-center">
           <button
             type="button"
-            className="cursor-pointer text-[#913c14]"
+            className="cursor-pointer text-[#9CA3AF] transition-colors hover:text-[#FFAB87]"
             aria-label={mode === "week" ? "Next week" : "Next day"}
             onClick={() => shiftPeriod(1)}
           >
-            <span className="material-symbols-outlined text-[40px]">arrow_forward</span>
+            <span className="material-symbols-outlined text-[34px] leading-none">arrow_forward</span>
           </button>
         </div>
 
         {isPickerOpen && (
           <div
             ref={popupRef}
-            className="absolute left-1/2 top-[calc(100%+10px)] z-20 w-64 -translate-x-1/2 rounded-xl border border-[#F3C5A5] bg-[#FFF9F4] p-3 shadow-lg"
+            className="absolute left-1/2 top-[calc(100%+12px)] z-20 w-64 -translate-x-1/2 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-[0_10px_30px_rgba(0,0,0,0.08)]"
           >
-            <label className="mb-2 block text-xs font-semibold text-[#913c14]">
+            <label className="mb-2 block text-xs font-semibold text-[#374151]">
               Jump to date
             </label>
             <input
               type="date"
               value={formatIsoDate(currentDate)}
               onChange={handleCalendarDateChange}
-              className="w-full rounded-md border border-[#E6C7B3] bg-white px-3 py-2 text-sm text-[#5A3A2A] focus:outline-none focus:ring-2 focus:ring-[#D3753D]"
+              className="w-full rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 text-sm text-[#111827] focus:border-[#FFAB87] focus:outline-none focus:ring-2 focus:ring-[#FFE4D9]"
             />
           </div>
         )}
       </div>
 
       {secondary && (
-        <p className="mt-1 text-center text-[14px] text-[#9c5a28]">{secondary}</p>
+        <p className="mt-1 text-center text-[14px] text-[#6B7280]">{secondary}</p>
       )}
     </header>
   );

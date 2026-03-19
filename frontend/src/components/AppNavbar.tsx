@@ -19,8 +19,8 @@ const AppNavbar: React.FC = () => {
   const location = useLocation();
 
   return (
-    <nav className="shrink-0 border-t border-[#F7C9AA] bg-[#FFF9F4] px-4 py-3">
-      <div className="grid grid-cols-5 items-center gap-2">
+    <nav className="shrink-0 border-t border-[#E5E7EB] bg-white px-3 py-2.5">
+      <div className="grid grid-cols-5 items-center gap-1.5">
         {NAV_ITEMS.map(({ path, iconSrc, label }) => {
           const isActive = location.pathname === path;
           return (
@@ -29,11 +29,11 @@ const AppNavbar: React.FC = () => {
               type="button"
               aria-label={label}
               onClick={() => navigate(path)}
-              className="flex h-11 w-full items-center justify-center rounded-xl transition-colors cursor-pointer"
+              className="flex h-11 w-full items-center justify-center rounded-xl transition-colors"
             >
               <span
                 aria-hidden="true"
-                className={`h-7 w-7 ${isActive ? "bg-[#A34712]" : "bg-[#8B6F60]"}`}
+                className={`h-6 w-6 ${isActive ? "bg-[#FFAB87]" : "bg-[#9CA3AF]"}`}
                 style={{
                   WebkitMaskImage: `url(${iconSrc})`,
                   maskImage: `url(${iconSrc})`,

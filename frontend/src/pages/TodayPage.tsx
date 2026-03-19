@@ -60,26 +60,9 @@ const EVENTS: TodayEvent[] = [
   { time: "08:30 - 10:00", title: "ACM Meeting @ SLC" },
 ];
 
-const EMAIL_TONE_STYLES: Record<
-  ImportantEmailPreview["tone"],
-  { leftStrip: string }
-> = {
-  urgent: {
-    leftStrip: "bg-[#D84A5D]",
-  },
-  soon: {
-    leftStrip: "bg-[#E8C24C]",
-  },
-  done: {
-    leftStrip: "bg-[#62AE87]",
-  },
-};
-
 const TodayPage: React.FC = () => {
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
-  const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(
-    () => IMPORTANT_EMAILS_FILLER,
-  );
+  const [importantEmails] = useState<ImportantEmailPreview[]>(() => IMPORTANT_EMAILS_FILLER);
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -92,15 +75,11 @@ const TodayPage: React.FC = () => {
 
   const getSourceIcon = (source: ImportantEmailPreview["source"]) => {
     if (source === "gmail") {
-      return (
-        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#D14836] text-[10px] font-bold text-white">
-          M
-        </span>
-      );
+      return null;
     }
 
     return (
-      <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-[#1E70C1] text-[10px] font-bold text-white">
+      <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-[#5C9BFF] text-[10px] font-bold text-white">
         H
       </span>
     );
@@ -110,130 +89,135 @@ const TodayPage: React.FC = () => {
     // Placeholder until mail detail/open workflow is wired.
   };
 
-  const handleDismissEmail = (emailId: string) => {
-    setImportantEmails((previous) => previous.filter((email) => email.id !== emailId));
-  };
-
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#F8E7DD] p-4">
-      <div className="flex min-h-0 flex-1 w-full flex-col overflow-hidden rounded-[30px] bg-[#FFFBF8]">
-
-        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-4 py-3 text-[#913c14] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader />
 
-          <section className="mt-5 w-full max-w-4xl sm:mt-6">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <span className="material-symbols-outlined text-[18px] text-[#913c14]">
-                workspace_premium
-              </span>
-              <span>Progress</span>
-            </div>
+          <div className="mt-5 space-y-4 sm:mt-6">
+            <section className="w-full max-w-4xl">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                  <span className="material-symbols-outlined text-[18px] text-[#FFAB87]">
+                    workspace_premium
+                  </span>
+                  <span>Weekly Progress</span>
+                </div>
 
-            <div className="mt-2 flex items-center gap-3">
-              <div className="relative h-2 flex-1 rounded-full bg-[#FFF0E5]">
-                <div
-                  className="h-2 rounded-full bg-[#BA4500] transition-[width] duration-200 ease-out"
-                  style={{ width: `${progress.progressPercentage}%` }}
-                />
-              </div>
-              <span className="text-sm font-semibold text-[#BA4500]">
-                {progress.progressPercentage}%
-              </span>
-            </div>
+                <div className="mt-3 flex items-center justify-between text-xs text-[#6B7280]">
+                  <span>Tasks Completed</span>
+                  <span className="text-sm">
+                    <span className="font-semibold text-[#FFAB87]">
+                      {progress.completedTasks}
+                    </span>
+                    <span className="text-[#9CA3AF]">/{progress.totalTasks}</span>
+                  </span>
+                </div>
 
-            <p className="mt-2 text-xs text-[#A34712]">
-              {progress.completedTasks}/{progress.totalTasks} tasks completed
-            </p>
-          </section>
-
-          <section className="mt-5 w-full max-w-4xl sm:mt-6">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <span className="material-symbols-outlined text-[18px] text-[#913c14]">
-                star
-              </span>
-              <span>Important Emails</span>
-            </div>
-
-            <div className="mt-2 space-y-2">
-              {importantEmails.map((mail) => {
-                const toneStyles = EMAIL_TONE_STYLES[mail.tone];
-
-                return (
+                <div className="mt-3 h-2 w-full rounded-full bg-[#FFE7DC]">
                   <div
-                    key={mail.id}
-                    className="group relative w-full overflow-visible"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`pointer-events-none absolute -left-1 inset-y-0 right-1 rounded-xl ${toneStyles.leftStrip}`}
-                    />
+                    className="h-2 rounded-full bg-[#FFAB87] transition-[width] duration-200 ease-out"
+                    style={{ width: `${progress.progressPercentage}%` }}
+                  />
+                </div>
+              </div>
+            </section>
 
-                    <div className="relative z-10 flex w-full items-center justify-between rounded-xl bg-[#FFF0E5] px-4 py-2 pl-5 text-left text-sm text-[#6D2F12]">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEmail(mail)}
-                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            <section className="w-full max-w-4xl">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                  <span className="material-symbols-outlined text-[18px] text-[#FFAB87]">
+                    star
+                  </span>
+                  <span>Important Emails</span>
+                </div>
+
+                <div className="mt-3">
+                  {importantEmails.map((mail, index) => {
+                    return (
+                      <div
+                        key={mail.id}
+                        className="group flex items-start gap-3 py-2"
+                        style={{ borderBottom: index === importantEmails.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
                       >
-                        {getSourceIcon(mail.source)}
-                        <span className="truncate">{mail.sender}</span>
-                      </button>
+                        <span
+                          aria-hidden="true"
+                          className="mt-0.5 h-full w-1 self-stretch rounded-full bg-[#FFAB87]"
+                        />
 
-                      <div className="ml-3 flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => handleOpenEmail(mail)}
-                          className="inline-flex h-8 items-center justify-center rounded-full bg-[#D75B00] px-4 text-xs font-semibold text-white opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
-                          aria-label={`Open email from ${mail.sender}`}
+                          className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
                         >
-                          Open
+                          <span className="text-sm font-semibold text-[#111827]">
+                            {mail.sender}
+                          </span>
+                          <div className="flex items-center gap-2 text-[12px] text-[#6B7280]">
+                            {getSourceIcon(mail.source)}
+                            <span className="capitalize">{mail.source}</span>
+                          </div>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDismissEmail(mail.id)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#E8D3C4] text-[#7A4023] opacity-0 transition-opacity duration-150 ease-out hover:bg-[#DFBFA9] group-hover:opacity-100 group-focus-within:opacity-100"
-                          aria-label={`Dismiss email from ${mail.sender}`}
-                        >
-                          <span className="material-symbols-outlined text-[18px]">close</span>
-                        </button>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEmail(mail)}
+                            className="inline-flex h-7 w-7 items-center justify-center text-[#FFAB87] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                            aria-label={`Open email from ${mail.sender}`}
+                          >
+                            <span className="material-symbols-outlined text-[16px]">check</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
 
-          <section className="mt-6 w-full max-w-4xl sm:mt-7">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <span className="material-symbols-outlined text-[18px] text-[#913c14]">
-                event_note
-              </span>
-              <span>Upcoming Events</span>
-            </div>
+            <section className="w-full max-w-4xl">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                  <span className="material-symbols-outlined text-[18px] text-[#FFAB87]">
+                    event_note
+                  </span>
+                  <span>Upcoming Events</span>
+                </div>
 
-            <div className="mt-2 space-y-2">
-              {EVENTS.map((event, index) => {
-                const background =
-                  index === 0
-                    ? "bg-[#FED3B4]"
-                    : index === 1
-                    ? "bg-[#FAE6D9]"
-                    : "bg-[#FFF0E5]";
+                <div className="mt-3 space-y-3">
+                  {EVENTS.map((event, index) => {
+                    const chipStyles =
+                      index === 0
+                        ? "bg-[#E8F0FF] text-[#3B82F6]"
+                        : index === 1
+                        ? "bg-[#F6E5DE] text-[#C46F41]"
+                        : "bg-[#E7F6EA] text-[#22A06B]";
 
-                return (
-                  <div
-                    key={event.title}
-                    className={`flex items-center justify-between rounded-xl px-4 py-2 text-sm text-[#6D2F12] ${background}`}
-                  >
-                    <span className="text-sm font-medium">{event.time}</span>
-                    <span className="ml-6 flex-1 text-right md:text-left">
-                      {event.title}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+                    return (
+                      <div
+                        key={event.title}
+                        className="flex flex-col gap-1 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)] sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="text-xs font-medium text-[#6B7280]">
+                          {event.time}
+                        </div>
+                        <div className="flex flex-1 items-center justify-between gap-3 sm:justify-start">
+                          <span className="text-[14px] font-semibold text-[#111827]">
+                            {event.title}
+                          </span>
+                          <span className={`rounded-full px-3 py-1 text-[11px] font-medium ${chipStyles}`}>
+                            {index === 0 ? "meeting" : index === 1 ? "presentation" : "workshop"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          </div>
         </main>
 
         <AppNavbar />
