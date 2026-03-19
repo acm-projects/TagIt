@@ -22,6 +22,11 @@ export interface DateHeaderProps {
    * (for example, a week-based tasks view).
    */
   onDateChange?: (nextDate: Date) => void;
+  /**
+   * Controls whether the year chip is shown under the primary label.
+   * Default is true to preserve existing layouts.
+   */
+  showYear?: boolean;
 }
 
 const parseMmDdYyyy = (raw?: string): Date | null => {
@@ -94,6 +99,7 @@ const DateHeader: React.FC<DateHeaderProps> = ({
   onDateChange,
   mode = "day",
   secondaryLabel,
+  showYear = true,
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -186,7 +192,7 @@ const DateHeader: React.FC<DateHeaderProps> = ({
         <div className="absolute left-0 flex items-center">
           <button
             type="button"
-            className="cursor-pointer text-[#9CA3AF] transition-colors hover:text-[#FFAB87]"
+            className="cursor-pointer text-[#9CA3AF] transition-colors hover:text-[#f9ab7b]"
             aria-label={mode === "week" ? "Previous week" : "Previous day"}
             onClick={() => shiftPeriod(-1)}
           >
@@ -206,7 +212,7 @@ const DateHeader: React.FC<DateHeaderProps> = ({
                 <span className="font-instrument italic text-[22px] leading-none text-black">
                   {weekLabelParts.monthPart}
                 </span>
-                <span className="text-[22px] font-semibold leading-none text-[#FFAB87]">
+                <span className="text-[22px] font-semibold leading-none text-[#f9ab7b]">
                   {weekLabelParts.dayPart}
                 </span>
               </span>
@@ -214,16 +220,20 @@ const DateHeader: React.FC<DateHeaderProps> = ({
               primaryLabel
             )}
           </button>
-          <span className="mt-1 h-px w-12 bg-[#E5E7EB]" aria-hidden="true" />
-          <span className="text-[14px] font-semibold tracking-wide text-[#9CA3AF]">
-            {yearLabel}
-          </span>
+          {showYear && (
+            <>
+              <span className="mt-1 h-px w-12 bg-[#E5E7EB]" aria-hidden="true" />
+              <span className="text-[14px] font-semibold tracking-wide text-[#9CA3AF]">
+                {yearLabel}
+              </span>
+            </>
+          )}
         </div>
 
         <div className="absolute right-0 flex items-center">
           <button
             type="button"
-            className="cursor-pointer text-[#9CA3AF] transition-colors hover:text-[#FFAB87]"
+            className="cursor-pointer text-[#9CA3AF] transition-colors hover:text-[#f9ab7b]"
             aria-label={mode === "week" ? "Next week" : "Next day"}
             onClick={() => shiftPeriod(1)}
           >
@@ -243,7 +253,7 @@ const DateHeader: React.FC<DateHeaderProps> = ({
               type="date"
               value={formatIsoDate(currentDate)}
               onChange={handleCalendarDateChange}
-              className="w-full rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 text-sm text-[#111827] focus:border-[#FFAB87] focus:outline-none focus:ring-2 focus:ring-[#FFE4D9]"
+              className="w-full rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fde6d7]"
             />
           </div>
         )}

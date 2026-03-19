@@ -33,7 +33,7 @@ const AppNavbar: React.FC = () => {
             >
               <span
                 aria-hidden="true"
-                className={`h-6 w-6 ${isActive ? "bg-[#FFAB87]" : "bg-[#9CA3AF]"}`}
+                className={`h-6 w-6 ${isActive ? "bg-[#f9ab7b]" : "bg-[#9CA3AF]"}`}
                 style={{
                   WebkitMaskImage: `url(${iconSrc})`,
                   maskImage: `url(${iconSrc})`,

@@ -93,13 +93,13 @@ const TodayPage: React.FC = () => {
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
-          <WeekHeader />
+          <WeekHeader showYear={false} />
 
           <div className="mt-5 space-y-4 sm:mt-6">
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
                 <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
-                  <span className="material-symbols-outlined text-[18px] text-[#FFAB87]">
+                  <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">
                     workspace_premium
                   </span>
                   <span>Weekly Progress</span>
@@ -108,16 +108,16 @@ const TodayPage: React.FC = () => {
                 <div className="mt-3 flex items-center justify-between text-xs text-[#6B7280]">
                   <span>Tasks Completed</span>
                   <span className="text-sm">
-                    <span className="font-semibold text-[#FFAB87]">
+                    <span className="font-semibold text-[#f9ab7b]">
                       {progress.completedTasks}
                     </span>
                     <span className="text-[#9CA3AF]">/{progress.totalTasks}</span>
                   </span>
                 </div>
 
-                <div className="mt-3 h-2 w-full rounded-full bg-[#FFE7DC]">
+                <div className="mt-3 h-2 w-full rounded-full bg-[#fde6d7]">
                   <div
-                    className="h-2 rounded-full bg-[#FFAB87] transition-[width] duration-200 ease-out"
+                    className="h-2 rounded-full bg-[#f9ab7b] transition-[width] duration-200 ease-out"
                     style={{ width: `${progress.progressPercentage}%` }}
                   />
                 </div>
@@ -127,7 +127,7 @@ const TodayPage: React.FC = () => {
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
                 <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
-                  <span className="material-symbols-outlined text-[18px] text-[#FFAB87]">
+                  <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">
                     star
                   </span>
                   <span>Important Emails</span>
@@ -143,7 +143,7 @@ const TodayPage: React.FC = () => {
                       >
                         <span
                           aria-hidden="true"
-                          className="mt-0.5 h-full w-1 self-stretch rounded-full bg-[#FFAB87]"
+                          className="mt-0.5 h-full w-1 self-stretch rounded-full bg-[#f9ab7b]"
                         />
 
                         <button
@@ -164,7 +164,7 @@ const TodayPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleOpenEmail(mail)}
-                            className="inline-flex h-7 w-7 items-center justify-center text-[#FFAB87] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
                             aria-label={`Open email from ${mail.sender}`}
                           >
                             <span className="material-symbols-outlined text-[16px]">check</span>
@@ -180,7 +180,7 @@ const TodayPage: React.FC = () => {
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
                 <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
-                  <span className="material-symbols-outlined text-[18px] text-[#FFAB87]">
+                  <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">
                     event_note
                   </span>
                   <span>Upcoming Events</span>
@@ -190,9 +190,9 @@ const TodayPage: React.FC = () => {
                   {EVENTS.map((event, index) => {
                     const chipStyles =
                       index === 0
-                        ? "bg-[#E8F0FF] text-[#3B82F6]"
+                        ? "bg-[#fde6d7] text-[#f9ab7b]"
                         : index === 1
-                        ? "bg-[#F6E5DE] text-[#C46F41]"
+                        ? "bg-[#fde6d7] text-[#f9ab7b]"
                         : "bg-[#E7F6EA] text-[#22A06B]";
 
                     return (
