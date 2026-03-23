@@ -53,10 +53,67 @@ def signup():
         return jsonify({"error": "Username already taken."}), 409
 
     hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
-    users_col.insert_one({"username": username, "password": hashed})
+
+    school = data.get("school", "").strip()
+    if school not in ("ECS", "JSOM", "Other", ""):
+        school = ""
+
+    raw_topics = data.get("priorityTopics", [])
+    priority_topics = [str(t).strip() for t in raw_topics if str(t).strip()][:20]
+
+    users_col.insert_one({
+        "username": username,
+        "password": hashed,
+        "school": school,
+        "priorityTopics": priority_topics,
+    })
 
     token = make_token(username)
     return jsonify({"message": "Account created successfully.", "token": token, "username": username}), 201
+
+
+@auth_bp.route("/auth/preferences", methods=["GET"])
+def get_preferences():
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    user = users_col.find_one({"username": username}, {"school": 1, "priorityTopics": 1})
+    if not user:
+        return jsonify({"error": "User not found."}), 404
+
+    return jsonify({
+        "school": user.get("school", ""),
+        "priorityTopics": user.get("priorityTopics", []),
+    }), 200
+
+
+@auth_bp.route("/auth/preferences", methods=["PUT"])
+def update_preferences():
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    data = request.json
+    update = {}
+
+    if "school" in data:
+        school = data["school"].strip()
+        if school not in ("ECS", "JSOM", "Other", ""):
+            return jsonify({"error": "Invalid school value."}), 400
+        update["school"] = school
+
+    if "priorityTopics" in data:
+        topics = data["priorityTopics"]
+        if not isinstance(topics, list):
+            return jsonify({"error": "priorityTopics must be an array."}), 400
+        update["priorityTopics"] = [str(t).strip() for t in topics if str(t).strip()][:20]
+
+    if not update:
+        return jsonify({"error": "Nothing to update."}), 400
+
+    users_col.update_one({"username": username}, {"$set": update})
+    return jsonify({"message": "Preferences saved."}), 200
 
 
 @auth_bp.route("/auth/login", methods=["POST"])
@@ -104,7 +161,7 @@ def save_oauth_tokens():
         return jsonify({"error": "Unauthorized."}), 401
 
     data = request.json
-    # Accepts: { googleRefreshToken, msRefreshToken } — either or both
+    # Accepts: { googleRefreshToken, msRefreshToken } - either or both
     update = {}
     if "googleRefreshToken" in data:
         update["googleRefreshToken"] = data["googleRefreshToken"]

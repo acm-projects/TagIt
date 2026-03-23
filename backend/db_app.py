@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 import certifi
 from flask_cors import CORS
 
-from AI_Summary import analyze_email_with_gemini, analyze_emails_batch
-from auth_routes import auth_bp
+from AI_Summary import analyze_email_with_gemini, analyze_emails_batch, is_spam, is_spam_batch, client as gemini_client
+from auth_routes import auth_bp, get_username_from_request
 
 load_dotenv()
 app = Flask(__name__)
@@ -43,9 +43,21 @@ def _format_email_result(doc):
         "events":           analysis.get("events", []),
         "location":         analysis.get("location", ""),
         "time":             analysis.get("time", ""),
+        "isSpam":           doc.get("isSpam", False),
+        "spamReason":       doc.get("spamReason", ""),
         "mongo_id":         str(doc.get("_id", "")),
         "cached":           True,
     }
+
+
+def _get_user_preferences(username):
+    """Pull school and priorityTopics for a given username."""
+    if not username:
+        return "", []
+    user = db["Users"].find_one({"username": username}, {"school": 1, "priorityTopics": 1})
+    if not user:
+        return "", []
+    return user.get("school", ""), user.get("priorityTopics", [])
 
 
 @app.route("/", methods=["GET"])
@@ -60,6 +72,7 @@ def add_email():
     email_id = incoming_data.get("id")
     subject  = incoming_data.get("subject", "No Subject")
     body     = incoming_data.get("body", "No Body Content")
+    sender   = incoming_data.get("sender", "")
 
     # Return cached version if this email id was already processed
     if email_id:
@@ -71,12 +84,44 @@ def add_email():
                 "message": "Email already processed (cached).",
                 "id": result["id"],
                 "ai_summary": result["summary"],
+                "isSpam": result["isSpam"],
                 "cached": True,
             }), 200
 
+    # Step 1: spam gate
+    spam_flagged, spam_reason = is_spam(subject, body)
+    if spam_flagged:
+        print(f"Spam detected: {subject}")
+        incoming_data["isSpam"] = True
+        incoming_data["spamReason"] = spam_reason
+        incoming_data["aiAnalysis"] = {
+            "summary": f"Spam/phishing detected: {spam_reason}",
+            "assignedCategory": "Spam",
+            "priorityLevel": 4,
+            "uiBadges": ["Spam"],
+            "tasks": [],
+            "deadlines": [],
+            "events": [],
+            "location": "",
+            "time": "",
+        }
+        db.emails.insert_one(incoming_data)
+        return jsonify({
+            "message": "Email flagged as spam.",
+            "id": email_id or "",
+            "ai_summary": incoming_data["aiAnalysis"]["summary"],
+            "isSpam": True,
+            "cached": False,
+        }), 201
+
+    # Step 2: full analysis for legitimate emails
+    username = get_username_from_request()
+    school, priority_topics = _get_user_preferences(username)
     print(f"Processing email: {subject}")
-    ai_results = analyze_email_with_gemini(subject, body)
+    ai_results = analyze_email_with_gemini(subject, body, sender, school, priority_topics)
     incoming_data["aiAnalysis"] = ai_results
+    incoming_data["isSpam"] = False
+    incoming_data["spamReason"] = ""
 
     result = db.emails.insert_one(incoming_data)
 
@@ -84,6 +129,7 @@ def add_email():
         "message": "Email processed and saved!",
         "id": str(result.inserted_id),
         "ai_summary": ai_results["summary"],
+        "isSpam": False,
         "cached": False,
     }), 201
 
@@ -130,8 +176,47 @@ def add_emails_batch():
 
     # Only call Gemini for emails we have never seen before
     if new_emails:
-        print(f"[batch] Processing {len(new_emails)} new email(s) via Gemini...")
-        ai_results = analyze_emails_batch(new_emails)
+        # One batch spam check instead of one call per email
+        spam_flags = is_spam_batch(new_emails)
+
+        legit_emails  = [e for e, (f, _) in zip(new_emails, spam_flags) if not f]
+        legit_indices = [idx for idx, (f, _) in zip(new_indices, spam_flags) if not f]
+        spam_emails   = [(e, idx, r) for e, idx, (f, r) in zip(new_emails, new_indices, spam_flags) if f]
+
+        # Handle spam right away — no Gemini analysis needed
+        for email_data, orig_idx, reason in spam_emails:
+            print(f"[batch] Spam detected: {email_data.get('subject')}")
+            spam_analysis = {
+                "summary": f"Spam/phishing detected: {reason}",
+                "assignedCategory": "Spam",
+                "priorityLevel": 4,
+                "uiBadges": ["Spam"],
+                "tasks": [], "deadlines": [], "events": [], "location": "", "time": "",
+            }
+            email_data["aiAnalysis"] = spam_analysis
+            email_data["isSpam"] = True
+            email_data["spamReason"] = reason
+            try:
+                db.emails.insert_one(email_data)
+            except Exception:
+                pass
+            results_map[orig_idx] = {
+                "id": email_data.get("id", ""),
+                "subject": email_data.get("subject", "No Subject"),
+                "summary": spam_analysis["summary"],
+                "assignedCategory": "Spam",
+                "priorityLevel": 4,
+                "uiBadges": ["Spam"],
+                "tasks": [], "deadlines": [], "events": [], "location": "", "time": "",
+                "isSpam": True, "spamReason": reason,
+                "mongo_id": "", "cached": False,
+            }
+
+        print(f"[batch] Processing {len(legit_emails)} new email(s) via Gemini...")
+        if legit_emails:
+            username = get_username_from_request()
+            school, priority_topics = _get_user_preferences(username)
+            ai_results = analyze_emails_batch(legit_emails, school, priority_topics)
 
         fallback = {
             "summary": "AI result missing for this email.",
@@ -145,25 +230,26 @@ def add_emails_batch():
             "time": "",
         }
 
-        for j, email_data in enumerate(new_emails):
+        for j, email_data in enumerate(legit_emails):
             analysis = ai_results[j] if j < len(ai_results) else fallback
             email_data["aiAnalysis"] = analysis
+            email_data["isSpam"] = False
+            email_data["spamReason"] = ""
 
             try:
                 insert_result = db.emails.insert_one(email_data)
                 mongo_id = str(insert_result.inserted_id)
             except Exception as e:
-                # Race condition: another request inserted the same id first
                 print(f"[batch] Insert conflict for {email_data.get('id')}: {e}")
                 existing = db.emails.find_one({"id": email_data.get("id")})
                 if existing:
                     formatted = _format_email_result(existing)
                     formatted["cached"] = True
-                    results_map[new_indices[j]] = formatted
+                    results_map[legit_indices[j]] = formatted
                     continue
                 mongo_id = "unknown"
 
-            results_map[new_indices[j]] = {
+            results_map[legit_indices[j]] = {
                 "id":               email_data.get("id", mongo_id),
                 "subject":          email_data.get("subject", "No Subject"),
                 "summary":          analysis.get("summary", ""),
@@ -175,6 +261,8 @@ def add_emails_batch():
                 "events":           analysis.get("events", []),
                 "location":         analysis.get("location", ""),
                 "time":             analysis.get("time", ""),
+                "isSpam":           False,
+                "spamReason":       "",
                 "mongo_id":         mongo_id,
                 "cached":           False,
             }
@@ -190,6 +278,76 @@ def add_emails_batch():
         "cached_count": cached_count,
         "results":      ordered_results,
     }), 200
+
+
+@app.route("/api/chat", methods=["POST"])
+def chat():
+    """
+    RAG-based inbox Q&A. Pull recent email summaries from MongoDB
+    and let Gemini answer the user's question using only that data.
+    """
+    data = request.json
+    question = data.get("question", "").strip()
+    username = data.get("username", "")
+
+    if not question:
+        return jsonify({"error": "No question provided."}), 400
+
+    # Pull the last 50 processed (non-spam) emails to use as context
+    recent_docs = list(db.emails.find(
+        {"isSpam": {"$ne": True}},
+        {"subject": 1, "aiAnalysis": 1, "_id": 0}
+    ).sort("_id", -1).limit(50))
+
+    if not recent_docs:
+        return jsonify({"answer": "No emails have been processed yet. Fetch your emails first!"}), 200
+
+    context_parts = []
+    for doc in recent_docs:
+        analysis = doc.get("aiAnalysis", {})
+        subject = doc.get("subject", "No Subject")
+        summary = analysis.get("summary", "")
+        tasks = "; ".join(analysis.get("tasks", []))
+        deadlines = "; ".join(analysis.get("deadlines", []))
+        events = "; ".join(analysis.get("events", []))
+        location = analysis.get("location", "")
+        time_val = analysis.get("time", "")
+
+        entry = f"- Subject: {subject} | Summary: {summary}"
+        if tasks:
+            entry += f" | Tasks: {tasks}"
+        if deadlines:
+            entry += f" | Deadlines: {deadlines}"
+        if events:
+            entry += f" | Events: {events}"
+        if location:
+            entry += f" | Location: {location}"
+        if time_val:
+            entry += f" | Time: {time_val}"
+        context_parts.append(entry)
+
+    context = "\n".join(context_parts)
+
+    prompt = f"""You are a helpful inbox assistant for a UT Dallas student.
+Answer the user's question using ONLY the email data provided below.
+If the answer isn't in the data, say you don't see that in their recent emails.
+Keep your answer concise and helpful.
+
+Email data:
+{context}
+
+Question: {question}
+"""
+
+    try:
+        response = gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        return jsonify({"answer": response.text.strip()}), 200
+    except Exception as e:
+        print(f"Chat error: {e}")
+        return jsonify({"error": "Could not generate a response."}), 500
 
 
 if __name__ == "__main__":

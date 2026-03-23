@@ -153,10 +153,13 @@ async function graphGet(path, token) {
 
 // Helper: forward a parsed email to Flask to ai to mongodb
 
-async function forwardToFlask(payload) {
+async function forwardToFlask(payload, userToken = '') {
     const resp = await fetch(FLASK_API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            ...(userToken && { Authorization: `Bearer ${userToken}` }),
+        },
         body: JSON.stringify(payload),
     });
 
@@ -180,6 +183,37 @@ async function forwardToFlask(payload) {
  * For simplicity we encode the userToken directly in state —
  * in production use a signed, expiring state value instead.
  */
+// Preferences routes — proxy through to Flask so the JWT is forwarded correctly
+
+app.get('/auth/preferences', requireAuth, async (req, res) => {
+    try {
+        const resp = await fetch(`${FLASK_BASE_URL}/auth/preferences`, {
+            headers: { Authorization: `Bearer ${req.userToken}` },
+        });
+        const data = await resp.json();
+        res.status(resp.status).json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/auth/preferences', requireAuth, async (req, res) => {
+    try {
+        const resp = await fetch(`${FLASK_BASE_URL}/auth/preferences`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${req.userToken}`,
+            },
+            body: JSON.stringify(req.body),
+        });
+        const data = await resp.json();
+        res.status(resp.status).json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/auth/url', requireAuth, (req, res) => {
     const scopes = [
         'https://www.googleapis.com/auth/gmail.readonly',
@@ -238,7 +272,7 @@ app.get('/latest', requireAuth, async (req, res) => {
             snippet: message.snippet,
         };
 
-        const flaskResult = await forwardToFlask(payload);
+        const flaskResult = await forwardToFlask(payload, req.userToken);
         res.json({ id, snippet: message.snippet, plainBody, flaskResult });
     } catch (err) {
         if (err.message === 'NO_GOOGLE_TOKEN') {
@@ -286,7 +320,7 @@ app.get('/message/:id', requireAuth, async (req, res) => {
             snippet: message.snippet,
         };
 
-        const flaskResult = await forwardToFlask(payload);
+        const flaskResult = await forwardToFlask(payload, req.userToken);
         res.json({ message, plainBody, subject, flaskResult });
     } catch (err) {
         if (err.message === 'NO_GOOGLE_TOKEN') {
@@ -328,7 +362,7 @@ app.post('/fetch-and-process', requireAuth, async (req, res) => {
             };
 
             try {
-                const flaskResult = await forwardToFlask(payload);
+                const flaskResult = await forwardToFlask(payload, req.userToken);
                 results.push({ id, status: 'ok', flaskResult });
             } catch (flaskErr) {
                 results.push({ id, status: 'error', error: flaskErr.message });
@@ -347,10 +381,13 @@ app.post('/fetch-and-process', requireAuth, async (req, res) => {
 
 // Helper: forward a batch of emails to Flask in one request
 
-async function forwardBatchToFlask(emails) {
+async function forwardBatchToFlask(emails, userToken = '') {
     const resp = await fetch(`${FLASK_BASE_URL}/api/emails/batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            ...(userToken && { Authorization: `Bearer ${userToken}` }),
+        },
         body: JSON.stringify(emails),
     });
 
@@ -401,7 +438,7 @@ app.post('/fetch-and-process-batch', requireAuth, async (req, res) => {
             };
         });
 
-        const batchResult = await forwardBatchToFlask(emails);
+        const batchResult = await forwardBatchToFlask(emails, req.userToken);
         res.json(batchResult);
     } catch (err) {
         if (err.message === 'NO_GOOGLE_TOKEN') {
@@ -506,7 +543,7 @@ app.get('/outlook/message/:id', requireAuth, async (req, res) => {
         const subject = msg.subject || msg.bodyPreview || '(no subject)';
 
         const payload = { id, subject, body: plainBody, snippet: msg.bodyPreview || '' };
-        const flaskResult = await forwardToFlask(payload);
+        const flaskResult = await forwardToFlask(payload, req.userToken);
         res.json({ message: msg, plainBody, subject, flaskResult });
     } catch (err) {
         if (err.message === 'NO_MS_TOKEN') {
@@ -537,7 +574,7 @@ app.post('/outlook/fetch-and-process', requireAuth, async (req, res) => {
                 snippet: msg.bodyPreview || '',
             };
             try {
-                const flaskResult = await forwardToFlask(payload);
+                const flaskResult = await forwardToFlask(payload, req.userToken);
                 results.push({ id: msg.id, status: 'ok', flaskResult });
             } catch (flaskErr) {
                 results.push({ id: msg.id, status: 'error', error: flaskErr.message });
@@ -574,7 +611,7 @@ app.post('/outlook/fetch-and-process-batch', requireAuth, async (req, res) => {
             };
         });
 
-        const batchResult = await forwardBatchToFlask(emails);
+        const batchResult = await forwardBatchToFlask(emails, req.userToken);
         res.json(batchResult);
     } catch (err) {
         if (err.message === 'NO_MS_TOKEN') {

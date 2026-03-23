@@ -9,25 +9,179 @@ load_dotenv()
 api = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api) 
 
-TAGS = ["Internship", "Job Offer", "Meeting Request", "Assigments/Deadlines", "Newsletter", "Other"]; 
+TAGS = ["Internship", "Job Offer", "Meeting Request", "Assigments/Deadlines", "Newsletter", "Other"]
+
+# Known UTD building abbreviations and locations used in email contexts
+UTD_LOCATIONS = {
+    "ECSW": "Engineering and Computer Science West",
+    "ECSS": "Engineering and Computer Science South",
+    "JSOM": "Jindal School of Management Building",
+    "SLC": "Student Learning Center",
+    "SSB": "Student Services Building",
+    "GR": "Green Hall",
+    "FO": "Founders Building",
+    "CB": "Chemistry Building",
+    "MC": "McDermott Library",
+    "HH": "Hoblitzelle Hall",
+    "CN": "Callier Center North",
+    "AD": "Administration Building",
+    "ATC": "Activity Center",
+    "RH": "Residence Hall",
+}
+
+# Known UTD schools for personalization
+UTD_SCHOOLS = {
+    "ECS": "Erik Jonsson School of Engineering and Computer Science",
+    "JSOM": "Naveen Jindal School of Management",
+    "NSM": "School of Natural Sciences and Mathematics",
+    "EPPS": "School of Economic, Political and Policy Sciences",
+    "AH": "School of Arts and Humanities",
+    "BBS": "School of Behavioral and Brain Sciences",
+    "IS": "School of Interdisciplinary Studies",
+}
 
 
-def analyze_emails_batch(emails):
+def is_spam(subject, body):
+    """
+    Quick gatekeeper check for a single email.
+    Returns (isSpam: bool, reason: str).
+    """
+    prompt = f"""You are a spam and phishing detection system.
+Analyze the following email and determine if it is spam, a scam, or a phishing attempt.
+
+Respond with ONLY a JSON object with two keys:
+1. "isSpam": true or false
+2. "reason": one short sentence explaining why (max 10 words)
+
+Subject: {subject}
+Body: {body[:1500]}
+
+Return ONLY the JSON. No explanation, no markdown.
+"""
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        result = json.loads(raw)
+        return bool(result.get("isSpam", False)), result.get("reason", "")
+    except Exception as e:
+        print(f"Spam check error: {e}")
+        return False, ""
+
+
+def is_spam_batch(emails):
+    """
+    Check up to 25 emails for spam in one single Gemini call instead of one per email.
+    Returns a list of (isSpam: bool, reason: str) tuples in the same order.
+    """
+    if not emails:
+        return []
+
+    emails_block = ""
+    for i, email in enumerate(emails, 1):
+        emails_block += f"\n--- EMAIL {i} ---\nSubject: {email.get('subject', '')}\nBody: {email.get('body', '')[:600]}\n"
+
+    prompt = f"""You are a spam and phishing detection system.
+Analyze each of the following {len(emails)} emails and determine if each is spam, a scam, or a phishing attempt.
+
+Respond with ONLY a JSON array containing exactly {len(emails)} objects in the same order, each with:
+1. "isSpam": true or false
+2. "reason": one short sentence explaining why (max 10 words)
+
+Emails:
+{emails_block}
+
+Return ONLY the JSON array. No explanation, no markdown fences.
+"""
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        results = json.loads(raw)
+        if not isinstance(results, list) or len(results) != len(emails):
+            raise ValueError(f"Expected {len(emails)} results, got {len(results) if isinstance(results, list) else 'non-list'}")
+        return [(bool(r.get("isSpam", False)), r.get("reason", "")) for r in results]
+    except Exception as e:
+        print(f"Batch spam check error: {e}")
+        return [(False, "") for _ in emails]
+
+
+def _utd_context(sender_domain="", school=""):
+    """
+    Build an extra instruction line to inject into prompts when the email
+    is from a UTD address. Helps the model prioritize academic info correctly.
+    """
+    if "utdallas.edu" not in sender_domain:
+        return ""
+
+    lines = [
+        "This is a university email from UT Dallas.",
+        "Prioritize academic deadlines, course-related tasks, and campus events.",
+        f"Recognize these UTD building abbreviations: {', '.join(f'{k}={v}' for k, v in UTD_LOCATIONS.items())}.",
+        f"Identify which school sent this if possible (ECS, JSOM, NSM, etc.) and include it in uiBadges.",
+    ]
+
+    if school == "ECS":
+        lines.append(
+            "The user is an ECS (Engineering & Computer Science) student. "
+            "Boost priority for anything related to CS courses, engineering labs, coding projects, "
+            "tech internships, research positions, and ECS department events."
+        )
+    elif school == "JSOM":
+        lines.append(
+            "The user is a JSOM (Jindal School of Management) student. "
+            "Boost priority for anything related to business courses, finance, accounting, "
+            "marketing, consulting internships, case competitions, and JSOM department events."
+        )
+
+    return "\n".join(lines)
+
+
+def _priority_topics_context(priority_topics):
+    """
+    Build a prompt snippet that tells the model to boost priorityLevel
+    for emails whose subject/body matches the user's topic list.
+    Topics are ordered most important to least important.
+    """
+    if not priority_topics:
+        return ""
+    ranked = ", ".join(f'"{t}"' for t in priority_topics)
+    return (
+        f"The user has a personal priority list (most to least important): [{ranked}]. "
+        "If the email subject or body closely relates to any of these topics, "
+        "boost its priorityLevel accordingly — topics earlier in the list warrant a higher boost. "
+        "Also add the matching topic as a uiBadge."
+    )
+
+
+def analyze_emails_batch(emails, school="", priority_topics=None):
     """
     Takes a list of dicts with 'subject' and 'body' keys (up to 25),
     sends them all in one prompt, and returns a list of analysis dicts.
     """
+    if priority_topics is None:
+        priority_topics = []
+
     emails_block = ""
     for i, email in enumerate(emails, 1):
+        sender = email.get('sender', '')
+        utd_note = f"\n[NOTE: {_utd_context(sender, school)}]" if "utdallas.edu" in sender else ""
         emails_block += f"""
 --- EMAIL {i} ---
 Subject: {email.get('subject', 'No Subject')}
-Body: {email.get('body', 'No Body Content')}
+Body: {email.get('body', 'No Body Content')}{utd_note}
 """
+
+    topics_line = _priority_topics_context(priority_topics)
 
     prompt = f"""
     Act as a highly efficient executive email assistant.
     Analyze each of the following {len(emails)} emails and categorize each using ONLY one of these categories: {TAGS}
+    {topics_line}
 
     Your output MUST be a valid, parseable JSON array containing exactly {len(emails)} objects, one per email, in the same order.
     Each object must contain exactly these keys:
@@ -49,7 +203,7 @@ Body: {email.get('body', 'No Body Content')}
 
     try:
         response = client.models.generate_content(
-            model="gemini-3.1-flash-lite-preview",
+            model="gemini-2.5-flash",
             contents=prompt,
         )
 
@@ -90,15 +244,22 @@ Body: {email.get('body', 'No Body Content')}
         ]
 
 
-def analyze_email_with_gemini(subject, body):
+def analyze_email_with_gemini(subject, body, sender="", school="", priority_topics=None):
     """
     Takes an email subject and body, sends it to Gemini, 
     and returns a clean Python dictionary.
     """
+    if priority_topics is None:
+        priority_topics = []
+
+    utd_note = _utd_context(sender, school)
+    utd_line = f"\nExtra context: {utd_note}" if utd_note else ""
+    topics_line = _priority_topics_context(priority_topics)
     
     prompt = f"""
     Act as a highly efficient executive email assistant. 
-    Analyze the following email and categorize it using ONLY one of these categories: {TAGS} 
+    Analyze the following email and categorize it using ONLY one of these categories: {TAGS}{utd_line}
+    {topics_line}
 
     Your output MUST be a valid, parseable JSON object containing exactly these keys:
     1. "summary": Concise summary (max 2 sentences). Include deadlines if present.
@@ -119,7 +280,7 @@ def analyze_email_with_gemini(subject, body):
 
     try:
         response = client.models.generate_content(
-            model="gemini-3.1-flash-lite-preview", 
+            model="gemini-2.5-flash",
             contents=prompt,
         )
         

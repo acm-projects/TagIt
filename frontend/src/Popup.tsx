@@ -16,6 +16,8 @@ interface EmailResult {
   events: string[];
   location: string;
   time: string;
+  isSpam?: boolean;
+  spamReason?: string;
   mongo_id?: string;
   cached?: boolean;
 }
@@ -41,6 +43,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Meeting Request":      "bg-blue-100 text-blue-700 border-blue-200",
   "Assigments/Deadlines": "bg-rose-100 text-rose-700 border-rose-200",
   "Newsletter":           "bg-amber-100 text-amber-700 border-amber-200",
+  "Spam":                 "bg-red-100 text-red-700 border-red-200",
   "Other":                "bg-gray-100 text-gray-600 border-gray-200",
 };
 
@@ -187,6 +190,16 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
   const [calStatus, setCalStatus] = useState<Record<string, string>>({});
   const [filterCat, setFilterCat] = useState<string>("All");
   const [filterPri, setFilterPri] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState<"inbox" | "spam" | "settings">("inbox");
+
+  // Settings state
+  const [settingsSchool, setSettingsSchool] = useState<string>("");
+  const [settingsTopics, setSettingsTopics] = useState<string[]>([]);
+  const [settingsTopicInput, setSettingsTopicInput] = useState("");
+  const [settingsDragIdx, setSettingsDragIdx] = useState<number | null>(null);
+  const [settingsDragOverIdx, setSettingsDragOverIdx] = useState<number | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
 
   useEffect(() => {
     if (provider === "outlook") {
@@ -196,6 +209,19 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
         .catch(() => setMsAuthed(false));
     }
   }, [provider]);
+
+  // Load user preferences whenever the settings tab is opened
+  useEffect(() => {
+    if (activeTab === "settings") {
+      fetch(`${BACKEND_BASE}/auth/preferences`, { headers: authHeaders() })
+        .then(r => r.json())
+        .then(data => {
+          setSettingsSchool(data.school || "");
+          setSettingsTopics(data.priorityTopics || []);
+        })
+        .catch(() => {});
+    }
+  }, [activeTab]);
 
   function resetState() {
     setError(null);
@@ -308,15 +334,59 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
     }
   }
 
+  function addSettingsTopic() {
+    const t = settingsTopicInput.trim();
+    if (!t || settingsTopics.includes(t)) { setSettingsTopicInput(""); return; }
+    setSettingsTopics(prev => [...prev, t]);
+    setSettingsTopicInput("");
+  }
+
+  function removeSettingsTopic(i: number) {
+    setSettingsTopics(prev => prev.filter((_, idx) => idx !== i));
+  }
+
+  function onSettingsDragStart(i: number) { setSettingsDragIdx(i); }
+  function onSettingsDragEnter(i: number) { setSettingsDragOverIdx(i); }
+  function onSettingsDragEnd() {
+    if (settingsDragIdx === null || settingsDragOverIdx === null || settingsDragIdx === settingsDragOverIdx) {
+      setSettingsDragIdx(null); setSettingsDragOverIdx(null); return;
+    }
+    const reordered = [...settingsTopics];
+    const [moved] = reordered.splice(settingsDragIdx, 1);
+    reordered.splice(settingsDragOverIdx, 0, moved);
+    setSettingsTopics(reordered);
+    setSettingsDragIdx(null); setSettingsDragOverIdx(null);
+  }
+
+  async function savePreferences() {
+    setSettingsLoading(true);
+    setSettingsSaved(false);
+    try {
+      await fetch(`${BACKEND_BASE}/auth/preferences`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ school: settingsSchool, priorityTopics: settingsTopics }),
+      });
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 2500);
+    } catch {
+      // silent fail — user will just not see confirmation
+    } finally {
+      setSettingsLoading(false);
+    }
+  }
+
   // Derived filtered list
-  const categories = ["All", ...Array.from(new Set(emails.map(e => e.assignedCategory)))];
-  const filtered = emails.filter(e => {
+  const inboxEmails = emails.filter(e => !e.isSpam);
+  const spamEmails = emails.filter(e => e.isSpam);
+  const categories = ["All", ...Array.from(new Set(inboxEmails.map(e => e.assignedCategory)))];
+  const filtered = inboxEmails.filter(e => {
     if (filterCat !== "All" && e.assignedCategory !== filterCat) return false;
     if (filterPri > 0 && e.priorityLevel !== filterPri) return false;
     return true;
   });
 
-  const priorityCounts = [1,2,3,4].map(p => ({ p, count: emails.filter(e => e.priorityLevel === p).length }));
+  const priorityCounts = [1,2,3,4].map(p => ({ p, count: inboxEmails.filter(e => e.priorityLevel === p).length }));
   const cachedCount = emails.filter(e => e.cached).length;
   const newCount = emails.length - cachedCount;
 
@@ -359,6 +429,26 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
             )}
           </div>
         </div>
+
+        {/* Tab bar */}
+        <div className="max-w-3xl mx-auto px-4 flex gap-1 pb-0">
+          {(["inbox", "spam", "settings"] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors capitalize ${
+                activeTab === tab
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab === "spam"
+                ? `Spam${spamEmails.length > 0 ? ` (${spamEmails.length})` : ""}`
+                : tab === "inbox" ? "Inbox"
+                : "Settings"}
+            </button>
+          ))}
+        </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6">
@@ -387,119 +477,250 @@ const Popup: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
           </div>
         )}
 
-        {/* Fetch button */}
-        <button
-          onClick={fetchBatch}
-          disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl shadow-sm transition-all text-sm tracking-wide"
-        >
-          {loading
-            ? "Analysing emails…"
-            : `Fetch & Analyse Last 25 ${provider === "gmail" ? "Gmail" : "Outlook"} Emails`}
-        </button>
-
-        {/* Loading skeleton */}
-        {loading && (
-          <div className="mt-6 space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="border border-gray-100 rounded-xl bg-white p-4 animate-pulse">
-                <div className="flex gap-3">
-                  <div className="w-6 h-6 rounded-full bg-gray-200" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-3 bg-gray-200 rounded w-3/4" />
-                    <div className="h-2 bg-gray-100 rounded w-1/2" />
-                    <div className="h-2 bg-gray-100 rounded w-full" />
-                    <div className="h-2 bg-gray-100 rounded w-5/6" />
-                  </div>
-                </div>
+        {/* Spam tab */}
+        {activeTab === "spam" && (
+          <div>
+            {spamEmails.length === 0 ? (
+              <div className="text-center text-gray-400 text-sm py-12">
+                {emails.length === 0 ? "Fetch your emails first." : "No spam detected in your last batch."}
               </div>
-            ))}
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-500">{spamEmails.length} email{spamEmails.length !== 1 ? "s" : ""} flagged as spam or phishing.</p>
+                {spamEmails.map((email, i) => (
+                  <div key={email.id} className="border border-red-100 rounded-xl bg-white p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <span className="text-red-400 text-sm mt-0.5">🚫</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-700 truncate">{email.subject}</p>
+                        {email.spamReason && (
+                          <p className="text-xs text-red-600 mt-1">{email.spamReason}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Error */}
-        {error && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl">
-            {error}
-          </div>
-        )}
-
-        {/* Results */}
-        {!loading && emails.length > 0 && (
-          <>
-            {/* Cache info */}
-            <div className="mt-5 flex items-center gap-2 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-blue-400" />
-                {newCount} newly analysed
-              </span>
-              <span className="text-gray-300">·</span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-gray-300" />
-                {cachedCount} from cache
-              </span>
-            </div>
-
-            {/* Stats bar */}
-            <div className="mt-3 mb-4 grid grid-cols-4 gap-2">
-              {priorityCounts.map(({ p, count }) => {
-                const cfg = PRIORITY_CONFIG[p];
-                return (
+        {/* Settings tab */}
+        {activeTab === "settings" && (
+          <div className="space-y-5">
+            {/* School */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-2 font-semibold uppercase tracking-wide">Your school at UTD</label>
+              <div className="flex gap-2">
+                {["ECS", "JSOM", "Other"].map(s => (
                   <button
-                    key={p}
-                    onClick={() => setFilterPri(prev => prev === p ? 0 : p)}
-                    className={`rounded-xl border p-3 text-center transition-all ${
-                      filterPri === p ? cfg.color + " ring-2 ring-offset-1 ring-current" : "bg-white border-gray-200 hover:border-gray-300"
+                    key={s}
+                    onClick={() => setSettingsSchool(prev => prev === s ? "" : s)}
+                    className={`flex-1 px-3 py-2 rounded text-sm font-medium border transition-colors ${
+                      settingsSchool === s
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
                     }`}
                   >
-                    <div className={`text-xl font-black ${filterPri === p ? "" : "text-gray-800"}`}>{count}</div>
-                    <div className={`text-xs font-medium mt-0.5 ${filterPri === p ? "" : "text-gray-500"}`}>{cfg.label}</div>
+                    {s}
                   </button>
-                );
-              })}
+                ))}
+              </div>
+              {settingsSchool === "ECS" && <p className="text-xs text-gray-400 mt-1">Engineering & Computer Science</p>}
+              {settingsSchool === "JSOM" && <p className="text-xs text-gray-400 mt-1">Jindal School of Management</p>}
             </div>
 
-            {/* Category filter pills */}
-            <div className="flex flex-wrap gap-2 mb-4">
-              {categories.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setFilterCat(cat)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
-                    filterCat === cat
-                      ? "bg-gray-900 text-white border-gray-900"
-                      : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
-                  }`}
-                >
-                  {cat}
-                  {cat !== "All" && (
-                    <span className="ml-1.5 opacity-60">
-                      {emails.filter(e => e.assignedCategory === cat).length}
-                    </span>
-                  )}
+            {/* Priority topics */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wide">Priority topics</label>
+              <p className="text-xs text-gray-400 mb-2">Drag to reorder — top = most important. Emails matching these topics get boosted priority.</p>
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  value={settingsTopicInput}
+                  onChange={e => setSettingsTopicInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && addSettingsTopic()}
+                  placeholder='e.g. Research'
+                  className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-400"
+                />
+                <button onClick={addSettingsTopic} className="bg-blue-600 text-white px-3 py-2 rounded text-sm font-medium hover:bg-blue-700">
+                  Add
                 </button>
-              ))}
-            </div>
-
-            {/* Email cards */}
-            <div className="space-y-3">
-              {filtered.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-12">No emails match this filter.</div>
-              ) : (
-                filtered.map((email, i) => (
-                  <div key={email.id}>
-                    <EmailCard
-                      email={email}
-                      index={emails.indexOf(email)}
-                      onAddCalendar={addToCalendar}
-                    />
-                    {calStatus[email.id] && (
-                      <p className="text-xs text-emerald-600 font-medium mt-1 ml-4">{calStatus[email.id]}</p>
-                    )}
-                  </div>
-                ))
+              </div>
+              {settingsTopics.length === 0 && (
+                <p className="text-xs text-gray-400 py-2">No topics added yet.</p>
+              )}
+              {settingsTopics.length > 0 && (
+                <ul className="space-y-1">
+                  {settingsTopics.map((t, i) => (
+                    <li
+                      key={t}
+                      draggable
+                      onDragStart={() => onSettingsDragStart(i)}
+                      onDragEnter={() => onSettingsDragEnter(i)}
+                      onDragEnd={onSettingsDragEnd}
+                      onDragOver={e => e.preventDefault()}
+                      className={`flex items-center gap-2 px-3 py-2 rounded border bg-white text-sm cursor-grab select-none transition-all ${
+                        settingsDragOverIdx === i ? "border-blue-400 bg-blue-50" : "border-gray-200"
+                      }`}
+                    >
+                      <span className="text-gray-300 text-xs">☰</span>
+                      <span className="text-xs font-semibold text-gray-400 w-4">{i + 1}.</span>
+                      <span className="flex-1 text-gray-800">{t}</span>
+                      <button onClick={() => removeSettingsTopic(i)} className="text-gray-400 hover:text-red-500 text-xs">✕</button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={savePreferences}
+                disabled={settingsLoading}
+                className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {settingsLoading ? "Saving..." : "Save preferences"}
+              </button>
+              {settingsSaved && <span className="text-xs text-emerald-600 font-medium">✓ Saved</span>}
+            </div>
+          </div>
+        )}
+
+        {/* Inbox tab */}
+        {activeTab === "inbox" && (
+          <>
+            {/* Fetch button */}
+            <button
+              onClick={fetchBatch}
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl shadow-sm transition-all text-sm tracking-wide"
+            >
+              {loading
+                ? "Analysing emails…"
+                : `Fetch & Analyse Last 25 ${provider === "gmail" ? "Gmail" : "Outlook"} Emails`}
+            </button>
+
+            {/* Loading skeleton */}
+            {loading && (
+              <div className="mt-6 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="border border-gray-100 rounded-xl bg-white p-4 animate-pulse">
+                    <div className="flex gap-3">
+                      <div className="w-6 h-6 rounded-full bg-gray-200" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 bg-gray-200 rounded w-3/4" />
+                        <div className="h-2 bg-gray-100 rounded w-1/2" />
+                        <div className="h-2 bg-gray-100 rounded w-full" />
+                        <div className="h-2 bg-gray-100 rounded w-5/6" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Error */}
+            {error && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl">
+                {error}
+              </div>
+            )}
+
+            {/* Results */}
+            {!loading && inboxEmails.length > 0 && (
+              <>
+                {/* Cache info */}
+                <div className="mt-5 flex items-center gap-2 text-xs text-gray-500">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-400" />
+                    {newCount} newly analysed
+                  </span>
+                  <span className="text-gray-300">·</span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-gray-300" />
+                    {cachedCount} from cache
+                  </span>
+                  {spamEmails.length > 0 && (
+                    <>
+                      <span className="text-gray-300">·</span>
+                      <button
+                        onClick={() => setActiveTab("spam")}
+                        className="flex items-center gap-1 text-red-500 hover:underline"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-red-400" />
+                        {spamEmails.length} spam
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Stats bar */}
+                <div className="mt-3 mb-4 grid grid-cols-4 gap-2">
+                  {priorityCounts.map(({ p, count }) => {
+                    const cfg = PRIORITY_CONFIG[p];
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setFilterPri(prev => prev === p ? 0 : p)}
+                        className={`rounded-xl border p-3 text-center transition-all ${
+                          filterPri === p ? cfg.color + " ring-2 ring-offset-1 ring-current" : "bg-white border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className={`text-xl font-black ${filterPri === p ? "" : "text-gray-800"}`}>{count}</div>
+                        <div className={`text-xs font-medium mt-0.5 ${filterPri === p ? "" : "text-gray-500"}`}>{cfg.label}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Category filter pills */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setFilterCat(cat)}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
+                        filterCat === cat
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                      }`}
+                    >
+                      {cat}
+                      {cat !== "All" && (
+                        <span className="ml-1.5 opacity-60">
+                          {inboxEmails.filter(e => e.assignedCategory === cat).length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Email cards */}
+                <div className="space-y-3">
+                  {filtered.length === 0 ? (
+                    <div className="text-center text-gray-400 text-sm py-12">No emails match this filter.</div>
+                  ) : (
+                    filtered.map((email, i) => (
+                      <div key={email.id}>
+                        <EmailCard
+                          email={email}
+                          index={inboxEmails.indexOf(email)}
+                          onAddCalendar={addToCalendar}
+                        />
+                        {calStatus[email.id] && (
+                          <p className="text-xs text-emerald-600 font-medium mt-1 ml-4">{calStatus[email.id]}</p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+
+            {!loading && emails.length === 0 && !error && (
+              <div className="text-center text-gray-400 text-sm py-12">Click the button above to load your emails.</div>
+            )}
           </>
         )}
       </main>
