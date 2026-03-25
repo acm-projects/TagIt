@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
+import SectionHeader from "../components/SectionHeader";
 import WeekHeader from "../components/WeekHeader";
-import mailOpenIcon from "../assets/page_buttons/mail_open.png";
-import draftIcon from "../assets/page_buttons/draft.png";
 
 /**
  * A prioritized mail card item.
@@ -110,11 +109,10 @@ const MailPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#F8E7DD] p-4">
-      <div className="flex min-h-0 flex-1 w-full flex-col overflow-hidden rounded-[30px] bg-[#FFFBF8]">
-
-        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-8 py-6 text-[#A34712]">
-          <WeekHeader />
+    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
+          <WeekHeader showYear={false} />
 
           <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1">
             {days.map((day) => {
@@ -126,8 +124,8 @@ const MailPage: React.FC = () => {
                   onClick={() => setSelectedDay(day)}
                   className={`rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
                     isActive
-                      ? "border-[#D3753D] bg-[#F4C7A2] text-[#8A4B2D]"
-                      : "border-transparent bg-[#EDEAE6] text-[#5A3A2A]"
+                      ? "border-[#f9ab7b] bg-[#fde6d7] text-[#c96f39]"
+                      : "border-transparent bg-[#F3F4F6] text-[#6B7280]"
                   }`}
                   aria-pressed={isActive}
                 >
@@ -138,35 +136,28 @@ const MailPage: React.FC = () => {
           </div>
 
           <section className="mt-6">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-[#A34712]">
-              <span
-                className="inline-block h-5 w-5 shrink-0 bg-[#A34712] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]"
-                style={{
-                  maskImage: `url(${mailOpenIcon})`,
-                  WebkitMaskImage: `url(${mailOpenIcon})`,
-                }}
-                aria-hidden
-              />
-              <span>Mails</span>
-            </h2>
+            <SectionHeader
+              title="Mails"
+              icon={<span className="material-symbols-outlined text-[18px]">mail</span>}
+            />
 
             <div className="mt-3 space-y-2">
               {sortedMails.map((mail) => (
                 <button
                   key={mail.id}
                   type="button"
-                  className="group relative flex w-full flex-col items-stretch rounded-xl border-[1.5px] border-[#FFE0C7] bg-[#FCE6D9] px-4 py-2 text-left text-sm text-[#3F2A1E] shadow-sm transition-all duration-150 ease-out hover:-translate-y-[1px] hover:shadow-md"
+                  className="group relative flex w-full flex-col items-stretch rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2 text-left text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)] transition-all duration-150 ease-out hover:-translate-y-[1px] hover:shadow-md"
                 >
                   <div className="flex items-start gap-3 pr-10">
                     <div className="flex-1">
-                      <p className="text-[13px] font-semibold leading-tight text-[#3B210F]">
+                      <p className="text-[13px] font-semibold leading-tight text-[#111827]">
                         {mail.summary}
                       </p>
-                      <p className="mt-0.5 text-[10.5px] font-medium text-[#8A4B2D]/80">
+                      <p className="mt-0.5 text-[10.5px] font-medium text-[#6B7280]">
                         {mail.sender}
                       </p>
                       <p
-                        className="mt-1 text-[12px] leading-snug text-[#5A3A2A]"
+                        className="mt-1 text-[12px] leading-snug text-[#4B5563]"
                         style={{
                           display: "-webkit-box",
                           WebkitLineClamp: 1,
@@ -177,7 +168,7 @@ const MailPage: React.FC = () => {
                         {mail.body}
                       </p>
                       {mail.extra && (
-                        <p className="mt-1 text-[10.5px] text-[#8A4B2D]">{mail.extra}</p>
+                        <p className="mt-1 text-[10.5px] text-[#6B7280]">{mail.extra}</p>
                       )}
                       {mail.tags.length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1">
@@ -206,7 +197,7 @@ const MailPage: React.FC = () => {
                     title="Mark as read"
                     aria-label="Mark as read"
                   >
-                    <span className="material-symbols-outlined text-[20px] text-[#D75B00] drop-shadow-[0_2px_6px_rgba(172,64,0,0.25)] transition-transform duration-200 ease-out group-hover:scale-110">
+                    <span className="material-symbols-outlined text-[20px] text-[#f9ab7b] transition-transform duration-200 ease-out group-hover:scale-110">
                       check
                     </span>
                   </div>
@@ -216,24 +207,17 @@ const MailPage: React.FC = () => {
           </section>
 
           <section className="mt-8">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-[#A34712]">
-              <span
-                className="inline-block h-5 w-5 shrink-0 bg-[#A34712] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]"
-                style={{
-                  maskImage: `url(${draftIcon})`,
-                  WebkitMaskImage: `url(${draftIcon})`,
-                }}
-                aria-hidden
-              />
-              <span>Drafted Replies</span>
-            </h2>
+            <SectionHeader
+              title="Drafted Replies"
+              icon={<span className="material-symbols-outlined text-[18px]">draft</span>}
+            />
 
             <div className="mt-3 space-y-2.5">
               {draftReplies.map((draft) => (
                 <button
                   key={draft.id}
                   type="button"
-                  className="group relative flex w-full items-center justify-between rounded-2xl border border-[#FFE0C7] bg-[#FFF3EA] px-4 py-2.5 text-left text-sm text-[#3F2A1E] shadow-sm transition-all duration-200 ease-out hover:-translate-y-[1px] hover:shadow-md"
+                  className="group relative flex w-full items-center justify-between rounded-2xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2.5 text-left text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)] transition-all duration-200 ease-out hover:-translate-y-[1px] hover:shadow-md"
                 >
                   <span>{draft.sender}</span>
 
@@ -245,7 +229,7 @@ const MailPage: React.FC = () => {
                     title="Mark as read"
                     aria-label="Mark as read"
                   >
-                    <span className="material-symbols-outlined text-[18px] text-[#D75B00] drop-shadow-[0_2px_6px_rgba(172,64,0,0.25)] transition-transform duration-200 ease-out group-hover:scale-110">
+                    <span className="material-symbols-outlined text-[18px] text-[#f9ab7b] transition-transform duration-200 ease-out group-hover:scale-110">
                       check
                     </span>
                   </div>
