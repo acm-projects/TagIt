@@ -304,7 +304,7 @@ const TasksPage: React.FC = () => {
                               aria-label={`Mark "${task.label}" as completed`}
                             />
                             <span
-                              className={`min-w-0 flex-1 truncate text-sm font-semibold text-[#111827] ${task.done ? "line-through opacity-70" : ""}`}
+                              className={`min-w-0 flex-1 truncate text-sm font-normal text-[#111827] ${task.done ? "line-through opacity-70" : ""}`}
                             >
                               {task.label}
                             </span>
