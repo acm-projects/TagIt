@@ -17,23 +17,12 @@
   font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
 }
 
-.today-scroll {
+/* Primary app pages: hide scrollbar on main scroll area */
+.app-main-scroll {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.today-scroll::-webkit-scrollbar {
+.app-main-scroll::-webkit-scrollbar {
   display: none;
-}
-
-.today-page .page-header .material-symbols-outlined {
-  font-size: 36px;
-}
-
-.today-page .page-header .text-\[22px\] {
-  font-size: 26px;
-}
-
-.today-page .page-header .text-\[14px\] {
-  font-size: 15px;
 }

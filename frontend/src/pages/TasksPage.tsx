@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
-import DateHeader from "../components/DateHeader";
+import WeekHeader from "../components/WeekHeader";
 import {
   loadTasks,
   saveTasks,
@@ -189,14 +189,13 @@ const TasksPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#FFF2E9] p-4">
-      <div className="flex min-h-0 flex-1 w-full flex-col overflow-hidden rounded-[30px] bg-[#FFFBF8]">
-
-        <main className="min-h-0 flex flex-1 flex-col overflow-auto px-8 py-6 text-[#A34712]">
-          <DateHeader date="02/18/2026" onDateChange={setSelectedDate} />
+    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
+          <WeekHeader showYear={false} onDateChange={setSelectedDate} />
 
           <section className="mt-6">
-            <div className="flex items-center gap-2 text-sm font-semibold">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[#1F2933]">
               <span className="material-symbols-outlined text-[18px]">task_alt</span>
               <span>Tasks</span>
             </div>
