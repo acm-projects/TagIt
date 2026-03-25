@@ -187,32 +187,32 @@ const DateHeader: React.FC<DateHeaderProps> = ({
   };
 
   return (
-    <header className="page-header w-full shrink-0 px-0 pb-4 pt-3 text-[#1F2933]">
-      <div className="relative flex min-h-12 items-center justify-center">
+    <header className="page-header w-full shrink-0 px-0 pb-6 pt-4 text-[#1F2933]">
+      <div className="relative flex min-h-16 items-center justify-center">
         <div className="absolute left-0 flex items-center">
           <button
             type="button"
-            className="inline-flex h-10 w-10 cursor-pointer items-center justify-center text-[#9CA3AF] transition-colors hover:text-[#f9ab7b]"
+            className="inline-flex h-12 w-12 cursor-pointer items-center justify-center text-[#9CA3AF] transition-colors hover:text-[#f9ab7b]"
             aria-label={mode === "week" ? "Previous week" : "Previous day"}
             onClick={() => shiftPeriod(-1)}
           >
-            <span className="material-symbols-outlined !text-[26px] leading-none">arrow_back</span>
+            <span className="material-symbols-outlined !text-[34px] leading-none">arrow_back</span>
           </button>
         </div>
 
-        <div className="flex flex-col items-center gap-0.5">
+        <div className="flex flex-col items-center gap-1">
           <button
             type="button"
             onClick={() => setIsPickerOpen((previous) => !previous)}
-            className="cursor-pointer text-lg font-semibold leading-tight tracking-[0.01em] text-[#111827] sm:text-xl whitespace-nowrap"
+            className="cursor-pointer text-2xl font-semibold leading-tight tracking-[0.01em] text-[#111827] sm:text-3xl whitespace-nowrap"
             aria-label="Choose date from calendar"
           >
             {mode === "week" ? (
-              <span className="flex items-baseline gap-2">
-                <span className="font-instrument italic text-lg leading-tight text-black sm:text-xl">
+              <span className="flex items-baseline gap-3">
+                <span className="font-instrument italic text-2xl leading-tight text-black sm:text-3xl">
                   {weekLabelParts.monthPart}
                 </span>
-                <span className="text-lg font-semibold leading-tight text-[#f9ab7b] sm:text-xl">
+                <span className="text-2xl font-semibold leading-tight text-[#f9ab7b] sm:text-3xl">
                   {weekLabelParts.dayPart}
                 </span>
               </span>
@@ -222,8 +222,8 @@ const DateHeader: React.FC<DateHeaderProps> = ({
           </button>
           {showYear && (
             <>
-              <span className="mt-0.5 h-px w-12 bg-[#E5E7EB]" aria-hidden="true" />
-              <span className="text-[13px] font-semibold tracking-wide text-[#9CA3AF] sm:text-sm">
+              <span className="mt-0.5 h-px w-16 bg-[#E5E7EB]" aria-hidden="true" />
+              <span className="text-[15px] font-semibold tracking-wide text-[#9CA3AF] sm:text-base">
                 {yearLabel}
               </span>
             </>
@@ -233,11 +233,11 @@ const DateHeader: React.FC<DateHeaderProps> = ({
         <div className="absolute right-0 flex items-center">
           <button
             type="button"
-            className="inline-flex h-10 w-10 cursor-pointer items-center justify-center text-[#9CA3AF] transition-colors hover:text-[#f9ab7b]"
+            className="inline-flex h-12 w-12 cursor-pointer items-center justify-center text-[#9CA3AF] transition-colors hover:text-[#f9ab7b]"
             aria-label={mode === "week" ? "Next week" : "Next day"}
             onClick={() => shiftPeriod(1)}
           >
-            <span className="material-symbols-outlined !text-[26px] leading-none">arrow_forward</span>
+            <span className="material-symbols-outlined !text-[34px] leading-none">arrow_forward</span>
           </button>
         </div>
 
