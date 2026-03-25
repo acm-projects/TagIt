@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import WeekHeader from "../components/WeekHeader";
 import {
@@ -11,6 +11,15 @@ import {
  * Important email preview shown on Today.
  * Backend can map directly into this shape once endpoint is ready.
  */
+type CategoryColor = { bg: string; text: string; border: string };
+
+type UserCategory = {
+  id: string;
+  label: string;
+  color?: CategoryColor;
+  isCustom?: boolean;
+};
+
 type ImportantEmailPreview = {
   id: string;
   sender: string;
@@ -18,6 +27,7 @@ type ImportantEmailPreview = {
   tone: "urgent" | "soon" | "done";
   summary: string;
   priority?: "urgent";
+  tagCategoryId?: string;
 };
 
 /**
@@ -27,6 +37,56 @@ type ImportantEmailPreview = {
 type TodayEvent = {
   time: string;
   title: string;
+  tagCategoryId?: string;
+};
+
+const CUSTOM_COLOR_PALETTE: CategoryColor[] = [
+  { bg: "bg-[#fee2e2]", text: "text-[#b91c1c]", border: "border-[#fecdd3]" }, // red
+  { bg: "bg-[#DBEAFE]", text: "text-[#1D4ED8]", border: "border-[#BFDBFE]" }, // blue
+  { bg: "bg-[#E0F2FE]", text: "text-[#0369A1]", border: "border-[#BAE6FD]" }, // teal
+  { bg: "bg-[#FCE7F3]", text: "text-[#BE185D]", border: "border-[#FBCFE8]" }, // pink
+  { bg: "bg-[#F5F3FF]", text: "text-[#6D28D9]", border: "border-[#DDD6FE]" }, // purple
+  { bg: "bg-[#ECFCCB]", text: "text-[#3F6212]", border: "border-[#D9F99D]" }, // lime
+  { bg: "bg-[#FEF9C3]", text: "text-[#A16207]", border: "border-[#FDE68A]" }, // amber
+];
+
+const USER_SELECTED_CATEGORIES: UserCategory[] = [
+  { id: "urgent", label: "Urgent", color: CUSTOM_COLOR_PALETTE[0] },
+  { id: "work", label: "Work", color: CUSTOM_COLOR_PALETTE[1] },
+  { id: "school", label: "School", color: CUSTOM_COLOR_PALETTE[2] },
+  { id: "personal", label: "Personal", color: CUSTOM_COLOR_PALETTE[3] },
+  // Example custom category chosen during setup; color will be auto-assigned if not provided.
+  { id: "side-hustle", label: "Side Hustle", isCustom: true },
+];
+
+const ensureDistinctColors = (
+  categories: UserCategory[],
+  palette: CategoryColor[],
+): UserCategory[] => {
+  const used = new Set<string>();
+  categories.forEach((c) => {
+    if (c.color) used.add(`${c.color.bg}|${c.color.text}|${c.color.border}`);
+  });
+
+  let paletteIndex = 0;
+
+  return categories.map((category) => {
+    if (category.color) return category;
+
+    while (paletteIndex < palette.length) {
+      const candidate = palette[paletteIndex];
+      paletteIndex += 1;
+      const key = `${candidate.bg}|${candidate.text}|${candidate.border}`;
+      if (!used.has(key)) {
+        used.add(key);
+        return { ...category, color: candidate };
+      }
+    }
+
+    // Fallback: reuse first palette color if exhausted (still deterministic)
+    const fallback = palette[palette.length - 1];
+    return { ...category, color: fallback };
+  });
 };
 
 const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
@@ -37,6 +97,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     tone: "urgent",
     summary: "Recruiter requested availability for next round; check attached timeline and confirm slots.",
     priority: "urgent",
+    tagCategoryId: "urgent",
   },
   {
     id: "mail-2",
@@ -44,6 +105,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     source: "gmail",
     tone: "soon",
     summary: "Agenda covers officer elections, budget approval, and venue change for next semester events.",
+    tagCategoryId: "personal",
   },
   {
     id: "mail-3",
@@ -51,6 +113,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     source: "gmail",
     tone: "done",
     summary: "Billing portal shows outstanding balance due Friday; late fee applies after 5 PM CST.",
+    tagCategoryId: "school",
   },
   {
     id: "mail-4",
@@ -59,18 +122,31 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     tone: "soon",
     summary: "Project checkpoint moved to next Monday; submit design doc draft before lab session.",
     priority: "urgent",
+    tagCategoryId: "work",
   },
 ];
 
 const EVENTS: TodayEvent[] = [
-  { time: "03:00 - 03:30", title: "Exam Prep" },
-  { time: "04:00 - 05:30", title: "Government Class" },
-  { time: "08:30 - 10:00", title: "ACM Meeting @ SLC" },
+  { time: "03:00 - 03:30", title: "Exam Prep", tagCategoryId: "school" },
+  { time: "04:00 - 05:30", title: "Government Class", tagCategoryId: "school" },
+  { time: "08:30 - 10:00", title: "ACM Meeting @ SLC", tagCategoryId: "work" },
 ];
 
 const TodayPage: React.FC = () => {
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
   const [importantEmails] = useState<ImportantEmailPreview[]>(() => IMPORTANT_EMAILS_FILLER);
+  const userCategories = useMemo(
+    () => ensureDistinctColors(USER_SELECTED_CATEGORIES, CUSTOM_COLOR_PALETTE),
+    [],
+  );
+  const categoryMap = useMemo(
+    () =>
+      userCategories.reduce<Record<string, UserCategory>>((map, category) => {
+        map[category.id] = category;
+        return map;
+      }, {}),
+    [userCategories],
+  );
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -95,6 +171,19 @@ const TodayPage: React.FC = () => {
 
   const handleOpenEmail = (_email: ImportantEmailPreview) => {
     // Placeholder until mail detail/open workflow is wired.
+  };
+
+  const getTagMeta = (categoryId?: string) =>
+    categoryId ? categoryMap[categoryId] : undefined;
+
+  const resolveBadge = (mail: ImportantEmailPreview) => {
+    const tagMeta = getTagMeta(mail.tagCategoryId);
+    if (!tagMeta?.color) return null;
+
+    return {
+      label: tagMeta.label,
+      className: `${tagMeta.color.border} ${tagMeta.color.bg} ${tagMeta.color.text}`,
+    };
   };
 
   return (
@@ -163,13 +252,17 @@ const TodayPage: React.FC = () => {
                             <span className="text-sm font-semibold text-[#111827]">
                               {mail.sender}
                             </span>
-                            {mail.priority && (
-                              <span
-                                className="rounded-full border border-[#fecdd3] bg-[#fee2e2] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#ef4444]"
-                              >
-                                Urgent
-                              </span>
-                            )}
+                            {(() => {
+                              const badge = resolveBadge(mail);
+                              if (!badge) return null;
+                              return (
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${badge.className}`}
+                                >
+                                  {badge.label}
+                                </span>
+                              );
+                            })()}
                           </div>
                           <p className="w-full truncate text-[12px] text-[#6B7280]">
                             {mail.summary}
@@ -208,30 +301,37 @@ const TodayPage: React.FC = () => {
                   <span>Upcoming Events</span>
                 </div>
 
-                <div className="mt-3 space-y-3">
+                <div className="mt-3 space-y-1">
                   {EVENTS.map((event, index) => {
-                    const chipStyles =
-                      index === 0
-                        ? "bg-[#DBEAFE] text-[#1D4ED8]"
-                        : index === 1
-                        ? "bg-[#fde6d7] text-[#f9ab7b]"
-                        : "bg-[#E7F6EA] text-[#22A06B]";
+                    const category = getTagMeta(event.tagCategoryId);
+                    const chipStyles = category?.color
+                      ? `${category.color.bg} ${category.color.text}`
+                      : "bg-[#E5E7EB] text-[#374151]";
 
                     return (
                       <div
                         key={event.title}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
+                        className="group flex items-start gap-3 py-1 text-sm text-[#1F2933]"
+                        style={{ borderBottom: index === EVENTS.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
                       >
-                        <div className="flex flex-1 items-center gap-3 sm:gap-4">
-                          <span className="text-[14px] font-semibold text-[#111827]">
-                            {event.title}
-                          </span>
-                          <span className="text-xs font-medium text-[#6B7280] whitespace-nowrap">
-                            {event.time}
-                          </span>
+                        <span
+                          aria-hidden="true"
+                          className="mt-0.5 h-full w-1 self-stretch rounded-full bg-[#f9ab7b]"
+                        />
+
+                        <div className="flex min-w-0 flex-1 flex-col gap-1 text-left">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-[#111827]">
+                              {event.title}
+                            </span>
+                            <span className="text-xs font-medium text-[#6B7280] whitespace-nowrap">
+                              {event.time}
+                            </span>
+                          </div>
                         </div>
+
                         <span className={`rounded-full px-3 py-1 text-[11px] font-medium ${chipStyles}`}>
-                          {index === 0 ? "meeting" : index === 1 ? "presentation" : "workshop"}
+                          {category?.label ?? "event"}
                         </span>
                       </div>
                     );
