@@ -16,6 +16,8 @@ type ImportantEmailPreview = {
   sender: string;
   source: "gmail" | "handshake";
   tone: "urgent" | "soon" | "done";
+  summary: string;
+  priority?: "urgent";
 };
 
 /**
@@ -33,24 +35,30 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     sender: "Internship Application Update @Amazon",
     source: "gmail",
     tone: "urgent",
+    summary: "Recruiter requested availability for next round; check attached timeline and confirm slots.",
+    priority: "urgent",
   },
   {
     id: "mail-2",
     sender: "Club meeting today",
     source: "gmail",
     tone: "soon",
+    summary: "Agenda covers officer elections, budget approval, and venue change for next semester events.",
   },
   {
     id: "mail-3",
     sender: "Tution deadline reminder",
     source: "gmail",
     tone: "done",
+    summary: "Billing portal shows outstanding balance due Friday; late fee applies after 5 PM CST.",
   },
   {
     id: "mail-4",
     sender: "John Dollinger @CS 3377",
     source: "gmail",
     tone: "soon",
+    summary: "Project checkpoint moved to next Monday; submit design doc draft before lab session.",
+    priority: "urgent",
   },
 ];
 
@@ -90,9 +98,9 @@ const TodayPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+    <div className="today-page flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
+        <main className="today-scroll flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} />
 
           <div className="mt-5 space-y-4 sm:mt-6">
@@ -151,13 +159,27 @@ const TodayPage: React.FC = () => {
                           onClick={() => handleOpenEmail(mail)}
                           className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
                         >
-                          <span className="text-sm font-semibold text-[#111827]">
-                            {mail.sender}
-                          </span>
-                          <div className="flex items-center gap-2 text-[12px] text-[#6B7280]">
-                            {getSourceIcon(mail.source)}
-                            <span className="capitalize">{mail.source}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-[#111827]">
+                              {mail.sender}
+                            </span>
+                            {mail.priority && (
+                              <span
+                                className="rounded-full border border-[#fecdd3] bg-[#fee2e2] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#ef4444]"
+                              >
+                                Urgent
+                              </span>
+                            )}
                           </div>
+                          <p className="w-full truncate text-[12px] text-[#6B7280]">
+                            {mail.summary}
+                          </p>
+                          {mail.source !== "gmail" && (
+                            <div className="flex items-center gap-2 text-[12px] text-[#6B7280]">
+                              {getSourceIcon(mail.source)}
+                              <span className="capitalize">{mail.source}</span>
+                            </div>
+                          )}
                         </button>
 
                         <div className="flex items-center gap-2">
@@ -190,7 +212,7 @@ const TodayPage: React.FC = () => {
                   {EVENTS.map((event, index) => {
                     const chipStyles =
                       index === 0
-                        ? "bg-[#fde6d7] text-[#f9ab7b]"
+                        ? "bg-[#DBEAFE] text-[#1D4ED8]"
                         : index === 1
                         ? "bg-[#fde6d7] text-[#f9ab7b]"
                         : "bg-[#E7F6EA] text-[#22A06B]";
@@ -198,19 +220,19 @@ const TodayPage: React.FC = () => {
                     return (
                       <div
                         key={event.title}
-                        className="flex flex-col gap-1 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)] sm:flex-row sm:items-center sm:justify-between"
+                        className="flex items-center justify-between gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
                       >
-                        <div className="text-xs font-medium text-[#6B7280]">
-                          {event.time}
-                        </div>
-                        <div className="flex flex-1 items-center justify-between gap-3 sm:justify-start">
+                        <div className="flex flex-1 items-center gap-3 sm:gap-4">
                           <span className="text-[14px] font-semibold text-[#111827]">
                             {event.title}
                           </span>
-                          <span className={`rounded-full px-3 py-1 text-[11px] font-medium ${chipStyles}`}>
-                            {index === 0 ? "meeting" : index === 1 ? "presentation" : "workshop"}
+                          <span className="text-xs font-medium text-[#6B7280] whitespace-nowrap">
+                            {event.time}
                           </span>
                         </div>
+                        <span className={`rounded-full px-3 py-1 text-[11px] font-medium ${chipStyles}`}>
+                          {index === 0 ? "meeting" : index === 1 ? "presentation" : "workshop"}
+                        </span>
                       </div>
                     );
                   })}
