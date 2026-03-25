@@ -17,7 +17,7 @@ const PageTopBar: React.FC<PageTopBarProps> = ({ back, right }) => {
         {back ? (
           <button
             type="button"
-            className="flex items-center gap-1 text-sm font-medium text-[#A34712] hover:underline"
+            className="flex items-center gap-1 text-sm font-medium text-[#1F2933] transition-colors hover:text-[#f9ab7b] hover:underline"
             onClick={() => navigate(back.to)}
           >
             <span className="material-symbols-outlined text-[20px]">arrow_back</span>

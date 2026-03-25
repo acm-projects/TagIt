@@ -49,19 +49,19 @@ const AuthenticatePage: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-full bg-[#F8E7DD] p-4">
+    <div className="relative min-h-full bg-[#F9F8F6] p-4">
 
-      <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center rounded-3xl bg-[#FDE5D1] px-10 pt-16">
-        <h1 className="mb-4 font-instrument text-5xl font-normal text-[#A34712]">
+      <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center px-10 pt-16">
+        <h1 className="mb-4 font-instrument text-5xl font-normal text-[#1F2933]">
           Authenticate
         </h1>
-        <p className="mb-10 text-base text-[#8B6F60]">
+        <p className="mb-10 text-base text-[#6B7280]">
           Choose how you’d like to sign in
         </p>
 
         {error && (
-          <div className="mb-6 w-full max-w-md rounded-xl bg-red-50 border border-red-200 px-4 py-3">
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="mb-6 w-full max-w-md rounded-xl border border-[#fecdd3] bg-[#fee2e2] px-4 py-3">
+            <p className="text-sm font-medium text-[#ef4444]">{error}</p>
           </div>
         )}
 
@@ -70,7 +70,7 @@ const AuthenticatePage: React.FC = () => {
             type="button"
             onClick={handleGoogleLogin}
             disabled={loadingProvider !== null}
-            className="flex w-full items-center gap-4 rounded-xl border-2 border-[#A34712] bg-white px-5 py-4 text-left font-medium text-[#3F2A1E] shadow-sm transition hover:bg-[#FDE5D1] disabled:opacity-60"
+            className="flex w-full items-center gap-4 rounded-xl border border-[#EFE7DC] bg-[#FBFBFB] px-5 py-4 text-left font-medium text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] transition hover:border-[#f9ab7b]/50 hover:bg-[#fef8f3] disabled:opacity-60"
           >
             <img src={gmailLogo} alt="" className="h-8 w-8 shrink-0 object-contain" />
             {loadingProvider === "google" ? "Connecting..." : "Gmail"}
@@ -79,14 +79,14 @@ const AuthenticatePage: React.FC = () => {
             type="button"
             onClick={handleOutlookLogin}
             disabled={loadingProvider !== null}
-            className="flex w-full items-center gap-4 rounded-xl border-2 border-[#A34712] bg-white px-5 py-4 text-left font-medium text-[#3F2A1E] shadow-sm transition hover:bg-[#FDE5D1] disabled:opacity-60"
+            className="flex w-full items-center gap-4 rounded-xl border border-[#EFE7DC] bg-[#FBFBFB] px-5 py-4 text-left font-medium text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] transition hover:border-[#f9ab7b]/50 hover:bg-[#fef8f3] disabled:opacity-60"
           >
             <img src={outlookLogo} alt="" className="h-8 w-8 shrink-0 object-contain" />
             {loadingProvider === "microsoft" ? "Connecting..." : "Outlook"}
           </button>
         </div>
 
-        <p className="mt-8 max-w-md text-center text-sm text-[#8B6F60]">
+        <p className="mt-8 max-w-md text-center text-sm text-[#6B7280]">
           Sign-in may open in a new window. Complete the steps there, then return here.
         </p>
       </div>
