@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import PageTopBar from "../components/PageTopBar";
 import gmailLogo from "../assets/Logos/gmail.png";
 import outlookLogo from "../assets/Logos/outlook.png";
 
@@ -49,7 +50,8 @@ const AuthenticatePage: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-full bg-[#F9F8F6] p-4">
+    <div className="relative min-h-screen bg-[#F9F8F6] p-4">
+      <PageTopBar back={{ label: "Back", useBrowserBack: true }} />
 
       <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center px-10 pt-16">
         <h1 className="mb-4 font-instrument text-5xl font-normal text-[#1F2933]">
