@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
+import DaysFilter, { type WeekdayShort } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
@@ -12,6 +13,8 @@ type CalendarEvent = {
   day2?: string;
   time: string;
   source: "google" | "outlook";
+  /** Weekday keys (matches DaysFilter) this event should appear under */
+  filterDays: WeekdayShort[];
 };
 
 const CALENDAR_EVENTS: CalendarEvent[] = [
@@ -21,6 +24,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     day1: "Sat",
     time: "07:00 - 10:00",
     source: "google",
+    filterDays: ["sat"],
   },
   {
     title: "WeHack - Hackathon",
@@ -30,6 +34,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     day2: "Sun",
     time: "09:00 - 24:00\n00:00 - 05:30",
     source: "outlook",
+    filterDays: ["sat", "sun"],
   },
   {
     title: "Resume Review Drop-In",
@@ -37,6 +42,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     day1: "Thu",
     time: "01:30 - 02:30",
     source: "google",
+    filterDays: ["thur"],
   },
   {
     title: "Systems Project Checkpoint",
@@ -44,17 +50,27 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     day1: "Fri",
     time: "11:00 - 12:15",
     source: "outlook",
+    filterDays: ["fri"],
   },
 ];
 
 const CalendarPage: React.FC = () => {
+  const [selectedDay, setSelectedDay] = useState<WeekdayShort>("sun");
+
+  const filteredEvents = useMemo(
+    () => CALENDAR_EVENTS.filter((event) => event.filterDays.includes(selectedDay)),
+    [selectedDay],
+  );
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} />
 
-          <div className="mt-4 space-y-4 sm:mt-5">
+          <div className="mt-5 space-y-4 sm:mt-6">
+            <DaysFilter value={selectedDay} onChange={setSelectedDay} className="!mt-0" />
+
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
                 <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
@@ -65,7 +81,10 @@ const CalendarPage: React.FC = () => {
                 </div>
 
                 <div className="mt-3">
-                  {CALENDAR_EVENTS.map((event, index) => {
+                  {filteredEvents.length === 0 ? (
+                    <p className="py-2 text-[12px] text-[#6B7280]">No events on this day.</p>
+                  ) : (
+                    filteredEvents.map((event, index) => {
                     const sourceChipStyles =
                       event.source === "google"
                         ? "bg-[#DBEAFE] text-[#1D4ED8]"
@@ -77,7 +96,7 @@ const CalendarPage: React.FC = () => {
                         className="grid grid-cols-[4px_minmax(0,1fr)_auto] items-center gap-x-4 py-4"
                         style={{
                           borderBottom:
-                            index === CALENDAR_EVENTS.length - 1
+                            index === filteredEvents.length - 1
                               ? "none"
                               : "0.5px solid #E5E7EB",
                         }}
@@ -142,7 +161,8 @@ const CalendarPage: React.FC = () => {
                         </div>
                       </div>
                     );
-                  })}
+                  })
+                  )}
                 </div>
               </div>
             </section>
