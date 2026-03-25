@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
-import DaysFilter, { type WeekdayShort } from "../components/DaysFilter";
+import { ConnectedDaysFilter } from "../components/DaysFilter";
+import type { WeekdayShort } from "../lib/weekday";
+import { useDayFilter } from "../context/DayFilterContext";
 import WeekHeader from "../components/WeekHeader";
 
 /**
@@ -28,6 +30,8 @@ type DraftItem = {
 };
 
 const MailPage: React.FC = () => {
+  const { selectedDay } = useDayFilter();
+
   /**
    * Seed data for UI prototyping.
    * Replace these with API responses once backend integration is ready.
@@ -81,8 +85,6 @@ const MailPage: React.FC = () => {
     },
   ]);
 
-  const [selectedDay, setSelectedDay] = useState<WeekdayShort>("sun");
-
   const filteredMails = useMemo(
     () => mails.filter((mail) => mail.day === selectedDay),
     [mails, selectedDay],
@@ -122,7 +124,7 @@ const MailPage: React.FC = () => {
           <WeekHeader showYear={false} />
 
           <div className="mt-5 space-y-4 sm:mt-6">
-            <DaysFilter value={selectedDay} onChange={setSelectedDay} className="!mt-0" />
+            <ConnectedDaysFilter className="!mt-0" />
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">

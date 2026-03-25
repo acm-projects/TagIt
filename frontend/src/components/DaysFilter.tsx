@@ -1,21 +1,14 @@
 import React from "react";
+import { useDayFilter } from "../context/DayFilterContext";
+import type { WeekdayShort } from "../lib/weekday";
+import { WEEKDAY_ORDER } from "../lib/weekday";
 
-export type WeekdayShort = "sun" | "mon" | "tue" | "wed" | "thur" | "fri" | "sat";
-
-export const WEEKDAY_ORDER: WeekdayShort[] = [
-  "sun",
-  "mon",
-  "tue",
-  "wed",
-  "thur",
-  "fri",
-  "sat",
-];
+export type { WeekdayShort } from "../lib/weekday";
+export { WEEKDAY_ORDER } from "../lib/weekday";
 
 export interface DaysFilterProps {
   value: WeekdayShort;
   onChange: (day: WeekdayShort) => void;
-  /** Defaults to full week starting Sunday */
   days?: WeekdayShort[];
   className?: string;
 }
@@ -57,3 +50,14 @@ const DaysFilter: React.FC<DaysFilterProps> = ({
 };
 
 export default DaysFilter;
+
+/** Wired to global day filter (persists across Mail, Calendar, Tasks via DayFilterProvider). */
+export const ConnectedDaysFilter: React.FC<{
+  className?: string;
+  days?: WeekdayShort[];
+}> = ({ className, days }) => {
+  const { selectedDay, setSelectedDay } = useDayFilter();
+  return (
+    <DaysFilter value={selectedDay} onChange={setSelectedDay} className={className} days={days} />
+  );
+};

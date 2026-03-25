@@ -1,7 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
-import DaysFilter, { type WeekdayShort } from "../components/DaysFilter";
+import { ConnectedDaysFilter } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
+import { useDayFilter } from "../context/DayFilterContext";
+import { useWeekAnchorWithSharedDayFilter } from "../hooks/useWeekAnchorWithSharedDayFilter";
+import {
+  getDateForWeekdayInAnchorWeek,
+  isSameLocalDay,
+} from "../lib/weekFilterUtils";
 import {
   loadTasks,
   saveTasks,
@@ -45,56 +51,11 @@ const formatDisplayDate = (date: Date): string => {
   return `${month}/${day}`;
 };
 
-const dateToWeekdayShort = (d: Date): WeekdayShort => {
-  const map: WeekdayShort[] = ["sun", "mon", "tue", "wed", "thur", "fri", "sat"];
-  return map[d.getDay()];
-};
-
-const startOfLocalDay = (d: Date): Date => {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-};
-
-const isSameLocalDay = (a: Date, b: Date): boolean =>
-  a.getFullYear() === b.getFullYear() &&
-  a.getMonth() === b.getMonth() &&
-  a.getDate() === b.getDate();
-
-/** Align with DateHeader / WeekHeader (Monday → Sunday week) */
-const OFFSET_FROM_MONDAY: Record<WeekdayShort, number> = {
-  mon: 0,
-  tue: 1,
-  wed: 2,
-  thur: 3,
-  fri: 4,
-  sat: 5,
-  sun: 6,
-};
-
-const startOfWeekMonday = (anchor: Date): Date => {
-  const d = new Date(anchor);
-  d.setHours(0, 0, 0, 0);
-  const day = d.getDay();
-  const diffToMonday = (day + 6) % 7;
-  d.setDate(d.getDate() - diffToMonday);
-  return d;
-};
-
-const getDateForWeekdayInAnchorWeek = (weekAnchor: Date, slot: WeekdayShort): Date => {
-  const monday = startOfWeekMonday(weekAnchor);
-  const out = new Date(monday);
-  out.setDate(monday.getDate() + OFFSET_FROM_MONDAY[slot]);
-  out.setHours(0, 0, 0, 0);
-  return out;
-};
-
 const TasksPage: React.FC = () => {
   const editingTimeInputRef = useRef<HTMLInputElement | null>(null);
-  const prevAnchorRef = useRef<Date | null>(null);
+  const { selectedDay } = useDayFilter();
+  const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
   const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
-  const [selectedDate, setSelectedDate] = useState(() => new Date());
-  const [selectedDay, setSelectedDay] = useState<WeekdayShort>(() => dateToWeekdayShort(new Date()));
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskLabel, setNewTaskLabel] = useState("");
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
@@ -107,28 +68,9 @@ const TasksPage: React.FC = () => {
     saveTasks(tasks);
   }, [tasks]);
 
-  const handleWeekDateChange = (next: Date) => {
-    const prev = prevAnchorRef.current;
-    prevAnchorRef.current = new Date(next);
-    setSelectedDate(next);
-
-    if (prev === null) {
-      setSelectedDay(dateToWeekdayShort(next));
-      return;
-    }
-
-    const diffDays = Math.round(
-      (startOfLocalDay(next).getTime() - startOfLocalDay(prev).getTime()) / 86_400_000,
-    );
-    const isWholeWeekStep = diffDays !== 0 && diffDays % 7 === 0;
-    if (!isWholeWeekStep) {
-      setSelectedDay(dateToWeekdayShort(next));
-    }
-  };
-
   const selectedCalendarDay = useMemo(
-    () => getDateForWeekdayInAnchorWeek(selectedDate, selectedDay),
-    [selectedDate, selectedDay],
+    () => getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay),
+    [weekAnchor, selectedDay],
   );
 
   const visibleTasks = useMemo(() => {
@@ -174,7 +116,7 @@ const TasksPage: React.FC = () => {
         id: nextId,
         label: trimmedLabel,
         done: false,
-        date: formatIsoDate(getDateForWeekdayInAnchorWeek(selectedDate, selectedDay)),
+        date: formatIsoDate(getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay)),
         time: "09:00",
       },
     ]);
@@ -191,7 +133,7 @@ const TasksPage: React.FC = () => {
     setEditingTaskId(task.id);
     setEditingLabel(task.label);
     setEditingDate(
-      task.date ?? formatIsoDate(getDateForWeekdayInAnchorWeek(selectedDate, selectedDay)),
+      task.date ?? formatIsoDate(getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay)),
     );
     setEditingTime(task.time ?? "09:00");
     setIsEditingTimeEnabled(Boolean(task.time));
@@ -279,7 +221,7 @@ const TasksPage: React.FC = () => {
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
           <div className="mt-5 space-y-4 sm:mt-6">
-            <DaysFilter value={selectedDay} onChange={setSelectedDay} className="!mt-0" />
+            <ConnectedDaysFilter className="!mt-0" />
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
