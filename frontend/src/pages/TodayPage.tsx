@@ -6,20 +6,12 @@ import {
   loadTasks,
   subscribeToTaskUpdates,
 } from "../services/taskProgress";
+import { getUserCategories, type UserCategory } from "../services/categories";
 
 /**
  * Important email preview shown on Today.
  * Backend can map directly into this shape once endpoint is ready.
  */
-type CategoryColor = { bg: string; text: string; border: string };
-
-type UserCategory = {
-  id: string;
-  label: string;
-  color?: CategoryColor;
-  isCustom?: boolean;
-};
-
 type ImportantEmailPreview = {
   id: string;
   sender: string;
@@ -38,55 +30,6 @@ type TodayEvent = {
   time: string;
   title: string;
   tagCategoryId?: string;
-};
-
-const CUSTOM_COLOR_PALETTE: CategoryColor[] = [
-  { bg: "bg-[#fee2e2]", text: "text-[#b91c1c]", border: "border-[#fecdd3]" }, // red
-  { bg: "bg-[#DBEAFE]", text: "text-[#1D4ED8]", border: "border-[#BFDBFE]" }, // blue
-  { bg: "bg-[#E0F2FE]", text: "text-[#0369A1]", border: "border-[#BAE6FD]" }, // teal
-  { bg: "bg-[#FCE7F3]", text: "text-[#BE185D]", border: "border-[#FBCFE8]" }, // pink
-  { bg: "bg-[#F5F3FF]", text: "text-[#6D28D9]", border: "border-[#DDD6FE]" }, // purple
-  { bg: "bg-[#ECFCCB]", text: "text-[#3F6212]", border: "border-[#D9F99D]" }, // lime
-  { bg: "bg-[#FEF9C3]", text: "text-[#A16207]", border: "border-[#FDE68A]" }, // amber
-];
-
-const USER_SELECTED_CATEGORIES: UserCategory[] = [
-  { id: "urgent", label: "Urgent", color: CUSTOM_COLOR_PALETTE[0] },
-  { id: "work", label: "Work", color: CUSTOM_COLOR_PALETTE[1] },
-  { id: "school", label: "School", color: CUSTOM_COLOR_PALETTE[2] },
-  { id: "personal", label: "Personal", color: CUSTOM_COLOR_PALETTE[3] },
-  // Example custom category chosen during setup; color will be auto-assigned if not provided.
-  { id: "side-hustle", label: "Side Hustle", isCustom: true },
-];
-
-const ensureDistinctColors = (
-  categories: UserCategory[],
-  palette: CategoryColor[],
-): UserCategory[] => {
-  const used = new Set<string>();
-  categories.forEach((c) => {
-    if (c.color) used.add(`${c.color.bg}|${c.color.text}|${c.color.border}`);
-  });
-
-  let paletteIndex = 0;
-
-  return categories.map((category) => {
-    if (category.color) return category;
-
-    while (paletteIndex < palette.length) {
-      const candidate = palette[paletteIndex];
-      paletteIndex += 1;
-      const key = `${candidate.bg}|${candidate.text}|${candidate.border}`;
-      if (!used.has(key)) {
-        used.add(key);
-        return { ...category, color: candidate };
-      }
-    }
-
-    // Fallback: reuse first palette color if exhausted (still deterministic)
-    const fallback = palette[palette.length - 1];
-    return { ...category, color: fallback };
-  });
 };
 
 const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
@@ -135,18 +78,7 @@ const EVENTS: TodayEvent[] = [
 const TodayPage: React.FC = () => {
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
   const [importantEmails] = useState<ImportantEmailPreview[]>(() => IMPORTANT_EMAILS_FILLER);
-  const userCategories = useMemo(
-    () => ensureDistinctColors(USER_SELECTED_CATEGORIES, CUSTOM_COLOR_PALETTE),
-    [],
-  );
-  const categoryMap = useMemo(
-    () =>
-      userCategories.reduce<Record<string, UserCategory>>((map, category) => {
-        map[category.id] = category;
-        return map;
-      }, {}),
-    [userCategories],
-  );
+  const [categories, setCategories] = useState<UserCategory[]>([]);
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -173,17 +105,43 @@ const TodayPage: React.FC = () => {
     // Placeholder until mail detail/open workflow is wired.
   };
 
-  const getTagMeta = (categoryId?: string) =>
-    categoryId ? categoryMap[categoryId] : undefined;
-
-  const resolveBadge = (mail: ImportantEmailPreview) => {
-    const tagMeta = getTagMeta(mail.tagCategoryId);
-    if (!tagMeta?.color) return null;
-
-    return {
-      label: tagMeta.label,
-      className: `${tagMeta.color.border} ${tagMeta.color.bg} ${tagMeta.color.text}`,
+  useEffect(() => {
+    let mounted = true;
+    getUserCategories().then((data) => {
+      if (mounted) setCategories(data);
+    });
+    return () => {
+      mounted = false;
     };
+  }, []);
+
+  const DEFAULT_COLOR = "#E5E7EB";
+
+  const uncategorized = useMemo<UserCategory>(
+    () => ({
+      id: "uncategorized",
+      name: "Uncategorized",
+      color: DEFAULT_COLOR,
+      isCustom: false,
+    }),
+    [],
+  );
+
+  const getTagMeta = (categoryId?: string) => {
+    if (!categoryId) return undefined;
+    const category = categories.find((c) => c.id === categoryId);
+    if (!category) {
+      console.warn("Missing category for id", categoryId);
+    }
+    return category;
+  };
+
+  const getCategoryColor = (category?: UserCategory) => {
+    if (!category?.color) {
+      console.warn("Category missing color, falling back", category);
+      return DEFAULT_COLOR;
+    }
+    return category.color;
   };
 
   return (
@@ -235,12 +193,15 @@ const TodayPage: React.FC = () => {
                     return (
                       <div
                         key={mail.id}
-                        className="group flex items-start gap-3 py-2"
+                        className="tagged-item group flex items-start gap-3 py-2"
                         style={{ borderBottom: index === importantEmails.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
                       >
-                        <span
+                        <div
                           aria-hidden="true"
-                          className="mt-0.5 h-full w-1 self-stretch rounded-full bg-[#f9ab7b]"
+                          className="color-line h-full w-[4px] self-stretch rounded-full"
+                          style={{
+                            backgroundColor: getCategoryColor(getTagMeta(mail.tagCategoryId) ?? uncategorized),
+                          }}
                         />
 
                         <button
@@ -252,17 +213,6 @@ const TodayPage: React.FC = () => {
                             <span className="text-sm font-semibold text-[#111827]">
                               {mail.sender}
                             </span>
-                            {(() => {
-                              const badge = resolveBadge(mail);
-                              if (!badge) return null;
-                              return (
-                                <span
-                                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${badge.className}`}
-                                >
-                                  {badge.label}
-                                </span>
-                              );
-                            })()}
                           </div>
                           <p className="w-full truncate text-[12px] text-[#6B7280]">
                             {mail.summary}
@@ -303,20 +253,18 @@ const TodayPage: React.FC = () => {
 
                 <div className="mt-3 space-y-1">
                   {EVENTS.map((event, index) => {
-                    const category = getTagMeta(event.tagCategoryId);
-                    const chipStyles = category?.color
-                      ? `${category.color.bg} ${category.color.text}`
-                      : "bg-[#E5E7EB] text-[#374151]";
+                    const category = getTagMeta(event.tagCategoryId) ?? uncategorized;
 
                     return (
                       <div
                         key={event.title}
-                        className="group flex items-start gap-3 py-1 text-sm text-[#1F2933]"
+                        className="tagged-item group flex items-start gap-3 py-1 text-sm text-[#1F2933]"
                         style={{ borderBottom: index === EVENTS.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
                       >
-                        <span
+                        <div
                           aria-hidden="true"
-                          className="mt-0.5 h-full w-1 self-stretch rounded-full bg-[#f9ab7b]"
+                          className="color-line h-full w-[4px] self-stretch rounded-full"
+                          style={{ backgroundColor: getCategoryColor(category) }}
                         />
 
                         <div className="flex min-w-0 flex-1 flex-col gap-1 text-left">
@@ -330,9 +278,6 @@ const TodayPage: React.FC = () => {
                           </div>
                         </div>
 
-                        <span className={`rounded-full px-3 py-1 text-[11px] font-medium ${chipStyles}`}>
-                          {category?.label ?? "event"}
-                        </span>
                       </div>
                     );
                   })}

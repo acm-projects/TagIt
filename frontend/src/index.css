@@ -26,6 +26,19 @@
   display: none;
 }
 
+.tagged-item {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.color-line {
+  width: 4px;
+  margin-right: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
 .today-page .page-header .material-symbols-outlined {
   font-size: 36px;
 }
