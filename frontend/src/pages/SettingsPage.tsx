@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
 import SectionHeader from "../components/SectionHeader";
-import WeekHeader from "../components/WeekHeader";
 import { removeToken } from "../services/auth/tokenStorage";
 
 const STORAGE_KEY_PRIORITIES = "tagit-settings-priorities";
@@ -167,8 +166,15 @@ const SettingsPage: React.FC = () => {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
-          <WeekHeader showYear={false} />
+        <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
+          {/* Same outer + row height as WeekHeader/DateHeader so content below aligns with Mail/Calendar */}
+          <header className="page-header w-full shrink-0 px-0 pb-3 pt-4 text-[#1F2933]">
+            <div className="relative flex min-h-16 items-center justify-center">
+              <h1 className="min-w-0 w-full max-w-full truncate px-2 text-center text-2xl font-semibold leading-tight tracking-[0.12em] text-[#111827] sm:text-3xl">
+                SETTINGS
+              </h1>
+            </div>
+          </header>
 
           {/* Connected user and linked emails */}
           <div className="mt-2.5 space-y-4 sm:mt-3">
