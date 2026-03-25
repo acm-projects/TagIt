@@ -64,7 +64,7 @@ const CalendarPage: React.FC = () => {
                   <span>Calendar Events</span>
                 </div>
 
-                <div className="mt-3 space-y-2">
+                <div className="mt-3">
                   {CALENDAR_EVENTS.map((event, index) => {
                     const sourceChipStyles =
                       event.source === "google"
@@ -74,51 +74,50 @@ const CalendarPage: React.FC = () => {
                     return (
                       <div
                         key={event.title + index}
-                        className="grid grid-cols-[4px_minmax(0,1fr)_auto] items-center gap-x-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-3 py-2 shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
+                        className="grid grid-cols-[4px_minmax(0,1fr)_auto] items-center gap-x-4 py-4"
+                        style={{
+                          borderBottom:
+                            index === CALENDAR_EVENTS.length - 1
+                              ? "none"
+                              : "0.5px solid #E5E7EB",
+                        }}
                       >
                         <span
                           aria-hidden="true"
-                          className="h-full min-h-9 rounded-full bg-[#f9ab7b]"
+                          className="h-full min-h-10 rounded-full bg-[#f9ab7b]"
                         />
 
                         <div className="min-w-0">
-                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <p className="truncate text-[13px] font-semibold text-[#111827] sm:text-sm">
                               {event.title}
                             </p>
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${sourceChipStyles}`}
+                              className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium capitalize ${sourceChipStyles}`}
                             >
                               {event.source}
                             </span>
                           </div>
 
-                          <div className="mt-1.5 grid grid-cols-3 gap-x-3 text-[11px] leading-tight text-[#6B7280] sm:max-w-[24rem]">
+                          <div className="mt-2 grid grid-cols-2 gap-x-5 text-[11px] leading-snug text-[#6B7280] sm:max-w-[22rem]">
                             <div>
-                              <p className="font-medium text-[#374151]">Date</p>
-                              <p>{event.date1}</p>
-                              {event.date2 && <p>{event.date2}</p>}
+                              <p>{`${event.day1} ${event.date1}`}</p>
+                              {event.date2 && event.day2 && <p>{`${event.day2} ${event.date2}`}</p>}
                             </div>
                             <div>
-                              <p className="font-medium text-[#374151]">Day</p>
-                              <p>{event.day1}</p>
-                              {event.day2 && <p>{event.day2}</p>}
-                            </div>
-                            <div>
-                              <p className="font-medium text-[#374151]">Time</p>
                               <p className="whitespace-pre-line">{event.time}</p>
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-1 self-center">
+                        <div className="flex shrink-0 items-center gap-1.5 self-center">
                           <button
                             type="button"
                             aria-label="Add"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b] transition-colors hover:bg-[#FFF4EC]"
+                            className="inline-flex h-8 w-8 items-center justify-center text-[#f9ab7b] transition-colors hover:text-[#e58a58]"
                           >
                             <span
-                              className="inline-block h-3 w-3 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
+                              className="inline-block h-3.5 w-3.5 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
                               style={{
                                 maskImage: `url(${addIcon})`,
                                 WebkitMaskImage: `url(${addIcon})`,
@@ -129,10 +128,10 @@ const CalendarPage: React.FC = () => {
                           <button
                             type="button"
                             aria-label="Delete"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b] transition-colors hover:bg-[#FFF4EC]"
+                            className="inline-flex h-8 w-8 items-center justify-center text-[#f9ab7b] transition-colors hover:text-[#e58a58]"
                           >
                             <span
-                              className="inline-block h-3 w-3 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
+                              className="inline-block h-3.5 w-3.5 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
                               style={{
                                 maskImage: `url(${deleteIcon})`,
                                 WebkitMaskImage: `url(${deleteIcon})`,
