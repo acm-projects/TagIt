@@ -13,6 +13,8 @@ import {
   saveTasks,
   type SharedTask,
 } from "../services/taskProgress";
+import addIcon from "../assets/page_buttons/add.png";
+import deleteIcon from "../assets/page_buttons/delete.png";
 
 /**
  * Represents a single task on the Tasks page.
@@ -51,6 +53,17 @@ const formatDisplayDate = (date: Date): string => {
   return `${month}/${day}`;
 };
 
+const iconMaskStyle = (src: string): React.CSSProperties => ({
+  WebkitMaskImage: `url(${src})`,
+  maskImage: `url(${src})`,
+  WebkitMaskRepeat: "no-repeat",
+  maskRepeat: "no-repeat",
+  WebkitMaskPosition: "center",
+  maskPosition: "center",
+  WebkitMaskSize: "contain",
+  maskSize: "contain",
+});
+
 const TasksPage: React.FC = () => {
   const editingTimeInputRef = useRef<HTMLInputElement | null>(null);
   const { selectedDay } = useDayFilter();
@@ -58,6 +71,8 @@ const TasksPage: React.FC = () => {
   const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskLabel, setNewTaskLabel] = useState("");
+  const [newTaskDate, setNewTaskDate] = useState("");
+  const [newTaskTime, setNewTaskTime] = useState("");
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [editingDate, setEditingDate] = useState("");
@@ -89,13 +104,21 @@ const TasksPage: React.FC = () => {
     );
   };
 
-  const removeCompletedTasks = () => {
-    setTasks((previousTasks) => previousTasks.filter((task) => !task.done));
+  const clearAllTasks = () => {
+    setTasks((previousTasks) =>
+      previousTasks.filter((task) => {
+        const taskDate = parseIsoDate(task.date);
+        if (!taskDate) return true;
+        return !isSameLocalDay(taskDate, selectedCalendarDay);
+      }),
+    );
   };
 
   const startAddingTask = () => {
     setIsAddingTask(true);
     setNewTaskLabel("");
+    setNewTaskDate(formatIsoDate(selectedCalendarDay));
+    setNewTaskTime("");
     setEditingTaskId(null);
     setEditingLabel("");
     setEditingDate("");
@@ -116,17 +139,21 @@ const TasksPage: React.FC = () => {
         id: nextId,
         label: trimmedLabel,
         done: false,
-        date: formatIsoDate(getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay)),
-        time: "09:00",
+        date: newTaskDate || formatIsoDate(selectedCalendarDay),
+        time: newTaskTime || undefined,
       },
     ]);
     setIsAddingTask(false);
     setNewTaskLabel("");
+    setNewTaskDate("");
+    setNewTaskTime("");
   };
 
   const cancelAddingTask = () => {
     setIsAddingTask(false);
     setNewTaskLabel("");
+    setNewTaskDate("");
+    setNewTaskTime("");
   };
 
   const startEditingTask = (task: TaskItem) => {
@@ -367,61 +394,89 @@ const TasksPage: React.FC = () => {
                   )}
                 </div>
 
-                {isAddingTask ? (
-                  <div className="mt-4 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] p-4 shadow-[0_6px_14px_rgba(17,24,39,0.05)]">
-                    <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-[#6B7280]">
-                      New Task
-                    </label>
-                    <input
-                      type="text"
-                      value={newTaskLabel}
-                      onChange={(event) => setNewTaskLabel(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") addTask();
-                        if (event.key === "Escape") cancelAddingTask();
-                      }}
-                      className={`mt-2 w-full ${fieldClass}`}
-                      placeholder="Add a task"
-                      aria-label="Add a task"
-                      autoFocus
-                    />
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={addTask}
-                        className="inline-flex items-center justify-center rounded-full bg-[#f9ab7b] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e89960]"
-                      >
-                        Save Task
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelAddingTask}
-                        className="inline-flex items-center justify-center rounded-full bg-[#F3F4F6] px-5 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#E5E7EB]"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={startAddingTask}
-                      className="inline-flex items-center justify-center rounded-full bg-[#f9ab7b] px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e89960]"
-                    >
-                      Add Task
-                    </button>
-                    <button
-                      type="button"
-                      onClick={removeCompletedTasks}
-                      className="inline-flex items-center justify-center rounded-full border border-[#E5E7EB] bg-white px-6 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#F9FAFB]"
-                    >
-                      Clear Completed
-                    </button>
-                  </div>
-                )}
               </div>
+
             </section>
+
+            <div className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={startAddingTask}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#f9ab7b] px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e89960]"
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 bg-white"
+                  style={iconMaskStyle(addIcon)}
+                />
+                <span>Add Task</span>
+              </button>
+              <button
+                type="button"
+                onClick={clearAllTasks}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-6 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#F9FAFB]"
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 bg-[#374151]"
+                  style={iconMaskStyle(deleteIcon)}
+                />
+                <span>Clear All Tasks</span>
+              </button>
+            </div>
+
+            {isAddingTask && (
+              <div className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] p-4 shadow-[0_6px_14px_rgba(17,24,39,0.05)]">
+                <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-[#6B7280]">
+                  New Task
+                </label>
+                <input
+                  type="text"
+                  value={newTaskLabel}
+                  onChange={(event) => setNewTaskLabel(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") addTask();
+                    if (event.key === "Escape") cancelAddingTask();
+                  }}
+                  className={`mt-2 w-full ${fieldClass}`}
+                  placeholder="Task name"
+                  aria-label="Task name"
+                  autoFocus
+                />
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <input
+                    type="date"
+                    value={newTaskDate}
+                    onChange={(event) => setNewTaskDate(event.target.value)}
+                    className={fieldClass}
+                    aria-label="Task date (optional)"
+                  />
+                  <input
+                    type="time"
+                    value={newTaskTime}
+                    onChange={(event) => setNewTaskTime(event.target.value)}
+                    className={fieldClass}
+                    aria-label="Task time (optional)"
+                  />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={addTask}
+                    className="inline-flex items-center justify-center rounded-full bg-[#f9ab7b] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e89960]"
+                  >
+                    Save Task
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelAddingTask}
+                    className="inline-flex items-center justify-center rounded-full bg-[#F3F4F6] px-5 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#E5E7EB]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </main>
 
