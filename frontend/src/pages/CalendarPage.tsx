@@ -1,13 +1,13 @@
 import React, { useMemo } from "react";
 import AppNavbar from "../components/AppNavbar";
-import { ConnectedDaysFilter } from "../components/DaysFilter";
-import WeekHeader from "../components/WeekHeader";
-import { useDayFilter } from "../context/DayFilterContext";
-import { useWeekAnchorWithSharedDayFilter } from "../hooks/useWeekAnchorWithSharedDayFilter";
 import {
+  ConnectedDaysFilter,
   eventOccursOnLocalDay,
   getDateForWeekdayInAnchorWeek,
-} from "../lib/weekFilterUtils";
+  useDayFilter,
+  useWeekAnchorWithSharedDayFilter,
+} from "../components/DaysFilter";
+import WeekHeader from "../components/WeekHeader";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
 

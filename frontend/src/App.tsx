@@ -2,7 +2,7 @@ import "./App.css";
 import Popup from "./Popup";
 import React from "react";
 import { HashRouter, Route, Routes } from "react-router-dom";
-import { DayFilterProvider } from "./context/DayFilterContext";
+import { DayFilterProvider } from "./components/DaysFilter";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import TodayPage from "./pages/TodayPage";

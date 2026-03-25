@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
-import { ConnectedDaysFilter } from "../components/DaysFilter";
-import type { WeekdayShort } from "../lib/weekday";
-import { useDayFilter } from "../context/DayFilterContext";
+import {
+  ConnectedDaysFilter,
+  useDayFilter,
+  type WeekdayShort,
+} from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
 
 /**
