@@ -187,7 +187,7 @@ const DateHeader: React.FC<DateHeaderProps> = ({
   };
 
   return (
-    <header className="page-header w-full shrink-0 px-0 pb-6 pt-4 text-[#1F2933]">
+    <header className="page-header w-full shrink-0 px-0 pb-3 pt-4 text-[#1F2933]">
       <div className="relative flex min-h-16 items-center justify-center">
         <div className="absolute left-0 flex items-center">
           <button
