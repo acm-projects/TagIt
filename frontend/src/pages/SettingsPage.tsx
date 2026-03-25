@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
+import SectionHeader from "../components/SectionHeader";
+import WeekHeader from "../components/WeekHeader";
+import { removeToken } from "../services/auth/tokenStorage";
 
 const STORAGE_KEY_PRIORITIES = "tagit-settings-priorities";
-const STORAGE_KEY_HIGHLIGHTS = "tagit-settings-highlights";
-
 /**
  * Represents the currently connected user account and emails.
  * Connected accounts are authenticated via the backend; the AI backend
@@ -26,17 +28,6 @@ type PriorityRule = {
   label: string;
 };
 
-/**
- * Extra "hint" phrases the user can add under the Add section to help
- * steer how emails are grouped or highlighted (e.g. "Scholarships").
- * These are meant to be small, user-defined keywords consumed by AI.
- */
-type HighlightChip = {
-  id: number;
-  label: string;
-  active: boolean;
-};
-
 const DEFAULT_PRIORITIES: PriorityRule[] = [
   { id: 1, label: "Club Events" },
   { id: 2, label: "Class/Assignment Notifications" },
@@ -44,16 +35,9 @@ const DEFAULT_PRIORITIES: PriorityRule[] = [
   { id: 4, label: "Deadlines" },
 ];
 
-const DEFAULT_HIGHLIGHTS: HighlightChip[] = [
-  { id: 1, label: "Turn tables", active: false },
-  { id: 2, label: "Financial Aid", active: true },
-  { id: 3, label: "Scholarships", active: true },
-  { id: 4, label: "Jobs", active: true },
-  { id: 5, label: "Internships", active: true },
-  { id: 6, label: "Other", active: false },
-];
-
 const SettingsPage: React.FC = () => {
+  const navigate = useNavigate();
+
   // Connected user and emails; updated when user authenticates new accounts.
   // Backend will use these to connect and read inboxes for the AI pipeline.
   const [connectedUser, setConnectedUser] = useState<ConnectedUser>(() => ({
@@ -81,19 +65,6 @@ const SettingsPage: React.FC = () => {
   );
   const [editingPriorityValue, setEditingPriorityValue] = useState<string>("");
 
-  const [highlightChips, setHighlightChips] = useState<HighlightChip[]>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_HIGHLIGHTS);
-      if (raw) {
-        const parsed = JSON.parse(raw) as HighlightChip[];
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {
-      /* ignore */
-    }
-    return DEFAULT_HIGHLIGHTS;
-  });
-
   // Persist priorities to localStorage whenever they change (reorder, add, remove, edit).
   useEffect(() => {
     try {
@@ -102,14 +73,6 @@ const SettingsPage: React.FC = () => {
       /* ignore */
     }
   }, [priorities]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_HIGHLIGHTS, JSON.stringify(highlightChips));
-    } catch {
-      /* ignore */
-    }
-  }, [highlightChips]);
 
   // Connect-email modal: user can add Gmail/Outlook etc.; backend will authenticate and read.
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -196,270 +159,237 @@ const SettingsPage: React.FC = () => {
     setEditingPriorityValue(newRule.label);
   }, [priorities]);
 
-  /**
-   * Toggle whether a highlight chip is active.
-   * Active chips represent the phrases the user wants AI to pay
-   * special attention to when scanning emails.
-   */
-  const toggleHighlightChip = (id: number) => {
-    setHighlightChips((previous) =>
-      previous.map((chip) =>
-        chip.id === id ? { ...chip, active: !chip.active } : chip,
-      ),
-    );
+  const handleLogout = async () => {
+    await Promise.all([removeToken("google"), removeToken("microsoft")]);
+    navigate("/login");
   };
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#FFF2E9] p-4">
-      <div className="flex min-h-0 flex-1 w-full flex-col overflow-hidden rounded-[30px] bg-[#FFFBF8]">
-
-        {/* Main settings column */}
-        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-8 py-6 text-[#A34712]">
-          {/* Same header strip as other pages so title aligns with date header */}
-          <header className="page-header flex flex-col items-center justify-center border-b border-[#F3C5A5] px-8 pb-4 pt-6 text-center">
-            <h1 className="text-4xl font-semibold tracking-[0.12em] text-[#913c14]">
-              SETTINGS
-            </h1>
-          </header>
+    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
+          <WeekHeader showYear={false} />
 
           {/* Connected user and linked emails */}
-          <section className="mt-8 space-y-3">
-            <div className="flex items-center justify-between text-sm font-semibold">
-              <div className="flex items-center gap-2">
-                <span className="text-base">👤</span>
-                <span>Users</span>
-              </div>
-
-              {/* Opens connect-email modal; backend will handle OAuth and then
-                  read/process these inboxes with the AI pipeline. */}
-              <button
-                type="button"
-                onClick={() => setShowConnectModal(true)}
-                className="text-lg font-semibold leading-none text-[#A34712] hover:underline"
-                aria-label="Connect another email account"
-              >
-                +
-              </button>
-            </div>
-
-            {/* Modal: authenticate a new email account for the AI backend */}
-            {showConnectModal && (
-              <div
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="connect-email-title"
-              >
-                <div className="max-w-md rounded-2xl bg-[#FFFBF8] p-6 shadow-xl border border-[#F3C5A5]">
-                  <h2
-                    id="connect-email-title"
-                    className="text-lg font-semibold text-[#913c14]"
-                  >
-                    Connect your email
-                  </h2>
-                  <p className="mt-2 text-sm text-[#5A3A2A]">
-                    Add an account so our AI backend can connect and read your
-                    inbox to prioritize mail, extract tasks, and surface
-                    deadlines. You can connect Gmail, Outlook, or other
-                    providers.
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowConnectModal(false);
-                        /* Backend: replace with Gmail OAuth; then setConnectedUser with returned email */
-                        setConnectedUser((u) => ({
-                          ...u,
-                          emails: [...u.emails, "your@gmail.com"],
-                        }));
-                      }}
-                      className="rounded-lg bg-[#D3753D] px-4 py-2 text-sm font-semibold text-white hover:bg-[#A34712]"
-                    >
-                      Connect Gmail
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowConnectModal(false);
-                        /* Backend: replace with Outlook OAuth; then setConnectedUser with returned email */
-                        setConnectedUser((u) => ({
-                          ...u,
-                          emails: [...u.emails, "your@outlook.com"],
-                        }));
-                      }}
-                      className="rounded-lg bg-[#0078D4] px-4 py-2 text-sm font-semibold text-white hover:bg-[#106EBE]"
-                    >
-                      Connect Outlook
-                    </button>
-                  </div>
+          <div className="mt-5 space-y-4 sm:mt-6">
+            <section className="w-full max-w-4xl">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex items-center justify-between gap-3">
+                  <SectionHeader
+                    title="Users"
+                    icon={<span className="material-symbols-outlined text-[18px]">person</span>}
+                  />
                   <button
                     type="button"
-                    onClick={() => setShowConnectModal(false)}
-                    className="mt-4 text-sm text-[#7A4A2D] hover:underline"
+                    onClick={() => setShowConnectModal(true)}
+                    className="inline-flex h-8 items-center justify-center rounded-full border border-[#F3E6D9] px-3 text-xs font-semibold text-[#f9ab7b] transition-colors hover:bg-[#FFF4EC]"
+                    aria-label="Connect another email account"
                   >
-                    Cancel
+                    Add account
+                  </button>
+                </div>
+
+                {/* Modal: authenticate a new email account for the AI backend */}
+                {showConnectModal && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="connect-email-title"
+                  >
+                    <div className="max-w-md rounded-2xl border border-[#EFE7DC] bg-white p-6 shadow-xl">
+                      <h2
+                        id="connect-email-title"
+                        className="text-lg font-semibold text-[#111827]"
+                      >
+                        Connect your email
+                      </h2>
+                      <p className="mt-2 text-sm text-[#6B7280]">
+                        Add an account so the app can prioritize mail, extract tasks,
+                        and surface deadlines.
+                      </p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowConnectModal(false);
+                            setConnectedUser((u) => ({
+                              ...u,
+                              emails: [...u.emails, "your@gmail.com"],
+                            }));
+                          }}
+                          className="rounded-lg bg-[#f9ab7b] px-4 py-2 text-sm font-semibold text-white hover:bg-[#ef9967]"
+                        >
+                          Connect Gmail
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowConnectModal(false);
+                            setConnectedUser((u) => ({
+                              ...u,
+                              emails: [...u.emails, "your@outlook.com"],
+                            }));
+                          }}
+                          className="rounded-lg bg-[#DBEAFE] px-4 py-2 text-sm font-semibold text-[#1D4ED8] hover:bg-[#bfdbfe]"
+                        >
+                          Connect Outlook
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowConnectModal(false)}
+                        className="mt-4 text-sm text-[#6B7280] hover:text-[#111827]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-3 space-y-3 text-sm">
+                  <div className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-[#9CA3AF]">
+                      Username
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-[#111827]">
+                      {connectedUser.username}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {connectedUser.emails.map((email, index) => (
+                      <div
+                        key={email}
+                        className="flex items-center gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
+                      >
+                        <span className="text-xs font-semibold text-[#9CA3AF]">
+                          {index + 1}.
+                        </span>
+                        <span className="font-medium text-[#111827]">{email}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Priorities configuration: order and labels are persisted (localStorage). */}
+            <section className="w-full max-w-4xl">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex items-center justify-between gap-3">
+                  <SectionHeader
+                    title="Priorities"
+                    icon={<span className="material-symbols-outlined text-[18px]">tune</span>}
+                  />
+                  <button
+                    type="button"
+                    onClick={addPriority}
+                    className="inline-flex h-8 items-center justify-center rounded-full border border-[#F3E6D9] px-3 text-xs font-semibold text-[#f9ab7b] transition-colors hover:bg-[#FFF4EC]"
+                  >
+                    Add priority
+                  </button>
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {priorities.map((rule, index) => {
+                    const isEditing = editingPriorityId === rule.id;
+
+                    return (
+                      <div
+                        key={rule.id}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="text-xs font-semibold text-[#9CA3AF]">
+                            {index + 1}.
+                          </span>
+
+                          {isEditing ? (
+                            <input
+                              autoFocus
+                              value={editingPriorityValue}
+                              onChange={(event) =>
+                                setEditingPriorityValue(event.target.value)
+                              }
+                              onBlur={saveEditedPriority}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  saveEditedPriority();
+                                }
+                              }}
+                              className="min-w-[160px] rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-xs font-normal text-[#1F2933] focus:outline-none focus:ring-2 focus:ring-[#fde6d7]"
+                              aria-label="Edit priority label"
+                            />
+                          ) : (
+                            <span className="truncate font-medium text-[#111827]">
+                              {rule.label}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-1.5 text-xs">
+                          <button
+                            type="button"
+                            onClick={() => movePriority(rule.id, "up")}
+                            disabled={index === 0}
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b] disabled:opacity-40"
+                            aria-label="Move priority up"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => movePriority(rule.id, "down")}
+                            disabled={index === priorities.length - 1}
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b] disabled:opacity-40"
+                            aria-label="Move priority down"
+                          >
+                            ▼
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => startEditingPriority(rule)}
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b]"
+                            aria-label="Edit priority"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removePriority(rule.id)}
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b]"
+                            aria-label="Delete priority"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+            <section className="w-full max-w-4xl">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex items-center justify-between gap-3">
+                  <SectionHeader
+                    title="Account"
+                    icon={<span className="material-symbols-outlined text-[18px]">logout</span>}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="inline-flex h-9 items-center justify-center rounded-full border border-[#FAD3D3] bg-[#FFF5F5] px-4 text-sm font-semibold text-[#DC2626] transition-colors hover:bg-[#FEE2E2]"
+                  >
+                    Log out
                   </button>
                 </div>
               </div>
-            )}
-
-            <div className="space-y-2 text-sm text-[#5A3A2A]">
-              {/* Username row */}
-              <div className="flex items-center gap-3 text-base">
-                <span>name:</span>
-                <div className="inline-flex min-w-[200px] items-center rounded-lg bg-[#F8E0CE] px-3 py-2 font-semibold text-[#7A4A2D]">
-                  {connectedUser.username}
-                </div>
-              </div>
-
-              {/* Connected email addresses listed in order */}
-              <div className="space-y-2">
-                {connectedUser.emails.map((email, index) => (
-                  <div
-                    key={email}
-                    className="flex items-center rounded-lg bg-[#F8E0CE] px-3 py-2 text-base font-semibold text-[#5A3A2A]"
-                  >
-                    <span className="mr-3">{index + 1}.</span>
-                    <span>{email}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Priorities configuration: order and labels are persisted (localStorage). */}
-          <section className="mt-10 space-y-3">
-            <div className="flex items-center justify-between text-sm font-semibold">
-              <div className="flex items-center gap-2">
-                <span className="text-base">🧩</span>
-                <span>Priorities</span>
-              </div>
-              <button
-                type="button"
-                onClick={addPriority}
-                className="rounded-lg bg-[#F8E0CE] px-3 py-1.5 text-xs font-semibold text-[#A34712] hover:bg-[#FFD6B8]"
-              >
-                Add priority
-              </button>
-            </div>
-
-            {/* Each pill row is an ordered priority rule with drag handle,
-                editable label, and controls for reordering and deletion. */}
-            <div className="space-y-3">
-              {priorities.map((rule, index) => {
-                const isEditing = editingPriorityId === rule.id;
-
-                return (
-                  <div
-                    key={rule.id}
-                    className="flex items-center justify-between rounded-full bg-[#F8E0CE] px-4 py-2 text-sm font-semibold text-[#5A3A2A]"
-                  >
-                    <div className="flex items-center gap-3">
-                      {/* Drag handle icon (visual only for now) */}
-                      <span className="text-lg text-[#7A4A2D]">⋮⋮</span>
-
-                      {/* Numbered label to reinforce ordering */}
-                      <span className="text-xs text-[#7A4A2D]">
-                        {index + 1}.
-                      </span>
-
-                      {/* Inline editable text field for the rule label */}
-                      {isEditing ? (
-                        <input
-                          autoFocus
-                          value={editingPriorityValue}
-                          onChange={(event) =>
-                            setEditingPriorityValue(event.target.value)
-                          }
-                          onBlur={saveEditedPriority}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              saveEditedPriority();
-                            }
-                          }}
-                          className="min-w-[160px] rounded-md border border-[#E6C7B3] bg-[#FFF9F4] px-2 py-1 text-xs font-normal text-[#5A3A2A] focus:outline-none focus:ring-2 focus:ring-[#D3753D]"
-                          aria-label="Edit priority label"
-                        />
-                      ) : (
-                        <span>{rule.label}</span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs">
-                      {/* Move up / down buttons to change order */}
-                      <button
-                        type="button"
-                        onClick={() => movePriority(rule.id, "up")}
-                        disabled={index === 0}
-                        className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FFEFEB] text-[11px] text-[#7A4A2D] disabled:opacity-40"
-                        aria-label="Move priority up"
-                      >
-                        ▲
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => movePriority(rule.id, "down")}
-                        disabled={index === priorities.length - 1}
-                        className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FFEFEB] text-[11px] text-[#7A4A2D] disabled:opacity-40"
-                        aria-label="Move priority down"
-                      >
-                        ▼
-                      </button>
-
-                      {/* Pencil to edit the rule label text */}
-                      <button
-                        type="button"
-                        onClick={() => startEditingPriority(rule)}
-                        className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FFEFEB] text-[13px] text-[#7A4A2D]"
-                        aria-label="Edit priority"
-                      >
-                        ✏️
-                      </button>
-
-                      {/* Trash to remove the rule */}
-                      <button
-                        type="button"
-                        onClick={() => removePriority(rule.id)}
-                        className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FFEFEB] text-[13px] text-[#7A4A2D]"
-                        aria-label="Delete priority"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* Additional highlight hints (persisted to localStorage) */}
-          <section className="mt-10 space-y-3">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <span className="text-base">+</span>
-              <span>Add</span>
-            </div>
-
-            {/* These chips express extra phrases the user wants surfaced.
-                When integrated, the backend / AI can treat all `active`
-                chips as high-value patterns to look for in email text. */}
-            <div className="flex flex-wrap gap-3 text-sm font-semibold text-[#5A3A2A]">
-              {highlightChips.map((chip) => (
-                <button
-                  key={chip.id}
-                  type="button"
-                  onClick={() => toggleHighlightChip(chip.id)}
-                  className={`rounded-md px-3 py-1 shadow-sm ${
-                    chip.active ? "bg-[#F8BE93]" : "bg-[#F8E0CE]"
-                  }`}
-                  aria-pressed={chip.active}
-                >
-                  {chip.label}
-                </button>
-              ))}
-            </div>
-          </section>
+            </section>
+          </div>
         </main>
 
         <AppNavbar />
