@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
+import DaysFilter, { type WeekdayShort } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
 import {
   loadTasks,
@@ -44,10 +45,56 @@ const formatDisplayDate = (date: Date): string => {
   return `${month}/${day}`;
 };
 
+const dateToWeekdayShort = (d: Date): WeekdayShort => {
+  const map: WeekdayShort[] = ["sun", "mon", "tue", "wed", "thur", "fri", "sat"];
+  return map[d.getDay()];
+};
+
+const startOfLocalDay = (d: Date): Date => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+
+const isSameLocalDay = (a: Date, b: Date): boolean =>
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate();
+
+/** Align with DateHeader / WeekHeader (Monday → Sunday week) */
+const OFFSET_FROM_MONDAY: Record<WeekdayShort, number> = {
+  mon: 0,
+  tue: 1,
+  wed: 2,
+  thur: 3,
+  fri: 4,
+  sat: 5,
+  sun: 6,
+};
+
+const startOfWeekMonday = (anchor: Date): Date => {
+  const d = new Date(anchor);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const diffToMonday = (day + 6) % 7;
+  d.setDate(d.getDate() - diffToMonday);
+  return d;
+};
+
+const getDateForWeekdayInAnchorWeek = (weekAnchor: Date, slot: WeekdayShort): Date => {
+  const monday = startOfWeekMonday(weekAnchor);
+  const out = new Date(monday);
+  out.setDate(monday.getDate() + OFFSET_FROM_MONDAY[slot]);
+  out.setHours(0, 0, 0, 0);
+  return out;
+};
+
 const TasksPage: React.FC = () => {
   const editingTimeInputRef = useRef<HTMLInputElement | null>(null);
+  const prevAnchorRef = useRef<Date | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
-  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date(2026, 1, 18));
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [selectedDay, setSelectedDay] = useState<WeekdayShort>(() => dateToWeekdayShort(new Date()));
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskLabel, setNewTaskLabel] = useState("");
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
@@ -59,6 +106,38 @@ const TasksPage: React.FC = () => {
   useEffect(() => {
     saveTasks(tasks);
   }, [tasks]);
+
+  const handleWeekDateChange = (next: Date) => {
+    const prev = prevAnchorRef.current;
+    prevAnchorRef.current = new Date(next);
+    setSelectedDate(next);
+
+    if (prev === null) {
+      setSelectedDay(dateToWeekdayShort(next));
+      return;
+    }
+
+    const diffDays = Math.round(
+      (startOfLocalDay(next).getTime() - startOfLocalDay(prev).getTime()) / 86_400_000,
+    );
+    const isWholeWeekStep = diffDays !== 0 && diffDays % 7 === 0;
+    if (!isWholeWeekStep) {
+      setSelectedDay(dateToWeekdayShort(next));
+    }
+  };
+
+  const selectedCalendarDay = useMemo(
+    () => getDateForWeekdayInAnchorWeek(selectedDate, selectedDay),
+    [selectedDate, selectedDay],
+  );
+
+  const visibleTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      const d = parseIsoDate(task.date);
+      if (!d) return false;
+      return isSameLocalDay(d, selectedCalendarDay);
+    });
+  }, [tasks, selectedCalendarDay]);
 
   const toggleTask = (taskId: number) => {
     setTasks((previousTasks) =>
@@ -95,7 +174,7 @@ const TasksPage: React.FC = () => {
         id: nextId,
         label: trimmedLabel,
         done: false,
-        date: formatIsoDate(selectedDate),
+        date: formatIsoDate(getDateForWeekdayInAnchorWeek(selectedDate, selectedDay)),
         time: "09:00",
       },
     ]);
@@ -111,7 +190,9 @@ const TasksPage: React.FC = () => {
   const startEditingTask = (task: TaskItem) => {
     setEditingTaskId(task.id);
     setEditingLabel(task.label);
-    setEditingDate(task.date ?? formatIsoDate(selectedDate));
+    setEditingDate(
+      task.date ?? formatIsoDate(getDateForWeekdayInAnchorWeek(selectedDate, selectedDay)),
+    );
     setEditingTime(task.time ?? "09:00");
     setIsEditingTimeEnabled(Boolean(task.time));
     setIsAddingTask(false);
@@ -195,9 +276,11 @@ const TasksPage: React.FC = () => {
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
-          <WeekHeader showYear={false} onDateChange={setSelectedDate} />
+          <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
           <div className="mt-5 space-y-4 sm:mt-6">
+            <DaysFilter value={selectedDay} onChange={setSelectedDay} className="!mt-0" />
+
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
                 <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
@@ -208,9 +291,11 @@ const TasksPage: React.FC = () => {
                 <div className="mt-3">
                   {tasks.length === 0 ? (
                     <p className="py-2 text-[12px] text-[#6B7280]">No tasks yet. Add one below.</p>
+                  ) : visibleTasks.length === 0 ? (
+                    <p className="py-2 text-[12px] text-[#6B7280]">No tasks for this day.</p>
                   ) : (
-                    tasks.map((task, index) => {
-                      const isLast = index === tasks.length - 1;
+                    visibleTasks.map((task, index) => {
+                      const isLast = index === visibleTasks.length - 1;
                       const rowDivider = {
                         borderBottom: isLast ? "none" : "0.5px solid #E5E7EB",
                       } as const;
@@ -309,7 +394,9 @@ const TasksPage: React.FC = () => {
                               {task.label}
                             </span>
                             <span className="shrink-0 whitespace-nowrap text-[12px] font-medium tabular-nums text-[#6B7280]">
-                              {formatDisplayDate(parseIsoDate(task.date) ?? selectedDate)}
+                              {formatDisplayDate(
+                                parseIsoDate(task.date) ?? selectedCalendarDay,
+                              )}
                               {task.time ? ` · ${formatDisplayTime(task.time)}` : ""}
                             </span>
                           </div>
