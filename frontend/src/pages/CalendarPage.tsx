@@ -23,35 +23,35 @@ type CalendarEvent = {
 
 const CALENDAR_EVENTS: CalendarEvent[] = [
   {
-    title: "ACM Social Night #1",
-    date1: "02/21/2026",
-    day1: "Sat",
-    time: "07:00 - 10:00",
-    source: "google",
-  },
-  {
-    title: "WeHack - Hackathon",
-    date1: "03/01/2026",
-    day1: "Sat",
-    date2: "03/02/2026",
-    day2: "Sun",
-    time: "09:00 - 24:00\n00:00 - 05:30",
-    source: "outlook",
-  },
-  {
-    title: "Resume Review Drop-In",
-    date1: "03/05/2026",
-    day1: "Thu",
-    time: "01:30 - 02:30",
-    source: "google",
-  },
-  {
-    title: "Systems Project Checkpoint",
-    date1: "03/06/2026",
-    day1: "Fri",
-    time: "11:00 - 12:15",
-    source: "outlook",
-  },
+  title: "ACM Social Night #1",
+  date1: "03/28/2026",
+  day1: "Sat",
+  time: "07:00 - 10:00",
+  source: "google",
+},
+{
+  title: "WeHack - Hackathon",
+  date1: "03/27/2026",
+  day1: "Fri",
+  date2: "03/28/2026",
+  day2: "Sat",
+  time: "09:00 - 24:00\n00:00 - 05:30",
+  source: "outlook",
+},
+{
+  title: "Resume Review Drop-In",
+  date1: "03/24/2026",
+  day1: "Tue",
+  time: "01:30 - 02:30",
+  source: "google",
+},
+{
+  title: "Systems Project Checkpoint",
+  date1: "03/26/2026",
+  day1: "Thu",
+  time: "11:00 - 12:15",
+  source: "outlook",
+},
 ];
 
 const CalendarPage: React.FC = () => {
