@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React from "react";
 import AppNavbar from "../components/AppNavbar";
 import WeekHeader from "../components/WeekHeader";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
-import { getUserCategories, type UserCategory } from "../services/categories";
+// TEMP: remove after backend integration. Hardcoded color map for visual check.
+import { getTempCategoryColor } from "../services/tempCategoryColors";
 
 type CalendarEvent = {
   title: string;
@@ -54,40 +55,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
 ];
 
 const CalendarPage: React.FC = () => {
-  const [categories, setCategories] = useState<UserCategory[]>([]);
-  const DEFAULT_COLOR = "#E5E7EB";
-
-  useEffect(() => {
-    let mounted = true;
-    getUserCategories().then((data) => {
-      if (mounted) setCategories(data);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const uncategorized = useMemo<UserCategory>(
-    () => ({ id: "uncategorized", name: "Uncategorized", color: DEFAULT_COLOR, isCustom: false }),
-    [],
-  );
-
-  const getCategory = (categoryId?: string) => {
-    if (!categoryId) return undefined;
-    const category = categories.find((c) => c.id === categoryId);
-    if (!category) {
-      console.warn("Missing category for id", categoryId);
-    }
-    return category;
-  };
-
-  const getCategoryColor = (category?: UserCategory) => {
-    if (!category?.color) {
-      console.warn("Category missing color, falling back", category);
-      return DEFAULT_COLOR;
-    }
-    return category.color;
-  };
+  const DEFAULT_COLOR = "#E5E7EB"; // TEMP: pastel fallback
 
   return (
     <div className="calendar-page flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
@@ -107,7 +75,7 @@ const CalendarPage: React.FC = () => {
 
                 <div className="mt-3 space-y-2">
                   {CALENDAR_EVENTS.map((event, index) => {
-                    const category = getCategory(event.tagCategoryId) ?? uncategorized;
+                    const categoryColor = getTempCategoryColor(event.tagCategoryId) ?? DEFAULT_COLOR;
 
                     return (
                       <div
@@ -117,7 +85,7 @@ const CalendarPage: React.FC = () => {
                         <span
                           aria-hidden="true"
                           className="color-line h-full min-h-9"
-                          style={{ backgroundColor: getCategoryColor(category) }}
+                          style={{ backgroundColor: categoryColor }}
                         />
 
                         <div className="min-w-0 flex-1">

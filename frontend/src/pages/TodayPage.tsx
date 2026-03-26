@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import WeekHeader from "../components/WeekHeader";
 import {
@@ -6,7 +6,8 @@ import {
   loadTasks,
   subscribeToTaskUpdates,
 } from "../services/taskProgress";
-import { getUserCategories, type UserCategory } from "../services/categories";
+// TEMP: remove after backend integration. Hardcoded color map for visual check.
+import { getTempCategoryColor } from "../services/tempCategoryColors";
 
 /**
  * Important email preview shown on Today.
@@ -78,7 +79,6 @@ const EVENTS: TodayEvent[] = [
 const TodayPage: React.FC = () => {
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
   const [importantEmails] = useState<ImportantEmailPreview[]>(() => IMPORTANT_EMAILS_FILLER);
-  const [categories, setCategories] = useState<UserCategory[]>([]);
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -105,44 +105,7 @@ const TodayPage: React.FC = () => {
     // Placeholder until mail detail/open workflow is wired.
   };
 
-  useEffect(() => {
-    let mounted = true;
-    getUserCategories().then((data) => {
-      if (mounted) setCategories(data);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const DEFAULT_COLOR = "#E5E7EB";
-
-  const uncategorized = useMemo<UserCategory>(
-    () => ({
-      id: "uncategorized",
-      name: "Uncategorized",
-      color: DEFAULT_COLOR,
-      isCustom: false,
-    }),
-    [],
-  );
-
-  const getTagMeta = (categoryId?: string) => {
-    if (!categoryId) return undefined;
-    const category = categories.find((c) => c.id === categoryId);
-    if (!category) {
-      console.warn("Missing category for id", categoryId);
-    }
-    return category;
-  };
-
-  const getCategoryColor = (category?: UserCategory) => {
-    if (!category?.color) {
-      console.warn("Category missing color, falling back", category);
-      return DEFAULT_COLOR;
-    }
-    return category.color;
-  };
+  const DEFAULT_COLOR = "#E5E7EB"; // TEMP: pastel fallback
 
   return (
     <div className="today-page flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
@@ -152,17 +115,17 @@ const TodayPage: React.FC = () => {
 
           <div className="mt-5 space-y-4 sm:mt-6">
             <section className="w-full max-w-4xl">
-              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-4 py-2 shadow-[0_6px_14px_rgba(15,23,42,0.05)]">
+                <div className="mt-2 flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
                   <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">
                     workspace_premium
                   </span>
                   <span>Weekly Progress</span>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between text-xs text-[#6B7280]">
-                  <span>Tasks Completed</span>
-                  <span className="text-sm">
+                <div className="mt-0 flex items-center justify-end gap-2 text-xs text-[#6B7280]">
+                  <span className="text-right">Tasks Completed</span>
+                  <span className="text-sm text-right">
                     <span className="font-semibold text-[#f9ab7b]">
                       {progress.completedTasks}
                     </span>
@@ -170,7 +133,7 @@ const TodayPage: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="mt-3 h-2 w-full rounded-full bg-[#fde6d7]">
+                <div className="mt-2 h-2 w-full rounded-full bg-[#fde6d7]">
                   <div
                     className="h-2 rounded-full bg-[#f9ab7b] transition-[width] duration-200 ease-out"
                     style={{ width: `${progress.progressPercentage}%` }}
@@ -200,7 +163,7 @@ const TodayPage: React.FC = () => {
                           aria-hidden="true"
                           className="color-line h-full w-[4px] self-stretch rounded-full"
                           style={{
-                            backgroundColor: getCategoryColor(getTagMeta(mail.tagCategoryId) ?? uncategorized),
+                            backgroundColor: getTempCategoryColor(mail.tagCategoryId) ?? DEFAULT_COLOR,
                           }}
                         />
 
@@ -253,8 +216,6 @@ const TodayPage: React.FC = () => {
 
                 <div className="mt-3 space-y-1">
                   {EVENTS.map((event, index) => {
-                    const category = getTagMeta(event.tagCategoryId) ?? uncategorized;
-
                     return (
                       <div
                         key={event.title}
@@ -264,7 +225,7 @@ const TodayPage: React.FC = () => {
                         <div
                           aria-hidden="true"
                           className="color-line h-full w-[4px] self-stretch rounded-full"
-                          style={{ backgroundColor: getCategoryColor(category) }}
+                          style={{ backgroundColor: getTempCategoryColor(event.tagCategoryId) ?? DEFAULT_COLOR }}
                         />
 
                         <div className="flex min-w-0 flex-1 flex-col gap-1 text-left">

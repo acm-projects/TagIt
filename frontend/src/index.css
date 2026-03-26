@@ -34,9 +34,11 @@
 
 .color-line {
   width: 4px;
-  margin-right: 8px;
+  min-height: 24px;
+  margin: 6px 8px 6px 0;
   border-radius: 2px;
   flex-shrink: 0;
+  align-self: stretch;
 }
 
 .today-page .page-header .material-symbols-outlined {
