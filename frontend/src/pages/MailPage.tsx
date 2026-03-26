@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
-import SectionHeader from "../components/SectionHeader";
+import DaysFilter, { type WeekdayShort } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
 
 /**
@@ -15,7 +15,7 @@ type MailItem = {
   extra?: string;
   tags: string[];
   priorityScore: number;
-  day: "mon" | "tue" | "wed" | "thur" | "fri" | "sat" | "sun";
+  day: WeekdayShort;
 };
 
 /**
@@ -81,8 +81,7 @@ const MailPage: React.FC = () => {
     },
   ]);
 
-  const days: MailItem["day"][] = ["sun", "mon", "tue", "wed", "thur", "fri", "sat"];
-  const [selectedDay, setSelectedDay] = useState<MailItem["day"]>("sun");
+  const [selectedDay, setSelectedDay] = useState<WeekdayShort>("sun");
 
   const filteredMails = useMemo(
     () => mails.filter((mail) => mail.day === selectedDay),
@@ -108,135 +107,132 @@ const MailPage: React.FC = () => {
     return { backgroundColor: "#EFD9BE", color: "#7A4A2F" };
   };
 
+  const handleOpenMail = (_mail: MailItem) => {
+    // Placeholder until mail detail workflow is wired.
+  };
+
+  const handleOpenDraft = (_draft: DraftItem) => {
+    // Placeholder until draft editor is wired.
+  };
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
+        <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} />
 
-          <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1">
-            {days.map((day) => {
-              const isActive = day === selectedDay;
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => setSelectedDay(day)}
-                  className={`rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                    isActive
-                      ? "border-[#f9ab7b] bg-[#fde6d7] text-[#c96f39]"
-                      : "border-transparent bg-[#F3F4F6] text-[#6B7280]"
-                  }`}
-                  aria-pressed={isActive}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
+          <div className="mt-5 space-y-4 sm:mt-6">
+            <DaysFilter value={selectedDay} onChange={setSelectedDay} className="!mt-0" />
 
-          <section className="mt-6">
-            <SectionHeader
-              title="Mails"
-              icon={<span className="material-symbols-outlined text-[18px]">mail</span>}
-            />
+            <section className="w-full max-w-4xl">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                  <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">mail</span>
+                  <span>Mails</span>
+                </div>
 
-            <div className="mt-3 space-y-2">
-              {sortedMails.map((mail) => (
-                <button
-                  key={mail.id}
-                  type="button"
-                  className="group relative flex w-full flex-col items-stretch rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2 text-left text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)] transition-all duration-150 ease-out hover:-translate-y-[1px] hover:shadow-md"
-                >
-                  <div className="flex items-start gap-3 pr-10">
-                    <div className="flex-1">
-                      <p className="text-[13px] font-semibold leading-tight text-[#111827]">
-                        {mail.summary}
-                      </p>
-                      <p className="mt-0.5 text-[10.5px] font-medium text-[#6B7280]">
-                        {mail.sender}
-                      </p>
-                      <p
-                        className="mt-1 text-[12px] leading-snug text-[#4B5563]"
-                        style={{
-                          display: "-webkit-box",
-                          WebkitLineClamp: 1,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                        }}
+                <div className="mt-3 space-y-3">
+                  {sortedMails.length === 0 ? (
+                    <p className="py-2 text-[12px] text-[#6B7280]">No messages for this day.</p>
+                  ) : (
+                    sortedMails.map((mail) => (
+                      <div
+                        key={mail.id}
+                        className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2 shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
                       >
-                        {mail.body}
-                      </p>
-                      {mail.extra && (
-                        <p className="mt-1 text-[10.5px] text-[#6B7280]">{mail.extra}</p>
-                      )}
-                      {mail.tags.length > 0 && (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {mail.tags.map((tag) => {
-                            const { backgroundColor, color } = getTagStyles(tag);
-                            return (
-                              <span
-                                key={tag}
-                                className="inline-block rounded-full px-2 py-[3px] text-[9px] font-medium tracking-tight shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
-                                style={{ backgroundColor, color }}
-                              >
-                                {tag}
-                              </span>
-                            );
-                          })}
+                        <div className="group flex items-start gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenMail(mail)}
+                            className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-semibold text-[#111827]">{mail.summary}</span>
+                              {mail.priorityScore >= 9 && (
+                                <span className="rounded-full border border-[#fecdd3] bg-[#fee2e2] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#ef4444]">
+                                  Urgent
+                                </span>
+                              )}
+                              {mail.tags.map((tag) => {
+                                const { backgroundColor, color } = getTagStyles(tag);
+                                return (
+                                  <span
+                                    key={tag}
+                                    className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-tight"
+                                    style={{ backgroundColor, color }}
+                                  >
+                                    {tag}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                            <p className="w-full truncate text-[12px] text-[#6B7280]">{mail.sender}</p>
+                            <p className="line-clamp-2 w-full text-[12px] leading-snug text-[#6B7280]">
+                              {mail.body}
+                            </p>
+                            {mail.extra && (
+                              <p className="w-full truncate text-[12px] text-[#6B7280]">{mail.extra}</p>
+                            )}
+                          </button>
+
+                          <div className="flex shrink-0 items-center gap-2 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenMail(mail)}
+                              className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                              aria-label={`Open ${mail.summary}`}
+                            >
+                              <span className="material-symbols-outlined text-[16px]">check</span>
+                            </button>
+                          </div>
                         </div>
-                      )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section className="w-full max-w-4xl">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                  <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">draft</span>
+                  <span>Drafted Replies</span>
+                </div>
+
+                <div className="mt-3 space-y-3">
+                  {draftReplies.map((draft) => (
+                    <div
+                      key={draft.id}
+                      className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2 shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
+                    >
+                      <div className="group flex items-start gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDraft(draft)}
+                          className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
+                        >
+                          <span className="text-sm font-semibold text-[#111827]">{draft.sender}</span>
+                          <p className="w-full truncate text-[12px] text-[#6B7280]">Draft reply</p>
+                        </button>
+
+                        <div className="flex shrink-0 items-center gap-2 pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDraft(draft)}
+                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                            aria-label={`Open draft for ${draft.sender}`}
+                          >
+                            <span className="material-symbols-outlined text-[16px]">check</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-
-                  <div
-                    className="absolute right-4 top-1/2 flex -translate-y-1/2 translate-x-2 items-center opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                    title="Mark as read"
-                    aria-label="Mark as read"
-                  >
-                    <span className="material-symbols-outlined text-[20px] text-[#f9ab7b] transition-transform duration-200 ease-out group-hover:scale-110">
-                      check
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="mt-8">
-            <SectionHeader
-              title="Drafted Replies"
-              icon={<span className="material-symbols-outlined text-[18px]">draft</span>}
-            />
-
-            <div className="mt-3 space-y-2.5">
-              {draftReplies.map((draft) => (
-                <button
-                  key={draft.id}
-                  type="button"
-                  className="group relative flex w-full items-center justify-between rounded-2xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2.5 text-left text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)] transition-all duration-200 ease-out hover:-translate-y-[1px] hover:shadow-md"
-                >
-                  <span>{draft.sender}</span>
-
-                  <div
-                    className="absolute right-4 top-1/2 flex -translate-y-1/2 translate-x-2 items-center opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                    title="Mark as read"
-                    aria-label="Mark as read"
-                  >
-                    <span className="material-symbols-outlined text-[18px] text-[#f9ab7b] transition-transform duration-200 ease-out group-hover:scale-110">
-                      check
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </section>
+                  ))}
+                </div>
+              </div>
+            </section>
+          </div>
         </main>
 
         <AppNavbar />

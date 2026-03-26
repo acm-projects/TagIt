@@ -90,9 +90,9 @@ const CalendarPage: React.FC = () => {
   };
 
   return (
-    <div className="calendar-page flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-        <main className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
+        <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} />
 
           <div className="mt-4 space-y-4 sm:mt-5">
@@ -105,7 +105,7 @@ const CalendarPage: React.FC = () => {
                   <span>Calendar Events</span>
                 </div>
 
-                <div className="mt-3 space-y-2">
+                <div className="mt-3">
                   {CALENDAR_EVENTS.map((event, index) => {
                     const category = getCategory(event.tagCategoryId) ?? uncategorized;
 
@@ -127,32 +127,25 @@ const CalendarPage: React.FC = () => {
                             </p>
                           </div>
 
-                          <div className="mt-1.5 grid grid-cols-3 gap-x-3 text-[11px] leading-tight text-[#6B7280] sm:max-w-[24rem]">
+                          <div className="mt-2 grid grid-cols-2 gap-x-5 text-[11px] leading-snug text-[#6B7280] sm:max-w-[22rem]">
                             <div>
-                              <p className="font-medium text-[#374151]">Date</p>
-                              <p>{event.date1}</p>
-                              {event.date2 && <p>{event.date2}</p>}
+                              <p>{`${event.day1} ${event.date1}`}</p>
+                              {event.date2 && event.day2 && <p>{`${event.day2} ${event.date2}`}</p>}
                             </div>
                             <div>
-                              <p className="font-medium text-[#374151]">Day</p>
-                              <p>{event.day1}</p>
-                              {event.day2 && <p>{event.day2}</p>}
-                            </div>
-                            <div>
-                              <p className="font-medium text-[#374151]">Time</p>
                               <p className="whitespace-pre-line">{event.time}</p>
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-1 self-center">
+                        <div className="flex shrink-0 items-center gap-1.5 self-center">
                           <button
                             type="button"
                             aria-label="Add"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b] transition-colors hover:bg-[#FFF4EC]"
+                            className="inline-flex h-8 w-8 items-center justify-center text-[#f9ab7b] transition-colors hover:text-[#e58a58]"
                           >
                             <span
-                              className="inline-block h-3 w-3 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
+                              className="inline-block h-3.5 w-3.5 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
                               style={{
                                 maskImage: `url(${addIcon})`,
                                 WebkitMaskImage: `url(${addIcon})`,
@@ -163,10 +156,10 @@ const CalendarPage: React.FC = () => {
                           <button
                             type="button"
                             aria-label="Delete"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b] transition-colors hover:bg-[#FFF4EC]"
+                            className="inline-flex h-8 w-8 items-center justify-center text-[#f9ab7b] transition-colors hover:text-[#e58a58]"
                           >
                             <span
-                              className="inline-block h-3 w-3 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
+                              className="inline-block h-3.5 w-3.5 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
                               style={{
                                 maskImage: `url(${deleteIcon})`,
                                 WebkitMaskImage: `url(${deleteIcon})`,
