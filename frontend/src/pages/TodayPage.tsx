@@ -150,7 +150,7 @@ const TodayPage: React.FC = () => {
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} />
 
-          <div className="mt-5 space-y-4 sm:mt-6">
+          <div className="mt-2.5 space-y-4 sm:mt-3">
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
                 <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
