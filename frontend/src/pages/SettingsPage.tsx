@@ -360,18 +360,18 @@ const SettingsPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => startEditingPriority(rule)}
-                            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b]"
+                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b]"
                             aria-label="Edit priority"
                           >
-                            ✏️
+                            <span className="material-symbols-outlined text-[16px]">edit</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => removePriority(rule.id)}
-                            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b]"
+                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b]"
                             aria-label="Delete priority"
                           >
-                            🗑️
+                            <span className="material-symbols-outlined text-[16px]">delete</span>
                           </button>
                         </div>
                       </div>
