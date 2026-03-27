@@ -346,8 +346,8 @@ const TodayPage: React.FC = () => {
                         />
 
                         <div className="flex min-w-0 flex-1 flex-col gap-1 text-left">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-[#111827]">
+                          <div className="flex items-center justify-between gap-3 pr-4">
+                            <span className="text-sm font-semibold text-[#111827] truncate">
                               {event.title}
                             </span>
                             <span className="text-xs font-medium text-[#6B7280] whitespace-nowrap">
