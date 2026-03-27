@@ -32,6 +32,114 @@ type ConnectedUser = {
  */
 type PriorityRule = ReturnType<typeof loadUserPriorities>[number];
 
+type SortablePriorityRowProps = {
+  rule: PriorityRule;
+  index: number;
+  isEditing: boolean;
+  isDragging: boolean;
+  editingPriorityValue: string;
+  onEditingPriorityValueChange: (value: string) => void;
+  onSaveEditedPriority: () => void;
+  onStartEditingPriority: (rule: PriorityRule) => void;
+  onRemovePriority: (id: number) => void;
+  onDragStart: (id: number, event: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver: (id: number, event: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
+  categories: ReturnType<typeof useUserCategories>;
+};
+
+const SortablePriorityRow: React.FC<SortablePriorityRowProps> = ({
+  rule,
+  index,
+  isEditing,
+  isDragging,
+  editingPriorityValue,
+  onEditingPriorityValueChange,
+  onSaveEditedPriority,
+  onStartEditingPriority,
+  onRemovePriority,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  categories,
+}) => {
+  return (
+    <div
+      draggable
+      onDragStart={(event) => onDragStart(rule.id, event)}
+      onDragOver={(event) => onDragOver(rule.id, event)}
+      onDragEnd={onDragEnd}
+      className={`flex items-center justify-between gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)] ${
+        isDragging
+          ? "scale-[1.01] opacity-90 shadow-[0_12px_26px_rgba(17,24,39,0.12)]"
+          : "transition-[transform,box-shadow] duration-200 ease-out"
+      }`}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <button
+          type="button"
+          className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b] active:cursor-grabbing"
+          aria-label={`Drag to reorder ${rule.label}`}
+        >
+          <span className="material-symbols-outlined text-[16px]">drag_indicator</span>
+        </button>
+        <span className="text-xs font-semibold text-[#9CA3AF]">{index + 1}.</span>
+
+        {isEditing ? (
+          <input
+            autoFocus
+            value={editingPriorityValue}
+            onChange={(event) => onEditingPriorityValueChange(event.target.value)}
+            onBlur={onSaveEditedPriority}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onSaveEditedPriority();
+              }
+            }}
+            className="min-w-[160px] rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-xs font-normal text-[#1F2933] focus:outline-none focus:ring-2 focus:ring-[#fde6d7]"
+            aria-label="Edit priority label"
+          />
+        ) : (
+          <span className="truncate font-medium text-[#111827]">{rule.label}</span>
+        )}
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1.5 text-xs">
+        <label
+          className="flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-[#F3E6D9] bg-white"
+          aria-label={`Change color for ${rule.label}`}
+        >
+          <input
+            type="color"
+            value={getCategoryColorById(categories, getCategoryIdForPriority(rule.id))}
+            onChange={(event) =>
+              setUserCategoryColor(getCategoryIdForPriority(rule.id), event.target.value)
+            }
+            className="h-10 w-10 cursor-pointer border-0 bg-transparent p-0"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => onStartEditingPriority(rule)}
+          className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b]"
+          aria-label="Edit priority"
+        >
+          <span className="material-symbols-outlined text-[16px]">edit</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onRemovePriority(rule.id)}
+          className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b]"
+          aria-label="Delete priority"
+        >
+          <span className="material-symbols-outlined text-[16px]">delete</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
 
@@ -51,6 +159,7 @@ const SettingsPage: React.FC = () => {
     null,
   );
   const [editingPriorityValue, setEditingPriorityValue] = useState<string>("");
+  const [dragId, setDragId] = useState<number | null>(null);
 
   // Persist priorities to localStorage whenever they change (reorder, add, remove, edit).
   useEffect(() => {
@@ -59,26 +168,6 @@ const SettingsPage: React.FC = () => {
 
   // Connect-email modal: user can add Gmail/Outlook etc.; backend will authenticate and read.
   const [showConnectModal, setShowConnectModal] = useState(false);
-
-  /**
-   * Move a priority one position up or down in the list.
-   * This directly controls the order in which AI will apply rules.
-   */
-  const movePriority = (id: number, direction: "up" | "down") => {
-    setPriorities((previous) => {
-      const index = previous.findIndex((item) => item.id === id);
-      if (index === -1) return previous;
-
-      const swapWith = direction === "up" ? index - 1 : index + 1;
-      if (swapWith < 0 || swapWith >= previous.length) return previous;
-
-      const next = [...previous];
-      const temp = next[index];
-      next[index] = next[swapWith];
-      next[swapWith] = temp;
-      return next;
-    });
-  };
 
   /**
    * Remove a priority rule entirely.
@@ -145,6 +234,36 @@ const SettingsPage: React.FC = () => {
   const handleLogout = async () => {
     await Promise.all([removeToken("google"), removeToken("microsoft")]);
     navigate("/login");
+  };
+
+  const handlePriorityDragStart = (id: number, event: React.DragEvent<HTMLDivElement>) => {
+    setDragId(id);
+    const img = new Image();
+    img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+    event.dataTransfer.setDragImage(img, 0, 0);
+    event.dataTransfer.effectAllowed = "move";
+  };
+
+  const handlePriorityDragOver = (overId: number, event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (dragId === null || dragId === overId) return;
+
+    setPriorities((previous) => {
+      const oldIndex = previous.findIndex((item) => item.id === dragId);
+      const newIndex = previous.findIndex((item) => item.id === overId);
+
+      if (oldIndex === -1 || newIndex === -1) return previous;
+
+      const next = [...previous];
+      const [moved] = next.splice(oldIndex, 1);
+      next.splice(newIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const handlePriorityDragEnd = () => {
+    setDragId(null);
   };
 
   return (
@@ -282,101 +401,24 @@ const SettingsPage: React.FC = () => {
                 </div>
 
                 <div className="mt-3 space-y-2">
-                  {priorities.map((rule, index) => {
-                    const isEditing = editingPriorityId === rule.id;
-
-                    return (
-                      <div
-                        key={rule.id}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span className="text-xs font-semibold text-[#9CA3AF]">
-                            {index + 1}.
-                          </span>
-
-                          {isEditing ? (
-                            <input
-                              autoFocus
-                              value={editingPriorityValue}
-                              onChange={(event) =>
-                                setEditingPriorityValue(event.target.value)
-                              }
-                              onBlur={saveEditedPriority}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  saveEditedPriority();
-                                }
-                              }}
-                              className="min-w-[160px] rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-xs font-normal text-[#1F2933] focus:outline-none focus:ring-2 focus:ring-[#fde6d7]"
-                              aria-label="Edit priority label"
-                            />
-                          ) : (
-                            <span className="truncate font-medium text-[#111827]">
-                              {rule.label}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-1.5 text-xs">
-                          <label
-                            className="flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-[#F3E6D9] bg-white"
-                            aria-label={`Change color for ${rule.label}`}
-                          >
-                            <input
-                              type="color"
-                              value={getCategoryColorById(
-                                categories,
-                                getCategoryIdForPriority(rule.id),
-                              )}
-                              onChange={(event) =>
-                                setUserCategoryColor(
-                                  getCategoryIdForPriority(rule.id),
-                                  event.target.value,
-                                )
-                              }
-                              className="h-10 w-10 cursor-pointer border-0 bg-transparent p-0"
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => movePriority(rule.id, "up")}
-                            disabled={index === 0}
-                            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b] disabled:opacity-40"
-                            aria-label="Move priority up"
-                          >
-                            ▲
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => movePriority(rule.id, "down")}
-                            disabled={index === priorities.length - 1}
-                            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b] disabled:opacity-40"
-                            aria-label="Move priority down"
-                          >
-                            ▼
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => startEditingPriority(rule)}
-                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b]"
-                            aria-label="Edit priority"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">edit</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removePriority(rule.id)}
-                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b]"
-                            aria-label="Delete priority"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">delete</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {priorities.map((rule, index) => (
+                    <SortablePriorityRow
+                      key={rule.id}
+                      rule={rule}
+                      index={index}
+                      isEditing={editingPriorityId === rule.id}
+                      isDragging={dragId === rule.id}
+                      editingPriorityValue={editingPriorityValue}
+                      onEditingPriorityValueChange={setEditingPriorityValue}
+                      onSaveEditedPriority={saveEditedPriority}
+                      onStartEditingPriority={startEditingPriority}
+                      onRemovePriority={removePriority}
+                      onDragStart={handlePriorityDragStart}
+                      onDragOver={handlePriorityDragOver}
+                      onDragEnd={handlePriorityDragEnd}
+                      categories={categories}
+                    />
+                  ))}
                 </div>
               </div>
             </section>
