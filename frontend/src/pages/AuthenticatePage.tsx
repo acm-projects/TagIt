@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import PageTopBar from "../components/PageTopBar";
 import gmailLogo from "../assets/Logos/gmail.png";
 import outlookLogo from "../assets/Logos/outlook.png";
+import authenticationBg from "../assets/AuthenticationBg.png";
 
 const AuthenticatePage: React.FC = () => {
   const navigate = useNavigate();
@@ -50,7 +51,14 @@ const AuthenticatePage: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-screen bg-[#F9F8F6] p-4">
+    <div
+      className="relative min-h-screen bg-[#F9F8F6] p-4"
+      style={{
+        backgroundImage: `url(${authenticationBg})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
       <PageTopBar back={{ label: "Back", useBrowserBack: true }} />
 
       <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center px-10 pt-16">

@@ -1,12 +1,20 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import PageTopBar from "../components/PageTopBar";
+import authenticationBg from "../assets/AuthenticationBg.png";
 
 const SignupPage: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="relative min-h-screen bg-[#F9F8F6] p-4">
+    <div
+      className="relative min-h-screen bg-[#F9F8F6] p-4"
+      style={{
+        backgroundImage: `url(${authenticationBg})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
       <PageTopBar back={{ label: "Back", to: "/" }} />
       <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center px-10 pt-16">
         <h1 className="mb-10 font-instrument text-5xl font-normal text-[#1F2933]">
@@ -49,7 +57,7 @@ const SignupPage: React.FC = () => {
         </div>
 
         <button
-          className="mt-10 w-56 rounded-full bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_6px_14px_rgba(249,171,123,0.35)] transition-colors hover:bg-[#f0a068]"
+          className="mt-10 w-full max-w-md rounded-full bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_6px_14px_rgba(249,171,123,0.35)] transition-colors transition-transform duration-200 hover:scale-[1.02] hover:bg-[#f0a068]"
           onClick={() => navigate("/authenticate")}
         >
           Create Account
@@ -59,7 +67,7 @@ const SignupPage: React.FC = () => {
           className="mt-6 text-base text-[#1F2933] underline decoration-[#EFE7DC] underline-offset-2 transition-colors hover:text-[#f9ab7b]"
           onClick={() => navigate("/login")}
         >
-          Log in
+          Back again? Log in
         </button>
       </div>
     </div>
