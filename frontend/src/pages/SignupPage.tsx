@@ -47,8 +47,8 @@ const SignupPage: React.FC = () => {
 
       if (response.data?.token) {
         await storeToken(response.data.token);
-        // Navigate to setup page for user to configure preferences
-        navigate("/setup");
+        // Navigate to authenticate page first, then setup
+        navigate("/authenticate", { state: { fromSignup: true } });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");

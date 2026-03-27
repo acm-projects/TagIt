@@ -11,16 +11,33 @@ require('dotenv').config();
 const {
     CLIENT_ID,
     CLIENT_SECRET,
-    REDIRECT_URI = 'http://localhost:3000/oauth2callback',
+    // Must match the redirect URI registered in Google Cloud Console.
+    // For Chrome extensions using launchWebAuthFlow, this must be:
+    //   https://<extension-id>.chromiumapp.org/oauth2callback
+    // Set CHROME_EXTENSION_ID in your .env file.
+    CHROME_EXTENSION_ID,
     // Microsoft / Outlook
     MS_CLIENT_ID,
     MS_CLIENT_SECRET,
     MS_TENANT_ID = 'common',
-    MS_REDIRECT_URI = 'http://localhost:3000/auth/microsoft/callback',
     FLASK_API_URL = 'http://localhost:8000/api/emails',
     FLASK_BASE_URL = 'http://localhost:8000',
     PORT = 3000,
 } = process.env;
+
+if (!CHROME_EXTENSION_ID) {
+    console.warn('[WARN] CHROME_EXTENSION_ID not set in .env — OAuth will fail until you add it. Find it at chrome://extensions.');
+}
+
+// Chrome intercepts these redirect URIs via launchWebAuthFlow — they never hit this server.
+// Both must also be registered in Google Cloud Console / Azure AD.
+const REDIRECT_URI = CHROME_EXTENSION_ID
+    ? `https://${CHROME_EXTENSION_ID}.chromiumapp.org/oauth2callback`
+    : 'http://localhost:3000/oauth2callback'; // fallback so server boots without the ID
+
+const MS_REDIRECT_URI = CHROME_EXTENSION_ID
+    ? `https://${CHROME_EXTENSION_ID}.chromiumapp.org/auth/microsoft/callback`
+    : 'http://localhost:3000/auth/microsoft/callback';
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
     console.error('Please set CLIENT_ID and CLIENT_SECRET in environment.');
@@ -229,22 +246,72 @@ app.get('/auth/url', requireAuth, (req, res) => {
     res.json({ url });
 });
 
-app.get('/oauth2callback', async (req, res) => {
-    const { code, state: userToken } = req.query;
-    if (!code) return res.status(400).send('Missing code');
-    if (!userToken) return res.status(400).send('Missing state/userToken');
+/**
+ * POST /auth/google/exchange
+ * Called by the Chrome extension background script after launchWebAuthFlow
+ * resolves. The extension passes the full redirect URL it received; this
+ * endpoint extracts the code, exchanges it for tokens, and stores them.
+ *
+ * Why POST instead of a browser redirect?
+ * With chromiumapp.org as the redirect URI, Google sends the browser to
+ * that URL — launchWebAuthFlow intercepts it and gives the URL back to the
+ * extension. The server never receives a browser request; the extension must
+ * forward the URL here manually.
+ */
+app.post('/auth/google/exchange', requireAuth, async (req, res) => {
+    const { redirectUrl } = req.body;
+    if (!redirectUrl) return res.status(400).json({ error: 'Missing redirectUrl' });
+
+    let code;
+    try {
+        const parsed = new URL(redirectUrl);
+        const error = parsed.searchParams.get('error');
+        if (error) {
+            return res.status(400).json({ error: `OAuth denied: ${error}` });
+        }
+        code = parsed.searchParams.get('code');
+    } catch {
+        return res.status(400).json({ error: 'Invalid redirectUrl' });
+    }
+
+    if (!code) return res.status(400).json({ error: 'Missing code in redirectUrl' });
 
     try {
         const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
         const { tokens } = await oauth2Client.getToken(code);
 
+        const tokensToSave = {};
+
         if (tokens.refresh_token) {
-            await saveUserOAuthTokens(userToken, { googleRefreshToken: tokens.refresh_token });
+            tokensToSave.googleRefreshToken = tokens.refresh_token;
         }
 
-        res.send(successHtml());
+        // Fetch and store the user's Google email
+        let email = null;
+        if (tokens.access_token) {
+            try {
+                const userInfoResp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                    headers: { Authorization: `Bearer ${tokens.access_token}` },
+                });
+                if (userInfoResp.ok) {
+                    const userInfo = await userInfoResp.json();
+                    if (userInfo.email) {
+                        tokensToSave.googleEmail = userInfo.email;
+                        email = userInfo.email;
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch Google user email:', err);
+            }
+        }
+
+        if (Object.keys(tokensToSave).length > 0) {
+            await saveUserOAuthTokens(req.userToken, tokensToSave);
+        }
+
+        res.json({ success: true, email });
     } catch (err) {
-        console.error(err);
+        console.error('Google token exchange error:', err);
         res.status(500).json({ error: 'Failed to exchange code for tokens' });
     }
 });
@@ -465,11 +532,29 @@ app.get('/auth/microsoft/url', requireAuth, (req, res) => {
     res.json({ url: `${MS_AUTH_URL_BASE}?${params.toString()}` });
 });
 
-app.get('/auth/microsoft/callback', async (req, res) => {
-    const { code, state: userToken, error, error_description } = req.query;
-    if (error) return res.status(400).send(`Auth error: ${error_description || error}`);
-    if (!code) return res.status(400).send('Missing code');
-    if (!userToken) return res.status(400).send('Missing state/userToken');
+/**
+ * POST /auth/microsoft/exchange
+ * Same pattern as /auth/google/exchange — the Chrome extension calls this
+ * after launchWebAuthFlow resolves with the chromiumapp.org redirect URL.
+ */
+app.post('/auth/microsoft/exchange', requireAuth, async (req, res) => {
+    const { redirectUrl } = req.body;
+    if (!redirectUrl) return res.status(400).json({ error: 'Missing redirectUrl' });
+
+    let code;
+    try {
+        const parsed = new URL(redirectUrl);
+        const error = parsed.searchParams.get('error');
+        if (error) {
+            const desc = parsed.searchParams.get('error_description') || error;
+            return res.status(400).json({ error: `OAuth denied: ${desc}` });
+        }
+        code = parsed.searchParams.get('code');
+    } catch {
+        return res.status(400).json({ error: 'Invalid redirectUrl' });
+    }
+
+    if (!code) return res.status(400).json({ error: 'Missing code in redirectUrl' });
 
     const params = new URLSearchParams({
         client_id: MS_CLIENT_ID,
@@ -489,19 +574,40 @@ app.get('/auth/microsoft/callback', async (req, res) => {
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error_description || data.error || 'Token exchange failed');
 
+        const tokensToSave = {};
         if (data.refresh_token) {
-            await saveUserOAuthTokens(userToken, { msRefreshToken: data.refresh_token });
+            tokensToSave.msRefreshToken = data.refresh_token;
         }
 
-        // Cache the access token for this user right away
-        msAccessTokenCache[userToken] = {
-            accessToken: data.access_token,
-            expiry: Date.now() + (data.expires_in || 3600) * 1000,
-        };
+        let email = null;
+        if (data.access_token) {
+            // Cache the access token for this user right away
+            msAccessTokenCache[req.userToken] = {
+                accessToken: data.access_token,
+                expiry: Date.now() + (data.expires_in || 3600) * 1000,
+            };
 
-        res.send(successHtml());
+            try {
+                const graphResp = await fetch('https://graph.microsoft.com/v1.0/me', {
+                    headers: { Authorization: `Bearer ${data.access_token}` },
+                });
+                if (graphResp.ok) {
+                    const userInfo = await graphResp.json();
+                    email = userInfo.userPrincipalName || userInfo.mail || null;
+                    if (email) tokensToSave.msEmail = email;
+                }
+            } catch (err) {
+                console.error('Failed to fetch Microsoft user email:', err);
+            }
+        }
+
+        if (Object.keys(tokensToSave).length > 0) {
+            await saveUserOAuthTokens(req.userToken, tokensToSave);
+        }
+
+        res.json({ success: true, email });
     } catch (err) {
-        console.error(err);
+        console.error('Microsoft token exchange error:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -514,6 +620,25 @@ app.get('/auth/microsoft/status', requireAuth, async (req, res) => {
         res.json({ authenticated: !!tokens.msRefreshToken || hasLiveToken });
     } catch {
         res.json({ authenticated: false });
+    }
+});
+
+// Endpoints to retrieve authenticated emails after OAuth
+app.get('/auth/google-email', requireAuth, async (req, res) => {
+    try {
+        const tokens = await getUserOAuthTokens(req.userToken);
+        res.json({ email: tokens.googleEmail || null });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/auth/microsoft-email', requireAuth, async (req, res) => {
+    try {
+        const tokens = await getUserOAuthTokens(req.userToken);
+        res.json({ email: tokens.msEmail || null });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

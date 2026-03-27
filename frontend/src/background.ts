@@ -5,15 +5,12 @@
 
 import {
   buildGoogleAuthUrl,
-  fetchGoogleUserEmail,
-  parseTokenFromRedirect,
+  exchangeGoogleCode,
 } from "./services/auth/googleOAuth";
 import {
   buildMicrosoftAuthUrl,
-  exchangeMicrosoftCodeForTokens,
-  fetchMicrosoftUserEmail,
+  exchangeMicrosoftCode,
 } from "./services/auth/microsoftOAuth";
-import { saveToken } from "./services/auth/tokenStorage";
 
 const enableSidePanelOnClick = async () => {
   try {
@@ -76,13 +73,15 @@ chrome.runtime.onMessage.addListener(
 );
 
 async function runGoogleOAuth(): Promise<{ email: string }> {
-  const url = buildGoogleAuthUrl();
+  console.log("[Google OAuth] Starting OAuth flow");
+  const url = await buildGoogleAuthUrl();
 
   const redirectUrl = await new Promise<string>((resolve, reject) => {
     chrome.identity.launchWebAuthFlow(
       { url, interactive: true },
       (callbackUrl?: string) => {
         if (chrome.runtime.lastError) {
+          console.error("[Google OAuth] Chrome runtime error:", chrome.runtime.lastError);
           reject(new Error(chrome.runtime.lastError.message ?? "OAuth cancelled"));
           return;
         }
@@ -90,30 +89,30 @@ async function runGoogleOAuth(): Promise<{ email: string }> {
           reject(new Error("OAuth flow did not return a URL"));
           return;
         }
+        console.log("[Google OAuth] Received callback URL");
         resolve(callbackUrl);
       }
     );
   });
 
-  const accessToken = parseTokenFromRedirect(redirectUrl);
-  const email = await fetchGoogleUserEmail(accessToken);
-
-  await saveToken("google", {
-    access_token: accessToken,
-    email,
-  });
-
+  // POST the redirect URL to the Node backend — it extracts the code,
+  // exchanges it for tokens, stores the refresh token, and returns the email.
+  console.log("[Google OAuth] Exchanging code with backend");
+  const email = await exchangeGoogleCode(redirectUrl);
+  console.log("[Google OAuth] Success, email:", email);
   return { email };
 }
 
 async function runMicrosoftOAuth(): Promise<{ email: string }> {
-  const { url, codeVerifier } = await buildMicrosoftAuthUrl();
+  console.log("[Microsoft OAuth] Starting OAuth flow");
+  const { url } = await buildMicrosoftAuthUrl();
 
   const redirectUrl = await new Promise<string>((resolve, reject) => {
     chrome.identity.launchWebAuthFlow(
       { url, interactive: true },
       (callbackUrl?: string) => {
         if (chrome.runtime.lastError) {
+          console.error("[Microsoft OAuth] Chrome runtime error:", chrome.runtime.lastError);
           reject(new Error(chrome.runtime.lastError.message ?? "OAuth cancelled"));
           return;
         }
@@ -121,26 +120,15 @@ async function runMicrosoftOAuth(): Promise<{ email: string }> {
           reject(new Error("OAuth flow did not return a URL"));
           return;
         }
+        console.log("[Microsoft OAuth] Received callback URL");
         resolve(callbackUrl);
       }
     );
   });
 
-  const parsed = new URL(redirectUrl);
-  const code = parsed.searchParams.get("code") ?? new URLSearchParams(parsed.hash?.slice(1) || "").get("code");
-  if (!code) {
-    const error = parsed.searchParams.get("error") ?? parsed.searchParams.get("error_description") ?? "No code in redirect";
-    throw new Error(`Microsoft OAuth: ${error}`);
-  }
-
-  const tokens = await exchangeMicrosoftCodeForTokens(code, codeVerifier);
-  const email = await fetchMicrosoftUserEmail(tokens.access_token);
-
-  await saveToken("microsoft", {
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
-    email,
-  });
-
+  // POST the redirect URL to the Node backend — same pattern as Google.
+  console.log("[Microsoft OAuth] Exchanging code with backend");
+  const email = await exchangeMicrosoftCode(redirectUrl);
+  console.log("[Microsoft OAuth] Success, email:", email);
   return { email };
 }

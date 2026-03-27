@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 type Priority = {
   id: string;
@@ -16,8 +17,10 @@ const initialPriorities: Priority[] = [
 ];
 
 const SetupPage: React.FC = () => {
+  const navigate = useNavigate();
   const [priorities, setPriorities] = useState<Priority[]>(initialPriorities);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const handleDragStart = (id: string) => setDragId(id);
 
@@ -36,6 +39,19 @@ const SetupPage: React.FC = () => {
   };
 
   const handleDrop = () => setDragId(null);
+  
+  const handleFinishSetup = async () => {
+    setLoading(true);
+    try {
+      // TODO: Save priorities to backend if needed
+      // For now, just navigate to the main dashboard
+      navigate("/today");
+    } catch (err) {
+      console.error("Error finishing setup:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-full bg-[#F8E7DD] p-4">
@@ -74,8 +90,12 @@ const SetupPage: React.FC = () => {
               + Add Priorities
             </button>
 
-            <button className="mx-auto block w-52 rounded-md bg-[#A34712] py-3 text-base font-medium text-white">
-              Finish setup
+            <button
+              onClick={handleFinishSetup}
+              disabled={loading}
+              className="mx-auto block w-52 rounded-md bg-[#A34712] py-3 text-base font-medium text-white transition-opacity disabled:opacity-50"
+            >
+              {loading ? "Setting up..." : "Finish setup"}
             </button>
           </div>
         </div>
