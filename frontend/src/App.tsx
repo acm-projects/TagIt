@@ -13,6 +13,7 @@ import SettingsPage from "./pages/SettingsPage";
 import AuthenticatePage from "./pages/AuthenticatePage";
 import ConnectedEmailsPage from "./pages/ConnectedEmailsPage";
 import SetupPage from "./pages/SetupPage";
+import MascotPage from "./pages/MascotPage";
 
 const App: React.FC = () => {
   return (
@@ -30,6 +31,7 @@ const App: React.FC = () => {
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/tasks" element={<TasksPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/mascot" element={<MascotPage />} />
       </Routes>
       </DayFilterProvider>
     </HashRouter>
