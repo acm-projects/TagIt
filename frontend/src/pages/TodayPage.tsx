@@ -248,7 +248,7 @@ const TodayPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="mt-3">
+                <div className="mt-3 pl-2.5 sm:pl-3.5">
                   {importantEmails.length === 0 ? (
                     <div className="flex items-center justify-center gap-2 py-3 text-sm font-semibold text-[#6B7280]">
                       <span className="material-symbols-outlined text-base text-[#34d399]">task_alt</span>
@@ -330,7 +330,7 @@ const TodayPage: React.FC = () => {
                   <span>Upcoming Events</span>
                 </div>
 
-                <div className="mt-3 space-y-1">
+                <div className="mt-3 space-y-1 pl-2.5 sm:pl-3.5">
                   {EVENTS.map((event, index) => {
                     return (
                       <div
