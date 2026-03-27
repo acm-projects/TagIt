@@ -9,6 +9,7 @@ import {
 // TEMP: remove after backend integration. Hardcoded color map for visual check.
 import { getTempCategoryColor } from "../services/tempCategoryColors";
 import filterIcon from "../assets/page_buttons/filter.png";
+import { getCategoryColorById, useUserCategories,} from "../services/categories";
 
 /**
  * Important email preview shown on Today.
@@ -87,6 +88,7 @@ const TodayPage: React.FC = () => {
   const [toast, setToast] = useState<{ email: ImportantEmailPreview; index: number } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
+  const categories = useUserCategories();
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -213,6 +215,12 @@ const TodayPage: React.FC = () => {
   const formatCategoryLabel = (id?: string) => {
     if (!id) return "Uncategorized";
     return id.charAt(0).toUpperCase() + id.slice(1);
+  const resetImportantEmails = () => {
+    setImportantEmails([...IMPORTANT_EMAILS_FILLER]);
+    setSlidingEmailIds(new Set());
+    setClosingEmailIds(new Set());
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(null);
   };
 
   return (
@@ -349,9 +357,9 @@ const TodayPage: React.FC = () => {
                         >
                           <div
                             aria-hidden="true"
-                            className="color-line h-full w-[4px] self-stretch rounded-full"
+                            className="color-line h-12 w-[6px] self-center rounded-full"
                             style={{
-                              backgroundColor: getTempCategoryColor(mail.tagCategoryId) ?? DEFAULT_COLOR,
+                              backgroundColor: getCategoryColorById(categories, mail.tagCategoryId),
                             }}
                           />
 
@@ -413,8 +421,8 @@ const TodayPage: React.FC = () => {
                       >
                         <div
                           aria-hidden="true"
-                          className="color-line h-full w-[4px] self-stretch rounded-full"
-                          style={{ backgroundColor: getTempCategoryColor(event.tagCategoryId) ?? DEFAULT_COLOR }}
+                          className="color-line h-10 w-[6px] self-center rounded-full"
+                          style={{ backgroundColor: getCategoryColorById(categories, event.tagCategoryId) }}
                         />
 
                         <div className="flex min-w-0 flex-1 flex-col gap-1 text-left">
