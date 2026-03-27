@@ -27,7 +27,7 @@ def make_token(username: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
-def get_username_from_request() -> str | None:
+def get_username_from_request():
     """Extract and verify the username from the Bearer token in the request."""
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.removeprefix("Bearer ").strip()
