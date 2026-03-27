@@ -10,6 +10,8 @@ import {
 import WeekHeader from "../components/WeekHeader";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
+// TEMP: remove after backend integration. Hardcoded color map for visual check.
+import { getTempCategoryColor } from "../services/tempCategoryColors";
 
 type CalendarEvent = {
   title: string;
@@ -19,6 +21,7 @@ type CalendarEvent = {
   day2?: string;
   time: string;
   source: "google" | "outlook";
+  tagCategoryId?: string;
 };
 
 const CALENDAR_EVENTS: CalendarEvent[] = [

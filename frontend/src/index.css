@@ -26,3 +26,30 @@
 .app-main-scroll::-webkit-scrollbar {
   display: none;
 }
+
+.tagged-item {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.color-line {
+  width: 4px;
+  min-height: 24px;
+  margin: 6px 8px 6px 0;
+  border-radius: 2px;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.today-page .page-header .material-symbols-outlined {
+  font-size: 36px;
+}
+
+.today-page .page-header .text-\[22px\] {
+  font-size: 26px;
+}
+
+.today-page .page-header .text-\[14px\] {
+  font-size: 15px;
+}

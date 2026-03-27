@@ -6,6 +6,8 @@ import {
   loadTasks,
   subscribeToTaskUpdates,
 } from "../services/taskProgress";
+// TEMP: remove after backend integration. Hardcoded color map for visual check.
+import { getTempCategoryColor } from "../services/tempCategoryColors";
 
 /**
  * Important email preview shown on Today.
@@ -18,6 +20,7 @@ type ImportantEmailPreview = {
   tone: "urgent" | "soon" | "done";
   summary: string;
   priority?: "urgent";
+  tagCategoryId?: string;
 };
 
 /**
@@ -27,6 +30,7 @@ type ImportantEmailPreview = {
 type TodayEvent = {
   time: string;
   title: string;
+  tagCategoryId?: string;
 };
 
 const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
@@ -37,6 +41,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     tone: "urgent",
     summary: "Recruiter requested availability for next round; check attached timeline and confirm slots.",
     priority: "urgent",
+    tagCategoryId: "urgent",
   },
   {
     id: "mail-2",
@@ -44,6 +49,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     source: "gmail",
     tone: "soon",
     summary: "Agenda covers officer elections, budget approval, and venue change for next semester events.",
+    tagCategoryId: "personal",
   },
   {
     id: "mail-3",
@@ -51,6 +57,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     source: "gmail",
     tone: "done",
     summary: "Billing portal shows outstanding balance due Friday; late fee applies after 5 PM CST.",
+    tagCategoryId: "school",
   },
   {
     id: "mail-4",
@@ -59,13 +66,14 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     tone: "soon",
     summary: "Project checkpoint moved to next Monday; submit design doc draft before lab session.",
     priority: "urgent",
+    tagCategoryId: "work",
   },
 ];
 
 const EVENTS: TodayEvent[] = [
-  { time: "03:00 - 03:30", title: "Exam Prep" },
-  { time: "04:00 - 05:30", title: "Government Class" },
-  { time: "08:30 - 10:00", title: "ACM Meeting @ SLC" },
+  { time: "03:00 - 03:30", title: "Exam Prep", tagCategoryId: "school" },
+  { time: "04:00 - 05:30", title: "Government Class", tagCategoryId: "school" },
+  { time: "08:30 - 10:00", title: "ACM Meeting @ SLC", tagCategoryId: "work" },
 ];
 
 const TodayPage: React.FC = () => {
@@ -97,6 +105,8 @@ const TodayPage: React.FC = () => {
     // Placeholder until mail detail/open workflow is wired.
   };
 
+  const DEFAULT_COLOR = "#E5E7EB"; // TEMP: pastel fallback
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
@@ -105,17 +115,17 @@ const TodayPage: React.FC = () => {
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
             <section className="w-full max-w-4xl">
-              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-4 py-2 shadow-[0_6px_14px_rgba(15,23,42,0.05)]">
+                <div className="mt-2 flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
                   <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">
                     workspace_premium
                   </span>
                   <span>Weekly Progress</span>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between text-xs text-[#6B7280]">
-                  <span>Tasks Completed</span>
-                  <span className="text-sm">
+                <div className="mt-0 flex items-center justify-end gap-2 text-xs text-[#6B7280]">
+                  <span className="text-right">Tasks Completed</span>
+                  <span className="text-sm text-right">
                     <span className="font-semibold text-[#f9ab7b]">
                       {progress.completedTasks}
                     </span>
@@ -123,7 +133,7 @@ const TodayPage: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="mt-3 h-2 w-full rounded-full bg-[#fde6d7]">
+                <div className="mt-2 h-2 w-full rounded-full bg-[#fde6d7]">
                   <div
                     className="h-2 rounded-full bg-[#f9ab7b] transition-[width] duration-200 ease-out"
                     style={{ width: `${progress.progressPercentage}%` }}
@@ -146,12 +156,15 @@ const TodayPage: React.FC = () => {
                     return (
                       <div
                         key={mail.id}
-                        className="group flex items-start gap-3 py-2"
+                        className="tagged-item group flex items-start gap-3 py-2"
                         style={{ borderBottom: index === importantEmails.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
                       >
-                        <span
+                        <div
                           aria-hidden="true"
-                          className="mt-0.5 h-full w-1 self-stretch rounded-full bg-[#f9ab7b]"
+                          className="color-line h-full w-[4px] self-stretch rounded-full"
+                          style={{
+                            backgroundColor: getTempCategoryColor(mail.tagCategoryId) ?? DEFAULT_COLOR,
+                          }}
                         />
 
                         <button
@@ -163,13 +176,6 @@ const TodayPage: React.FC = () => {
                             <span className="text-sm font-semibold text-[#111827]">
                               {mail.sender}
                             </span>
-                            {mail.priority && (
-                              <span
-                                className="rounded-full border border-[#fecdd3] bg-[#fee2e2] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#ef4444]"
-                              >
-                                Urgent
-                              </span>
-                            )}
                           </div>
                           <p className="w-full truncate text-[12px] text-[#6B7280]">
                             {mail.summary}
@@ -208,31 +214,31 @@ const TodayPage: React.FC = () => {
                   <span>Upcoming Events</span>
                 </div>
 
-                <div className="mt-3 space-y-3">
+                <div className="mt-3 space-y-1">
                   {EVENTS.map((event, index) => {
-                    const chipStyles =
-                      index === 0
-                        ? "bg-[#DBEAFE] text-[#1D4ED8]"
-                        : index === 1
-                        ? "bg-[#fde6d7] text-[#f9ab7b]"
-                        : "bg-[#E7F6EA] text-[#22A06B]";
-
                     return (
                       <div
                         key={event.title}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
+                        className="tagged-item group flex items-start gap-3 py-1 text-sm text-[#1F2933]"
+                        style={{ borderBottom: index === EVENTS.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
                       >
-                        <div className="flex flex-1 items-center gap-3 sm:gap-4">
-                          <span className="text-[14px] font-semibold text-[#111827]">
-                            {event.title}
-                          </span>
-                          <span className="text-xs font-medium text-[#6B7280] whitespace-nowrap">
-                            {event.time}
-                          </span>
+                        <div
+                          aria-hidden="true"
+                          className="color-line h-full w-[4px] self-stretch rounded-full"
+                          style={{ backgroundColor: getTempCategoryColor(event.tagCategoryId) ?? DEFAULT_COLOR }}
+                        />
+
+                        <div className="flex min-w-0 flex-1 flex-col gap-1 text-left">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-[#111827]">
+                              {event.title}
+                            </span>
+                            <span className="text-xs font-medium text-[#6B7280] whitespace-nowrap">
+                              {event.time}
+                            </span>
+                          </div>
                         </div>
-                        <span className={`rounded-full px-3 py-1 text-[11px] font-medium ${chipStyles}`}>
-                          {index === 0 ? "meeting" : index === 1 ? "presentation" : "workshop"}
-                        </span>
+
                       </div>
                     );
                   })}
