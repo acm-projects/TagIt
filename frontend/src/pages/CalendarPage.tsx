@@ -33,7 +33,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     day1: "Sat",
     time: "07:00 - 10:00",
     source: "google",
-    tagCategoryId: "personal",
+    tagCategoryId: "priority-1",
   },
   {
     title: "WeHack - Hackathon",
@@ -43,7 +43,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     day2: "Sat",
     time: "09:00 - 24:00\n00:00 - 05:30",
     source: "outlook",
-    tagCategoryId: "work",
+    tagCategoryId: "priority-3",
   },
   {
     title: "Resume Review Drop-In",
@@ -51,7 +51,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     day1: "Tue",
     time: "01:30 - 02:30",
     source: "google",
-    tagCategoryId: "work",
+    tagCategoryId: "priority-3",
   },
   {
     title: "Systems Project Checkpoint",
@@ -59,7 +59,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     day1: "Thu",
     time: "11:00 - 12:15",
     source: "outlook",
-    tagCategoryId: "school",
+    tagCategoryId: "priority-2",
   },
 ];
 

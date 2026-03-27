@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react";
+import {
+  getCategoryIdForPriority,
+  loadUserPriorities,
+  subscribeToPriorityUpdates,
+  type PriorityRule,
+} from "./priorities";
 
 export type UserCategory = {
   id: string;
   name: string;
-  color: string; // hex code provided by backend
+  color: string;
   isCustom: boolean;
 };
 
@@ -11,123 +17,143 @@ export const DEFAULT_CATEGORY_COLOR = "#E5E7EB";
 
 const STORAGE_KEY = "tagit.user-categories.v1";
 const CATEGORIES_UPDATED_EVENT = "tagit:categories-updated";
-
-// Temporary mock to mimic backend-provided user categories until API wiring lands.
-const DEFAULT_USER_CATEGORIES: UserCategory[] = [
-  { id: "urgent", name: "Urgent", color: "#FEE2E2", isCustom: false },
-  { id: "work", name: "Work", color: "#DBEAFE", isCustom: false },
-  { id: "school", name: "School", color: "#E0F2FE", isCustom: false },
-  { id: "personal", name: "Personal", color: "#FCE7F3", isCustom: false },
-  { id: "side-hustle", name: "Side Hustle", color: "#EDE9FE", isCustom: true },
-];
-
-const BUILT_IN_CATEGORY_IDS = new Set(
-  DEFAULT_USER_CATEGORIES.filter((category) => !category.isCustom).map((category) => category.id),
-);
+const DEFAULT_CATEGORY_PALETTE = ["#FEE2E2", "#DBEAFE", "#E0F2FE", "#FCE7F3", "#EDE9FE"];
 
 const cloneCategories = (categories: UserCategory[]): UserCategory[] =>
   categories.map((category) => ({ ...category }));
 
-const normalizeCategories = (categories: UserCategory[]): UserCategory[] => {
-  const incomingById = new Map(categories.map((category) => [category.id, category]));
-  const normalizedDefaults = DEFAULT_USER_CATEGORIES.map((defaultCategory) => {
-    const incomingCategory = incomingById.get(defaultCategory.id);
-    if (!incomingCategory) {
-      return { ...defaultCategory };
-    }
+const createDefaultCategoriesFromPriorities = (
+  priorities: PriorityRule[],
+): UserCategory[] =>
+  priorities.map((priority, index) => ({
+    id: getCategoryIdForPriority(priority.id),
+    name: priority.label,
+    color: DEFAULT_CATEGORY_PALETTE[index % DEFAULT_CATEGORY_PALETTE.length],
+    isCustom: false,
+  }));
 
-    if (defaultCategory.isCustom) {
-      return { ...incomingCategory };
+const isUserCategoryArray = (value: unknown): value is UserCategory[] => {
+  if (!Array.isArray(value)) return false;
+
+  return value.every((entry) => {
+    if (!entry || typeof entry !== "object") return false;
+
+    const candidate = entry as Partial<UserCategory>;
+    return (
+      typeof candidate.id === "string" &&
+      typeof candidate.name === "string" &&
+      typeof candidate.color === "string" &&
+      typeof candidate.isCustom === "boolean"
+    );
+  });
+};
+
+const readStoredCategories = (): UserCategory[] | null => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed: unknown = JSON.parse(raw);
+    if (!isUserCategoryArray(parsed)) return null;
+
+    return cloneCategories(parsed);
+  } catch {
+    return null;
+  }
+};
+
+const mergeCategoriesWithPriorities = (
+  priorities: PriorityRule[],
+  storedCategories: UserCategory[] | null,
+): UserCategory[] => {
+  const storedById = new Map((storedCategories ?? []).map((category) => [category.id, category]));
+
+  return createDefaultCategoriesFromPriorities(priorities).map((category) => {
+    const storedCategory = storedById.get(category.id);
+    if (!storedCategory) {
+      return category;
     }
 
     return {
-      ...incomingCategory,
-      name: defaultCategory.name,
-      color: defaultCategory.color,
-      isCustom: false,
+      ...category,
+      color: storedCategory.color || category.color,
     };
   });
-
-  const customCategories = categories
-    .filter((category) => !BUILT_IN_CATEGORY_IDS.has(category.id))
-    .map((category) => ({ ...category }));
-
-  return [...normalizedDefaults, ...customCategories];
 };
 
 const dispatchCategoriesUpdated = () => {
   window.dispatchEvent(new Event(CATEGORIES_UPDATED_EVENT));
 };
 
-const readStoredCategories = (): UserCategory[] | null => {
-  if (typeof window === "undefined") return cloneCategories(DEFAULT_USER_CATEGORIES);
-
-  const storedValue = window.localStorage.getItem(STORAGE_KEY);
-  if (!storedValue) return null;
-
+const writeStoredCategories = (categories: UserCategory[]) => {
   try {
-    const parsed = JSON.parse(storedValue);
-    if (!Array.isArray(parsed)) return null;
-
-    return parsed
-      .filter(
-        (item): item is UserCategory =>
-          item &&
-          typeof item.id === "string" &&
-          typeof item.name === "string" &&
-          typeof item.color === "string" &&
-          typeof item.isCustom === "boolean",
-      )
-      .map((category) => ({ ...category }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(categories));
+    dispatchCategoriesUpdated();
   } catch {
-    return null;
+    // Ignore storage errors so the UI remains usable.
   }
 };
 
-const writeStoredCategories = (categories: UserCategory[]) => {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeCategories(categories)));
-  dispatchCategoriesUpdated();
-};
-
 export const getDefaultUserCategories = (): UserCategory[] =>
-  cloneCategories(DEFAULT_USER_CATEGORIES);
+  createDefaultCategoriesFromPriorities(loadUserPriorities());
 
-/**
- * Acts like a backend fetch today. Replace the caller with a real API response later,
- * then pass that response into `setUserCategories` so every page updates consistently.
- */
 export const getUserCategories = async (): Promise<UserCategory[]> => {
-  return normalizeCategories(readStoredCategories() ?? getDefaultUserCategories());
+  return mergeCategoriesWithPriorities(loadUserPriorities(), readStoredCategories());
 };
 
 export const setUserCategories = (categories: UserCategory[]): void => {
   writeStoredCategories(cloneCategories(categories));
 };
 
+export const setUserCategoryColor = (categoryId: string, color: string): void => {
+  const nextCategories = mergeCategoriesWithPriorities(loadUserPriorities(), readStoredCategories()).map(
+    (category) =>
+      category.id === categoryId
+        ? {
+            ...category,
+            color,
+          }
+        : category,
+  );
+
+  setUserCategories(nextCategories);
+};
+
 export const syncUserCategoriesFromBackend = async (
   categoriesFromBackend: UserCategory[],
 ): Promise<UserCategory[]> => {
-  const nextCategories = cloneCategories(categoriesFromBackend);
+  const currentCategories = await getUserCategories();
+  const backendById = new Map(categoriesFromBackend.map((category) => [category.id, category]));
+
+  const nextCategories = currentCategories.map((category) => {
+    const backendCategory = backendById.get(category.id);
+    if (!backendCategory) {
+      return category;
+    }
+
+    return {
+      ...category,
+      color: backendCategory.color,
+    };
+  });
+
   setUserCategories(nextCategories);
   return nextCategories;
 };
 
 export const subscribeToCategoryUpdates = (listener: () => void): (() => void) => {
-  if (typeof window === "undefined") {
-    return () => {};
-  }
-
-  const handleUpdate = () => {
-    listener();
+  const storageListener = (event: StorageEvent) => {
+    if (event.key === STORAGE_KEY || event.key === null) {
+      listener();
+    }
   };
 
-  window.addEventListener(CATEGORIES_UPDATED_EVENT, handleUpdate);
-  window.addEventListener("storage", handleUpdate);
+  window.addEventListener(CATEGORIES_UPDATED_EVENT, listener);
+  window.addEventListener("storage", storageListener);
 
   return () => {
-    window.removeEventListener(CATEGORIES_UPDATED_EVENT, handleUpdate);
-    window.removeEventListener("storage", handleUpdate);
+    window.removeEventListener(CATEGORIES_UPDATED_EVENT, listener);
+    window.removeEventListener("storage", storageListener);
   };
 };
 
@@ -135,19 +161,23 @@ export const useUserCategories = (): UserCategory[] => {
   const [categories, setCategories] = useState<UserCategory[]>(() => getDefaultUserCategories());
 
   useEffect(() => {
-    let isMounted = true;
-
     const refreshCategories = async () => {
-      const nextCategories = await getUserCategories();
-      if (isMounted) {
-        setCategories(nextCategories);
-      }
+      setCategories(await getUserCategories());
     };
 
     void refreshCategories();
-    return subscribeToCategoryUpdates(() => {
+
+    const unsubscribeCategories = subscribeToCategoryUpdates(() => {
       void refreshCategories();
     });
+    const unsubscribePriorities = subscribeToPriorityUpdates(() => {
+      void refreshCategories();
+    });
+
+    return () => {
+      unsubscribeCategories();
+      unsubscribePriorities();
+    };
   }, []);
 
   return categories;
