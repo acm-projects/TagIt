@@ -41,7 +41,7 @@ const LoginPage: React.FC = () => {
         </div>
 
         <button
-          className="mt-10 w-56 rounded-full bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_6px_14px_rgba(249,171,123,0.35)] transition-colors hover:bg-[#f0a068]"
+          className="mt-10 w-full max-w-md rounded-full bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_6px_14px_rgba(249,171,123,0.35)] transition-colors transition-transform duration-200 hover:scale-[1.02] hover:bg-[#f0a068]"
           onClick={() => navigate("/today")}
         >
           Login
@@ -51,7 +51,7 @@ const LoginPage: React.FC = () => {
           className="mt-6 text-base text-[#1F2933] underline decoration-[#EFE7DC] underline-offset-2 transition-colors hover:text-[#f9ab7b]"
           onClick={() => navigate("/signup")}
         >
-          Sign Up
+          Don’t have an account? Sign up
         </button>
       </div>
     </div>
