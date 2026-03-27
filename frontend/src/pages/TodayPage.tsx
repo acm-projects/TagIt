@@ -108,12 +108,12 @@ const TodayPage: React.FC = () => {
   const DEFAULT_COLOR = "#E5E7EB"; // TEMP: pastel fallback
 
   return (
-    <div className="today-page flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-        <main className="today-scroll flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
+        <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} />
 
-          <div className="mt-5 space-y-4 sm:mt-6">
+          <div className="mt-2.5 space-y-4 sm:mt-3">
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-4 py-2 shadow-[0_6px_14px_rgba(15,23,42,0.05)]">
                 <div className="mt-2 flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">

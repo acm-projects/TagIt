@@ -2,6 +2,7 @@ import "./App.css";
 import Popup from "./Popup";
 import React from "react";
 import { HashRouter, Route, Routes } from "react-router-dom";
+import { DayFilterProvider } from "./components/DaysFilter";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import TodayPage from "./pages/TodayPage";
@@ -16,6 +17,7 @@ import SetupPage from "./pages/SetupPage";
 const App: React.FC = () => {
   return (
     <HashRouter>
+      <DayFilterProvider>
       <Routes>
         <Route path="/" element={<Popup />} />
         <Route path="/login" element={<LoginPage />} />
@@ -29,6 +31,7 @@ const App: React.FC = () => {
         <Route path="/tasks" element={<TasksPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>
+      </DayFilterProvider>
     </HashRouter>
   );
 };

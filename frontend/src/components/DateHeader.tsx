@@ -1,5 +1,49 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import arrowLeftIcon from "../assets/nav-buttons/arrow_left.png";
+import arrowRightIcon from "../assets/nav-buttons/arrow_right.png";
+
+/** Mask fills the box sized by the PNG’s intrinsic width/height (see WeekNavArrowButton). */
+const maskOverlayStyle = (src: string): React.CSSProperties => ({
+  WebkitMaskImage: `url(${src})`,
+  maskImage: `url(${src})`,
+  WebkitMaskRepeat: "no-repeat",
+  maskRepeat: "no-repeat",
+  WebkitMaskPosition: "center",
+  maskPosition: "center",
+  WebkitMaskSize: "100% 100%",
+  maskSize: "100% 100%",
+});
+
+type WeekNavArrowButtonProps = {
+  iconSrc: string;
+  ariaLabel: string;
+  onClick: () => void;
+};
+
+/** Renders at the image file’s natural pixel size (no CSS width/height scaling). */
+const WeekNavArrowButton: React.FC<WeekNavArrowButtonProps> = ({ iconSrc, ariaLabel, onClick }) => (
+  <button
+    type="button"
+    className="group inline-flex cursor-pointer items-center justify-center rounded-lg p-0.5 shadow-none ring-0 outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9ab7b]/30 [-webkit-tap-highlight-color:transparent]"
+    aria-label={ariaLabel}
+    onClick={onClick}
+  >
+    <span className="relative inline-block leading-none">
+      <img
+        src={iconSrc}
+        alt=""
+        draggable={false}
+        className="pointer-events-none block h-auto w-auto max-w-none select-none opacity-0"
+      />
+      <span
+        aria-hidden
+        className="absolute inset-0 bg-[#9CA3AF] group-hover:bg-[#f9ab7b]"
+        style={maskOverlayStyle(iconSrc)}
+      />
+    </span>
+  </button>
+);
 
 export interface DateHeaderProps {
   /**
@@ -187,32 +231,29 @@ const DateHeader: React.FC<DateHeaderProps> = ({
   };
 
   return (
-    <header className="page-header px-3 pb-5 pt-4 text-[#1F2933] sm:px-8">
-      <div className="relative flex items-center justify-center">
-        <div className="absolute left-0 flex items-center">
-          <button
-            type="button"
-            className="cursor-pointer text-[#9CA3AF] transition-colors hover:text-[#f9ab7b]"
-            aria-label={mode === "week" ? "Previous week" : "Previous day"}
+    <header className="page-header w-full shrink-0 px-0 pb-3 pt-4 text-[#1F2933]">
+      <div className="relative flex min-h-16 items-center justify-center">
+        <div className="absolute left-5 flex items-center">
+          <WeekNavArrowButton
+            iconSrc={arrowLeftIcon}
+            ariaLabel={mode === "week" ? "Previous week" : "Previous day"}
             onClick={() => shiftPeriod(-1)}
-          >
-            <span className="material-symbols-outlined text-[34px] leading-none">arrow_back</span>
-          </button>
+          />
         </div>
 
         <div className="flex flex-col items-center gap-1">
           <button
             type="button"
             onClick={() => setIsPickerOpen((previous) => !previous)}
-            className="cursor-pointer text-[22px] font-semibold leading-none tracking-[0.01em] text-[#111827] whitespace-nowrap"
+            className="cursor-pointer text-2xl font-semibold leading-tight tracking-[0.01em] text-[#111827] sm:text-3xl whitespace-nowrap"
             aria-label="Choose date from calendar"
           >
             {mode === "week" ? (
-              <span className="flex items-baseline gap-2">
-                <span className="font-instrument italic text-[22px] leading-none text-black">
+              <span className="flex items-baseline gap-3">
+                <span className="font-instrument italic text-2xl leading-tight text-black sm:text-3xl">
                   {weekLabelParts.monthPart}
                 </span>
-                <span className="text-[22px] font-semibold leading-none text-[#f9ab7b]">
+                <span className="text-2xl font-semibold leading-tight text-[#f9ab7b] sm:text-3xl">
                   {weekLabelParts.dayPart}
                 </span>
               </span>
@@ -222,23 +263,20 @@ const DateHeader: React.FC<DateHeaderProps> = ({
           </button>
           {showYear && (
             <>
-              <span className="mt-1 h-px w-12 bg-[#E5E7EB]" aria-hidden="true" />
-              <span className="text-[14px] font-semibold tracking-wide text-[#9CA3AF]">
+              <span className="mt-0.5 h-px w-16 bg-[#E5E7EB]" aria-hidden="true" />
+              <span className="text-[15px] font-semibold tracking-wide text-[#9CA3AF] sm:text-base">
                 {yearLabel}
               </span>
             </>
           )}
         </div>
 
-        <div className="absolute right-0 flex items-center">
-          <button
-            type="button"
-            className="cursor-pointer text-[#9CA3AF] transition-colors hover:text-[#f9ab7b]"
-            aria-label={mode === "week" ? "Next week" : "Next day"}
+        <div className="absolute right-5 flex items-center">
+          <WeekNavArrowButton
+            iconSrc={arrowRightIcon}
+            ariaLabel={mode === "week" ? "Next week" : "Next day"}
             onClick={() => shiftPeriod(1)}
-          >
-            <span className="material-symbols-outlined text-[34px] leading-none">arrow_forward</span>
-          </button>
+          />
         </div>
 
         {isPickerOpen && (
