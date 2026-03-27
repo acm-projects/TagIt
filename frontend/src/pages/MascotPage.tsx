@@ -13,14 +13,14 @@ const MascotPage: React.FC = () => {
         <div className="mt-2 flex flex-wrap justify-center gap-4">
           <button
             type="button"
-            className="rounded-2xl bg-white px-8 py-3 font-serif text-xl text-[#F9A36E] shadow-md ring-1 ring-[#F9A36E]/25 transition hover:bg-[#FFF9F5]"
+            className="rounded-2xl bg-[#F9A36E] px-8 py-3 font-serif text-xl text-white shadow-md transition hover:bg-[#E8945F] active:bg-[#D9854F]"
             onClick={() => navigate("/signup")}
           >
             Get Started
           </button>
           <button
             type="button"
-            className="rounded-2xl bg-white px-10 py-3 font-serif text-xl text-[#F9A36E] shadow-md ring-1 ring-[#F9A36E]/25 transition hover:bg-[#FFF9F5]"
+            className="rounded-2xl bg-[#F9A36E] px-10 py-3 font-serif text-xl text-white shadow-md transition hover:bg-[#E8945F] active:bg-[#D9854F]"
             onClick={() => navigate("/login")}
           >
             Login

@@ -4,7 +4,6 @@ import AppNavbar from "../components/AppNavbar";
 import deleteIcon from "../assets/page_buttons/delete.png";
 
 const STORAGE_KEY_PRIORITIES = "tagit-settings-priorities";
-import { loadUserPriorities, saveUserPriorities } from "../services/priorities";
 
 type Priority = {
   id: number;
