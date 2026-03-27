@@ -99,6 +99,7 @@ const CalendarPage: React.FC = () => {
                         event.source === "google"
                           ? "bg-[#DBEAFE] text-[#1D4ED8]"
                           : "bg-[#E7F6EA] text-[#22A06B]";
+                      const categoryColor = getTempCategoryColor(event.tagCategoryId);
 
                       return (
                         <div
@@ -113,7 +114,8 @@ const CalendarPage: React.FC = () => {
                         >
                           <span
                             aria-hidden="true"
-                            className="h-full min-h-10 rounded-full bg-[#f9ab7b]"
+                            className="h-full min-h-10 rounded-full"
+                            style={{ backgroundColor: categoryColor }}
                           />
 
                           <div className="min-w-0">
