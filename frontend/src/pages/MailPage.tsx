@@ -6,6 +6,10 @@ import {
   type WeekdayShort,
 } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
+import {
+  getCategoryColorById,
+  useUserCategories,
+} from "../services/categories";
 
 /**
  * A prioritized mail card item.
@@ -17,7 +21,7 @@ type MailItem = {
   sender: string;
   body: string;
   extra?: string;
-  tags: string[];
+  tagCategoryId?: string;
   priorityScore: number;
   day: WeekdayShort;
 };
@@ -43,9 +47,19 @@ const MailPage: React.FC = () => {
       id: "m1",
       summary: "Transfer Credit",
       sender: "Joshua Montogermy",
-      body: "Requesting a screenshot of current off-campus enrollment (with courses and college) to grant temporary credit while awaiting transfer.",
-      tags: ["Temporary Credit"],
+      body: "Need a screenshot of your current enrollment.",
+      tagCategoryId: "priority-4",
       priorityScore: 10,
+      day: "mon",
+    },
+    {
+      id: "m1b",
+      summary: "Club Budget Follow-Up",
+      sender: "Student Activities Board",
+      body: "Please review the revised budget request before Monday evening so the funding vote can stay on schedule. We added notes to the travel line items, updated the projected turnout numbers, and included a revised breakdown for equipment, catering, and room setup so the committee can approve everything in one pass.",
+      extra: "Meeting: March 29, 2026 at 6:30 PM in the Student Union conference room. Bring the updated spreadsheet and the reimbursement receipts if you have them.",
+      tagCategoryId: "priority-1",
+      priorityScore: 8,
       day: "mon",
     },
     {
@@ -54,7 +68,7 @@ const MailPage: React.FC = () => {
       sender: "John Mathew @Verizon @Handshake",
       body: "Internship offer. Respond with your resume and portfolio.",
       extra: "Deadline : March 15, 2026",
-      tags: ["Internship", "Resume"],
+      tagCategoryId: "priority-3",
       priorityScore: 9,
       day: "tue",
     },
@@ -64,7 +78,7 @@ const MailPage: React.FC = () => {
       sender: "John Mathew @Verizon @Handshake",
       body: "Internship offer. Respond with your resume and portfolio.",
       extra: "Deadline : March 15, 2026",
-      tags: [],
+      tagCategoryId: "priority-3",
       priorityScore: 6,
       day: "wed",
     },
@@ -74,11 +88,12 @@ const MailPage: React.FC = () => {
       sender: "Registrar Office",
       body: "Reminder to submit your semester enrollment confirmation before the stated deadline.",
       extra: "Due: March 20, 2026",
-      tags: ["Enrollment", "Reminder"],
+      tagCategoryId: "priority-4",
       priorityScore: 7,
       day: "fri",
     },
   ]);
+  const categories = useUserCategories();
 
   const [draftReplies] = useState<DraftItem[]>([
     {
@@ -97,25 +112,13 @@ const MailPage: React.FC = () => {
     [filteredMails],
   );
 
-  const getTagStyles = (tag: string): { backgroundColor: string; color: string } => {
-    const normalized = tag.toLowerCase();
-    if (normalized.includes("temporary")) {
-      return { backgroundColor: "#DCD6B2", color: "#7A4A2F" };
-    }
-    if (normalized.includes("internship")) {
-      return { backgroundColor: "#EBC7B2", color: "#7A4A2F" };
-    }
-    if (normalized.includes("resume")) {
-      return { backgroundColor: "#F4E1C8", color: "#7A4A2F" };
-    }
-    return { backgroundColor: "#EFD9BE", color: "#7A4A2F" };
-  };
-
-  const handleOpenMail = (_mail: MailItem) => {
+  const handleOpenMail = (mail: MailItem) => {
+    void mail;
     // Placeholder until mail detail workflow is wired.
   };
 
-  const handleOpenDraft = (_draft: DraftItem) => {
+  const handleOpenDraft = (draft: DraftItem) => {
+    void draft;
     // Placeholder until draft editor is wired.
   };
 
@@ -135,60 +138,57 @@ const MailPage: React.FC = () => {
                   <span>Mails</span>
                 </div>
 
-                <div className="mt-3 space-y-3">
+                <div className="mt-3">
                   {sortedMails.length === 0 ? (
                     <p className="py-2 text-[12px] text-[#6B7280]">No messages for this day.</p>
                   ) : (
-                    sortedMails.map((mail) => (
+                    sortedMails.map((mail, index) => (
                       <div
                         key={mail.id}
-                        className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2 shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
+                        className="group grid grid-cols-[6px_minmax(0,1fr)_auto] items-center gap-x-4 py-4"
+                        style={{
+                          borderBottom:
+                            index === sortedMails.length - 1 ? "none" : "0.5px solid #E5E7EB",
+                        }}
                       >
-                        <div className="group flex items-start gap-3">
+                        <div
+                          aria-hidden="true"
+                          className="h-full min-h-[5rem] w-[6px] self-stretch rounded-full"
+                          style={{
+                            backgroundColor: getCategoryColorById(categories, mail.tagCategoryId),
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleOpenMail(mail)}
+                          className="min-w-0 text-left"
+                        >
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <p className="truncate text-[13px] font-semibold text-[#111827] sm:text-sm">
+                              {mail.summary}
+                            </p>
+                            {mail.priorityScore >= 9 && (
+                              <span className="rounded-full border border-[#fecdd3] bg-[#fee2e2] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#ef4444]">
+                                Urgent
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-2 space-y-1 text-[11px] leading-snug text-[#6B7280] sm:max-w-[32rem]">
+                            <p className="truncate text-[12px]">{mail.sender}</p>
+                            <p className="line-clamp-2 text-[12px]">{mail.body}</p>
+                            {mail.extra && <p className="truncate text-[12px]">{mail.extra}</p>}
+                          </div>
+                        </button>
+
+                        <div className="flex shrink-0 items-center gap-2 self-center">
                           <button
                             type="button"
                             onClick={() => handleOpenMail(mail)}
-                            className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
+                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                            aria-label={`Open ${mail.summary}`}
                           >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-semibold text-[#111827]">{mail.summary}</span>
-                              {mail.priorityScore >= 9 && (
-                                <span className="rounded-full border border-[#fecdd3] bg-[#fee2e2] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#ef4444]">
-                                  Urgent
-                                </span>
-                              )}
-                              {mail.tags.map((tag) => {
-                                const { backgroundColor, color } = getTagStyles(tag);
-                                return (
-                                  <span
-                                    key={tag}
-                                    className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-tight"
-                                    style={{ backgroundColor, color }}
-                                  >
-                                    {tag}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                            <p className="w-full truncate text-[12px] text-[#6B7280]">{mail.sender}</p>
-                            <p className="line-clamp-2 w-full text-[12px] leading-snug text-[#6B7280]">
-                              {mail.body}
-                            </p>
-                            {mail.extra && (
-                              <p className="w-full truncate text-[12px] text-[#6B7280]">{mail.extra}</p>
-                            )}
+                            <span className="material-symbols-outlined text-[16px]">check</span>
                           </button>
-
-                          <div className="flex shrink-0 items-center gap-2 pt-0.5">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenMail(mail)}
-                              className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
-                              aria-label={`Open ${mail.summary}`}
-                            >
-                              <span className="material-symbols-outlined text-[16px]">check</span>
-                            </button>
-                          </div>
                         </div>
                       </div>
                     ))

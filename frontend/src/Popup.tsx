@@ -29,6 +29,13 @@ const Popup: React.FC = () => {
           >
             Login
           </button>
+
+          <button
+            className="rounded-2xl bg-white/80 px-8 py-3 font-serif text-lg text-[#C97D6E] shadow-sm"
+            onClick={() => navigate("/setup")}
+          >
+            Setup (temp)
+          </button>
         </div>
       </div>
     </div>

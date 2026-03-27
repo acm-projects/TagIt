@@ -253,7 +253,14 @@ const TasksPage: React.FC = () => {
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
                 <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
-                  <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">task_alt</span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 -960 960 960"
+                    aria-hidden="true"
+                    className="h-[24px] w-[24px] shrink-0 fill-[#f9ab7b]"
+                  >
+                    <path d="M268-240 42-466l57-56 170 170 56 56-57 56Zm226 0L268-466l56-57 170 170 368-368 56 57-424 424Zm0-226-57-56 198-198 57 56-198 198Z" />
+                  </svg>
                   <span>Tasks</span>
                 </div>
 
@@ -346,29 +353,33 @@ const TasksPage: React.FC = () => {
                       return (
                         <div
                           key={task.id}
-                          className="group flex items-center gap-3 py-2"
+                          className="group grid grid-cols-[28px_minmax(0,1fr)_auto_auto] items-center gap-x-3 py-3"
                           style={rowDivider}
                         >
-                          <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                          <div className="flex items-center justify-center">
                             <input
                               type="checkbox"
                               checked={task.done}
                               onChange={() => toggleTask(task.id)}
-                              className="h-4 w-4 shrink-0 rounded border border-[#D1D5DB] accent-[#f9ab7b]"
+                              className="h-5 w-5 shrink-0 rounded-[4px] border border-[#D1D5DB] accent-[#f9ab7b]"
                               aria-label={`Mark "${task.label}" as completed`}
                             />
+                          </div>
+
+                          <div className="min-w-0 text-left">
                             <span
-                              className={`min-w-0 flex-1 truncate text-sm font-normal text-[#111827] ${task.done ? "line-through opacity-70" : ""}`}
+                              className={`block truncate text-sm font-normal text-[#111827] ${task.done ? "line-through opacity-70" : ""}`}
                             >
                               {task.label}
                             </span>
-                            <span className="shrink-0 whitespace-nowrap text-[12px] font-medium tabular-nums text-[#6B7280]">
-                              {formatDisplayDate(
-                                parseIsoDate(task.date) ?? selectedCalendarDay,
-                              )}
-                              {task.time ? ` · ${formatDisplayTime(task.time)}` : ""}
-                            </span>
                           </div>
+
+                          <span className="shrink-0 whitespace-nowrap text-[12px] font-medium tabular-nums text-[#6B7280]">
+                            {formatDisplayDate(
+                              parseIsoDate(task.date) ?? selectedCalendarDay,
+                            )}
+                            {task.time ? ` · ${formatDisplayTime(task.time)}` : ""}
+                          </span>
 
                           <div className="flex shrink-0 items-center gap-0.5">
                             <button

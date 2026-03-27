@@ -1,108 +1,87 @@
 /**
  * Microsoft (Entra ID / Azure AD) OAuth 2.0 for Chrome extension.
- *
- * Same pattern as googleOAuth.ts:
- *  1. Fetch the auth URL from the Node backend (/auth/microsoft/url).
- *  2. Open it with chrome.identity.launchWebAuthFlow.
- *  3. POST the resulting redirect URL to /auth/microsoft/exchange.
- *  4. Return the email so the caller can update the UI.
+ * Uses authorization code flow with PKCE — no client_secret (public client / SPA).
+ * Redirect URI from chrome.identity.getRedirectURL().
+ * Register the redirect URI in Azure as SPA: https://<EXTENSION_ID>.chromiumapp.org/
  */
 
-import { getStoredToken } from "../api";
+import { getMicrosoftClientId } from "./config";
+import { generateCodeChallenge, generateCodeVerifier } from "./pkce";
+import { getRedirectUrl } from "./googleOAuth";
 
-const NODE_BACKEND_URL = "http://localhost:3000";
+const MICROSOFT_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+const MICROSOFT_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+const SCOPES = ["openid", "email", "profile", "User.Read", "Mail.Read", "offline_access"];
 
 export async function buildMicrosoftAuthUrl(): Promise<{
   url: string;
   codeVerifier: string;
 }> {
-  const token = await getStoredToken();
-  if (!token) {
-    throw new Error("No JWT token available. User must be authenticated.");
-  }
+  const clientId = getMicrosoftClientId();
+  const redirectUri = getRedirectUrl();
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = await generateCodeChallenge(codeVerifier);
 
-  const response = await fetch(`${NODE_BACKEND_URL}/auth/microsoft/url`, {
-    headers: { Authorization: `Bearer ${token}` },
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    response_mode: "query",
+    scope: SCOPES.join(" "),
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
+    prompt: "consent",
+  });
+
+  const url = `${MICROSOFT_AUTH_URL}?${params.toString()}`;
+  return { url, codeVerifier };
+}
+
+export async function exchangeMicrosoftCodeForTokens(
+  code: string,
+  codeVerifier: string
+): Promise<{ access_token: string; refresh_token?: string }> {
+  const clientId = getMicrosoftClientId();
+  const redirectUri = getRedirectUrl();
+
+  const body = new URLSearchParams({
+    client_id: clientId,
+    code,
+    redirect_uri: redirectUri,
+    grant_type: "authorization_code",
+    code_verifier: codeVerifier,
+  });
+
+  const response = await fetch(MICROSOFT_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(
-      error.error || "Failed to get Microsoft OAuth URL from server"
-    );
+    const err = await response.json().catch(() => ({})) as { error_description?: string; error?: string };
+    const msg = err.error_description ?? err.error ?? response.statusText ?? "Token exchange failed";
+    throw new Error(`Microsoft token exchange: ${msg}`);
   }
 
-  const data = (await response.json()) as { url: string };
-  // No PKCE code verifier needed — the backend handles the token exchange.
-  return { url: data.url, codeVerifier: "" };
+  const data = (await response.json()) as { access_token: string; refresh_token?: string };
+  return { access_token: data.access_token, refresh_token: data.refresh_token };
 }
 
-/**
- * After launchWebAuthFlow resolves, POST the redirect URL to the Node backend.
- * Returns the user's Microsoft email address on success.
- */
-export async function exchangeMicrosoftCode(
-  redirectUrl: string
-): Promise<string> {
-  const token = await getStoredToken();
-  if (!token) {
-    throw new Error("No JWT token available.");
-  }
-
-  // Check for explicit denial before hitting the server
-  try {
-    const parsed = new URL(redirectUrl);
-    const error = parsed.searchParams.get("error");
-    if (error === "access_denied") {
-      throw new Error(
-        "You denied access to Outlook. Please try again and click 'Accept'."
-      );
-    }
-    if (error) {
-      throw new Error(`Authentication failed: ${error}`);
-    }
-  } catch (err) {
-    if (err instanceof Error && err.message.startsWith("Authentication")) {
-      throw err;
-    }
-  }
-
-  const response = await fetch(`${NODE_BACKEND_URL}/auth/microsoft/exchange`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ redirectUrl }),
+export async function fetchMicrosoftUserEmail(accessToken: string): Promise<string> {
+  const response = await fetch("https://graph.microsoft.com/v1.0/me", {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  const data = (await response.json()) as {
-    success?: boolean;
-    email?: string | null;
-    error?: string;
-  };
-
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data.error || "Failed to complete Microsoft authentication"
-    );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch Microsoft user: ${response.status} ${text.slice(0, 100)}`);
   }
 
-  return data.email ?? "microsoft@account.com";
-}
-
-/** @deprecated Use exchangeMicrosoftCode instead */
-export async function fetchMicrosoftUserEmail(): Promise<string> {
-  const token = await getStoredToken();
-  if (!token) return "microsoft@account.com";
-  try {
-    const response = await fetch(`${NODE_BACKEND_URL}/auth/microsoft-email`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!response.ok) return "microsoft@account.com";
-    const data = (await response.json()) as { email: string | null };
-    return data.email ?? "microsoft@account.com";
-  } catch {
-    return "microsoft@account.com";
+  const data = (await response.json()) as { userPrincipalName?: string; mail?: string };
+  const email = data.userPrincipalName ?? data.mail;
+  if (!email || typeof email !== "string") {
+    throw new Error("Microsoft profile did not return an email");
   }
+  return email;
 }

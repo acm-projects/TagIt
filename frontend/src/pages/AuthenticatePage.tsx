@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import PageTopBar from "../components/PageTopBar";
 import gmailLogo from "../assets/Logos/gmail.png";
 import outlookLogo from "../assets/Logos/outlook.png";
@@ -7,8 +7,6 @@ import authenticationBg from "../assets/AuthenticationBg.png";
 
 const AuthenticatePage: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const fromSignup = (location.state as any)?.fromSignup === true;
   const [loadingProvider, setLoadingProvider] = useState<"google" | "microsoft" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,24 +18,14 @@ const AuthenticatePage: React.FC = () => {
       (response: { success?: boolean; data?: { email: string }; error?: string }) => {
         setLoadingProvider(null);
         if (chrome.runtime.lastError) {
-          const errorMsg = chrome.runtime.lastError.message ?? "Connection failed";
-          console.error("Chrome runtime error:", errorMsg);
-          setError(errorMsg);
-          return;
-        }
-        if (!response) {
-          console.error("No response from OAuth handler");
-          setError("No response from authentication handler");
+          setError(chrome.runtime.lastError.message ?? "Connection failed");
           return;
         }
         if (response?.success && response.data?.email) {
-          console.log("OAuth successful, navigating to", fromSignup ? "/setup" : "/connected-emails");
-          navigate(fromSignup ? "/setup" : "/connected-emails");
+          navigate("/connected-emails");
           return;
         }
-        const errorMsg = response?.error ?? "Google sign-in failed";
-        console.error("Google OAuth error:", errorMsg);
-        setError(errorMsg);
+        setError(response?.error ?? "Google sign-in failed");
       }
     );
   };
@@ -50,24 +38,14 @@ const AuthenticatePage: React.FC = () => {
       (response: { success?: boolean; data?: { email: string }; error?: string }) => {
         setLoadingProvider(null);
         if (chrome.runtime.lastError) {
-          const errorMsg = chrome.runtime.lastError.message ?? "Connection failed";
-          console.error("Chrome runtime error:", errorMsg);
-          setError(errorMsg);
-          return;
-        }
-        if (!response) {
-          console.error("No response from OAuth handler");
-          setError("No response from authentication handler");
+          setError(chrome.runtime.lastError.message ?? "Connection failed");
           return;
         }
         if (response?.success && response.data?.email) {
-          console.log("OAuth successful, navigating to", fromSignup ? "/setup" : "/connected-emails");
-          navigate(fromSignup ? "/setup" : "/connected-emails");
+          navigate("/connected-emails");
           return;
         }
-        const errorMsg = response?.error ?? "Microsoft sign-in failed";
-        console.error("Microsoft OAuth error:", errorMsg);
-        setError(errorMsg);
+        setError(response?.error ?? "Microsoft sign-in failed");
       }
     );
   };
