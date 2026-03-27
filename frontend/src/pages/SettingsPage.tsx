@@ -30,7 +30,7 @@ type PriorityRule = {
 const DEFAULT_PRIORITIES: PriorityRule[] = [
   { id: 1, label: "Club Events" },
   { id: 2, label: "Class/Assignment Notifications" },
-  { id: 3, label: "Class/Assignment Notifications" },
+  { id: 3, label: "Job/Internship Opportunities" },
   { id: 4, label: "Deadlines" },
 ];
 
