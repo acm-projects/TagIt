@@ -2,6 +2,9 @@ import "./App.css";
 import Popup from "./Popup";
 import React from "react";
 import { HashRouter, Route, Routes } from "react-router-dom";
+import { DayFilterProvider } from "./components/DaysFilter";
+import { AuthProvider } from "./services/auth/AuthContext";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import TodayPage from "./pages/TodayPage";
@@ -16,19 +19,82 @@ import SetupPage from "./pages/SetupPage";
 const App: React.FC = () => {
   return (
     <HashRouter>
-      <Routes>
-        <Route path="/" element={<Popup />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        <Route path="/authenticate" element={<AuthenticatePage />} />
-        <Route path="/connected-emails" element={<ConnectedEmailsPage />} />
-        <Route path="/setup" element={<SetupPage />} />
-        <Route path="/today" element={<TodayPage />} />
-        <Route path="/mail" element={<MailPage />} />
-        <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/tasks" element={<TasksPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-      </Routes>
+      <AuthProvider>
+        <DayFilterProvider>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/" element={<Popup />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            
+            {/* Protected routes */}
+            <Route
+              path="/authenticate"
+              element={
+                <ProtectedRoute>
+                  <AuthenticatePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/connected-emails"
+              element={
+                <ProtectedRoute>
+                  <ConnectedEmailsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/setup"
+              element={
+                <ProtectedRoute>
+                  <SetupPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/today"
+              element={
+                <ProtectedRoute>
+                  <TodayPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/mail"
+              element={
+                <ProtectedRoute>
+                  <MailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/calendar"
+              element={
+                <ProtectedRoute>
+                  <CalendarPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tasks"
+              element={
+                <ProtectedRoute>
+                  <TasksPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <SettingsPage />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </DayFilterProvider>
+      </AuthProvider>
     </HashRouter>
   );
 };

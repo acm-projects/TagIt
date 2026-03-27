@@ -1,57 +1,121 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageTopBar from "../components/PageTopBar";
+import authenticationBg from "../assets/AuthenticationBg.png";
+import { login, storeToken } from "../services/api";
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!username.trim() || !password.trim()) {
+      setError("Username and password are required");
+      return;
+    }
+
+    setError("");
+    setLoading(true);
+
+    try {
+      const response = await login(username, password);
+
+      if (!response.success) {
+        setError(response.error || "Login failed");
+        setLoading(false);
+        return;
+      }
+
+      if (response.data?.token) {
+        await storeToken(response.data.token);
+        // Navigate to today page after successful login
+        navigate("/today");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+      setLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleLogin();
+    }
+  };
 
   return (
-    <div className="relative min-h-full bg-[#F8E7DD] p-4">
+    <div
+      className="relative min-h-screen bg-[#F9F8F6] p-4"
+      style={{
+        backgroundImage: `url(${authenticationBg})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
       <PageTopBar back={{ label: "Back", to: "/" }} />
-      <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center rounded-3xl bg-[#FDE5D1] px-10 pt-16">
-        <h1 className="mb-10 font-instrument text-5xl font-normal text-[#A34712]">
+      <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center px-10 pt-16">
+        <h1 className="mb-10 font-instrument text-5xl font-normal text-[#1F2933]">
           Login
         </h1>
 
         <div className="w-full max-w-md space-y-6 text-left">
+          {error && (
+            <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
           <div className="space-y-2">
-            <label className="block text-base font-medium text-[#A34712]">
+            <label className="block text-base font-medium text-[#1F2933]">
               Username
             </label>
             <input
               type="text"
               placeholder="Enter your username"
-              className="w-full rounded-xl border-none bg-white px-4 py-3 text-base text-[#8B6F60] shadow-sm placeholder:text-[#B8A39A] focus:outline-none"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              onKeyPress={handleKeyPress}
+              disabled={loading}
+              className="w-full rounded-xl border border-[#EFE7DC] bg-white px-4 py-3 text-base text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] placeholder:text-[#9CA3AF] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#f9ab7b]/25 disabled:opacity-50"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="block text-base font-medium text-[#A34712]">
+            <label className="block text-base font-medium text-[#1F2933]">
               Password
             </label>
             <input
               type="password"
               placeholder="Enter your password"
-              className="w-full rounded-xl border-none bg-white px-4 py-3 text-base text-[#8B6F60] shadow-sm placeholder:text-[#B8A39A] focus:outline-none"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyPress={handleKeyPress}
+              disabled={loading}
+              className="w-full rounded-xl border border-[#EFE7DC] bg-white px-4 py-3 text-base text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] placeholder:text-[#9CA3AF] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#f9ab7b]/25 disabled:opacity-50"
             />
-            <p className="mt-1 text-sm italic text-[#4E3C34]">
+            <p className="mt-1 text-sm text-[#6B7280]">
               I forgot my password
             </p>
           </div>
         </div>
 
         <button
-          className="mt-10 w-56 rounded-full bg-[#A34712] py-3 text-base font-medium text-white"
-          onClick={() => navigate("/today")}
+          className="mt-10 w-full max-w-md rounded-full bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_6px_14px_rgba(249,171,123,0.35)] transition-colors transition-transform duration-200 hover:scale-[1.02] hover:bg-[#f0a068] disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={handleLogin}
+          disabled={loading}
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </button>
 
         <button
-          className="mt-6 text-base text-[#2F1E15] underline"
+          className="mt-6 text-base text-[#1F2933] underline decoration-[#EFE7DC] underline-offset-2 transition-colors hover:text-[#f9ab7b] disabled:opacity-50"
           onClick={() => navigate("/signup")}
+          disabled={loading}
         >
-          Sign Up
+          Don’t have an account? Sign up
         </button>
       </div>
     </div>

@@ -3,9 +3,10 @@ body,
 #root {
   height: 100%;
   margin: 0;
+  overflow-x: hidden;
 }
 
 body {
-  min-width: 420px;
+  min-width: 380px;
   background: #f8e7dd;
 }

@@ -1,9 +1,13 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
+export type PageTopBarBack =
+  | { label: string; to: string }
+  | { label: string; useBrowserBack: true };
+
 interface PageTopBarProps {
-  /** Back button: undefined = hide, { label, to } = show */
-  back?: { label: string; to: string };
+  /** Back button: undefined = hide; `to` navigates to a path; `useBrowserBack` uses history (-1). */
+  back?: PageTopBarBack;
   /** Optional right-side content (e.g. Setup button) */
   right?: React.ReactNode;
 }
@@ -17,10 +21,18 @@ const PageTopBar: React.FC<PageTopBarProps> = ({ back, right }) => {
         {back ? (
           <button
             type="button"
-            className="flex items-center gap-1 text-sm font-medium text-[#A34712] hover:underline"
-            onClick={() => navigate(back.to)}
+            className="group flex items-center gap-1.5 rounded-lg py-1 text-sm font-medium text-[#1F2933] transition-colors hover:text-[#f9ab7b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9ab7b]/30"
+            onClick={() => {
+              if ("to" in back) {
+                navigate(back.to);
+              } else {
+                navigate(-1);
+              }
+            }}
           >
-            <span className="material-symbols-outlined text-[20px]">arrow_back</span>
+            <span className="material-symbols-outlined text-[22px] leading-none text-[#9CA3AF] transition-colors group-hover:text-[#f9ab7b]">
+              arrow_back
+            </span>
             {back.label}
           </button>
         ) : (

@@ -19,11 +19,11 @@
   },
   "content_scripts": [
     {
-      "js": [
-        "assets/content.js-DkE5sgNb.js"
-      ],
       "matches": [
         "<all_urls>"
+      ],
+      "js": [
+        "src/content.js-loader.js"
       ]
     }
   ],
@@ -36,7 +36,8 @@
         "<all_urls>"
       ],
       "resources": [
-        "assets/content.js-DkE5sgNb.js"
+        "**/*",
+        "*"
       ],
       "use_dynamic_url": false
     }
