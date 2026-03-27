@@ -6,8 +6,6 @@ import {
   loadTasks,
   subscribeToTaskUpdates,
 } from "../services/taskProgress";
-// TEMP: remove after backend integration. Hardcoded color map for visual check.
-import { getTempCategoryColor } from "../services/tempCategoryColors";
 import filterIcon from "../assets/page_buttons/filter.png";
 import { getCategoryColorById, useUserCategories,} from "../services/categories";
 
@@ -203,7 +201,6 @@ const TodayPage: React.FC = () => {
     setToast(null);
   };
 
-  const DEFAULT_COLOR = "#E5E7EB"; // TEMP: pastel fallback
   const availableCategories = Array.from(
     new Set(importantEmails.map((mail) => mail.tagCategoryId).filter(Boolean))
   ) as string[];
@@ -215,12 +212,6 @@ const TodayPage: React.FC = () => {
   const formatCategoryLabel = (id?: string) => {
     if (!id) return "Uncategorized";
     return id.charAt(0).toUpperCase() + id.slice(1);
-  const resetImportantEmails = () => {
-    setImportantEmails([...IMPORTANT_EMAILS_FILLER]);
-    setSlidingEmailIds(new Set());
-    setClosingEmailIds(new Set());
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast(null);
   };
 
   return (
