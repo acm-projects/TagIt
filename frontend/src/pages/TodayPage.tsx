@@ -7,7 +7,11 @@ import {
   subscribeToTaskUpdates,
 } from "../services/taskProgress";
 import filterIcon from "../assets/page_buttons/filter.png";
-import { getCategoryColorById, useUserCategories,} from "../services/categories";
+import {
+  getCategoryById,
+  getCategoryColorById,
+  useUserCategories,
+} from "../services/categories";
 
 /**
  * Important email preview shown on Today.
@@ -41,7 +45,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     tone: "urgent",
     summary: "Recruiter requested availability for next round; check attached timeline and confirm slots.",
     priority: "urgent",
-    tagCategoryId: "urgent",
+    tagCategoryId: "priority-3",
   },
   {
     id: "mail-2",
@@ -49,7 +53,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     source: "gmail",
     tone: "soon",
     summary: "Agenda covers officer elections, budget approval, and venue change for next semester events.",
-    tagCategoryId: "personal",
+    tagCategoryId: "priority-1",
   },
   {
     id: "mail-3",
@@ -57,7 +61,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     source: "gmail",
     tone: "done",
     summary: "Billing portal shows outstanding balance due Friday; late fee applies after 5 PM CST.",
-    tagCategoryId: "school",
+    tagCategoryId: "priority-4",
   },
   {
     id: "mail-4",
@@ -66,14 +70,14 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     tone: "soon",
     summary: "Project checkpoint moved to next Monday; submit design doc draft before lab session.",
     priority: "urgent",
-    tagCategoryId: "work",
+    tagCategoryId: "priority-2",
   },
 ];
 
 const EVENTS: TodayEvent[] = [
-  { time: "03:00 - 03:30", title: "Exam Prep", tagCategoryId: "school" },
-  { time: "04:00 - 05:30", title: "Government Class", tagCategoryId: "school" },
-  { time: "08:30 - 10:00", title: "ACM Meeting @ SLC", tagCategoryId: "work" },
+  { time: "03:00 - 03:30", title: "Exam Prep", tagCategoryId: "priority-2" },
+  { time: "04:00 - 05:30", title: "Government Class", tagCategoryId: "priority-2" },
+  { time: "08:30 - 10:00", title: "ACM Meeting @ SLC", tagCategoryId: "priority-1" },
 ];
 
 const TodayPage: React.FC = () => {
@@ -211,7 +215,7 @@ const TodayPage: React.FC = () => {
 
   const formatCategoryLabel = (id?: string) => {
     if (!id) return "Uncategorized";
-    return id.charAt(0).toUpperCase() + id.slice(1);
+    return getCategoryById(categories, id)?.name ?? id;
   };
 
   return (

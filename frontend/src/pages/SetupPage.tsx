@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { loadUserPriorities, saveUserPriorities } from "../services/priorities";
 
 type Priority = {
-  id: string;
+  id: number;
   label: string;
 };
 
@@ -19,19 +20,12 @@ function TrashIcon({ className }: { className?: string }) {
   );
 }
 
-const initialPriorities: Priority[] = [
-  { id: "1", label: "Club Events" },
-  { id: "2", label: "Class/Assignment Notifications" },
-  { id: "3", label: "Job/Internship Opportunities" },
-  { id: "4", label: "Deadlines" },
-];
-
 const SetupPage: React.FC = () => {
   const navigate = useNavigate();
-  const [priorities, setPriorities] = useState<Priority[]>(initialPriorities);
-  const [dragId, setDragId] = useState<string | null>(null);
+  const [priorities, setPriorities] = useState<Priority[]>(() => loadUserPriorities());
+  const [dragId, setDragId] = useState<number | null>(null);
 
-  const handleDragStart = (id: string, e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragStart = (id: number, e: React.DragEvent<HTMLDivElement>) => {
     setDragId(id);
     // Remove default drag preview (non-rounded box) and green plus by using a transparent image
     const img = new Image();
@@ -40,7 +34,7 @@ const SetupPage: React.FC = () => {
     e.dataTransfer.effectAllowed = "move";
   };
 
-  const handleDragOver = (event: React.DragEvent<HTMLDivElement>, overId: string) => {
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>, overId: number) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     if (dragId === null || dragId === overId) return;
@@ -57,7 +51,7 @@ const SetupPage: React.FC = () => {
 
   const handleDrop = () => setDragId(null);
 
-  const handleRemovePriority = (id: string) => {
+  const handleRemovePriority = (id: number) => {
     setPriorities((prev) => prev.filter((p) => p.id !== id));
   };
 
@@ -105,7 +99,10 @@ const SetupPage: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => navigate("/today")}
+              onClick={() => {
+                saveUserPriorities(priorities);
+                navigate("/today");
+              }}
               className="mx-auto block w-52 rounded-md bg-[#A34712] py-3 text-base font-medium text-white"
             >
               Finish setup
@@ -118,5 +115,3 @@ const SetupPage: React.FC = () => {
 };
 
 export default SetupPage;
-
-

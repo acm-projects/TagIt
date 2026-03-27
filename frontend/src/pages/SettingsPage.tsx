@@ -3,8 +3,16 @@ import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
 import SectionHeader from "../components/SectionHeader";
 import { removeToken } from "../services/auth/tokenStorage";
-
-const STORAGE_KEY_PRIORITIES = "tagit-settings-priorities";
+import {
+  getCategoryIdForPriority,
+  loadUserPriorities,
+  saveUserPriorities,
+} from "../services/priorities";
+import {
+  getCategoryColorById,
+  setUserCategoryColor,
+  useUserCategories,
+} from "../services/categories";
 /**
  * Represents the currently connected user account and emails.
  * Connected accounts are authenticated via the backend; the AI backend
@@ -22,17 +30,7 @@ type ConnectedUser = {
  * When emails are read, the backend / AI pipeline can walk this list in
  * order and match messages against each rule.
  */
-type PriorityRule = {
-  id: number;
-  label: string;
-};
-
-const DEFAULT_PRIORITIES: PriorityRule[] = [
-  { id: 1, label: "Club Events" },
-  { id: 2, label: "Class/Assignment Notifications" },
-  { id: 3, label: "Class/Assignment Notifications" },
-  { id: 4, label: "Deadlines" },
-];
+type PriorityRule = ReturnType<typeof loadUserPriorities>[number];
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -45,18 +43,8 @@ const SettingsPage: React.FC = () => {
   }));
 
   // Priorities: load from localStorage so changes are permanent across sessions.
-  const [priorities, setPriorities] = useState<PriorityRule[]>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_PRIORITIES);
-      if (raw) {
-        const parsed = JSON.parse(raw) as PriorityRule[];
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {
-      /* ignore */
-    }
-    return DEFAULT_PRIORITIES;
-  });
+  const [priorities, setPriorities] = useState<PriorityRule[]>(() => loadUserPriorities());
+  const categories = useUserCategories();
 
   // Track which priority (if any) is currently being edited inline.
   const [editingPriorityId, setEditingPriorityId] = useState<number | null>(
@@ -66,11 +54,7 @@ const SettingsPage: React.FC = () => {
 
   // Persist priorities to localStorage whenever they change (reorder, add, remove, edit).
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_PRIORITIES, JSON.stringify(priorities));
-    } catch {
-      /* ignore */
-    }
+    saveUserPriorities(priorities);
   }, [priorities]);
 
   // Connect-email modal: user can add Gmail/Outlook etc.; backend will authenticate and read.
@@ -336,6 +320,25 @@ const SettingsPage: React.FC = () => {
                         </div>
 
                         <div className="flex shrink-0 items-center gap-1.5 text-xs">
+                          <label
+                            className="flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-[#F3E6D9] bg-white"
+                            aria-label={`Change color for ${rule.label}`}
+                          >
+                            <input
+                              type="color"
+                              value={getCategoryColorById(
+                                categories,
+                                getCategoryIdForPriority(rule.id),
+                              )}
+                              onChange={(event) =>
+                                setUserCategoryColor(
+                                  getCategoryIdForPriority(rule.id),
+                                  event.target.value,
+                                )
+                              }
+                              className="h-10 w-10 cursor-pointer border-0 bg-transparent p-0"
+                            />
+                          </label>
                           <button
                             type="button"
                             onClick={() => movePriority(rule.id, "up")}
