@@ -8,6 +8,7 @@ import {
 } from "../services/taskProgress";
 // TEMP: remove after backend integration. Hardcoded color map for visual check.
 import { getTempCategoryColor } from "../services/tempCategoryColors";
+import filterIcon from "../assets/page_buttons/filter.png";
 
 /**
  * Important email preview shown on Today.
@@ -79,10 +80,13 @@ const EVENTS: TodayEvent[] = [
 const TodayPage: React.FC = () => {
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
   const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(() => [...IMPORTANT_EMAILS_FILLER]);
+  const [selectedFilter, setSelectedFilter] = useState<string>("all");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [slidingEmailIds, setSlidingEmailIds] = useState<Set<string>>(new Set());
   const [closingEmailIds, setClosingEmailIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ email: ImportantEmailPreview; index: number } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filterMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -97,6 +101,19 @@ const TodayPage: React.FC = () => {
   useEffect(() => {
     setImportantEmails([...IMPORTANT_EMAILS_FILLER]);
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+
+    if (isFilterOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isFilterOpen]);
 
   const getSourceIcon = (source: ImportantEmailPreview["source"]) => {
     if (source === "gmail") {
@@ -184,15 +201,19 @@ const TodayPage: React.FC = () => {
     setToast(null);
   };
 
-  const resetImportantEmails = () => {
-    setImportantEmails([...IMPORTANT_EMAILS_FILLER]);
-    setSlidingEmailIds(new Set());
-    setClosingEmailIds(new Set());
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast(null);
-  };
-
   const DEFAULT_COLOR = "#E5E7EB"; // TEMP: pastel fallback
+  const availableCategories = Array.from(
+    new Set(importantEmails.map((mail) => mail.tagCategoryId).filter(Boolean))
+  ) as string[];
+  const filteredEmails =
+    selectedFilter === "all"
+      ? importantEmails
+      : importantEmails.filter((mail) => mail.tagCategoryId === selectedFilter);
+
+  const formatCategoryLabel = (id?: string) => {
+    if (!id) return "Uncategorized";
+    return id.charAt(0).toUpperCase() + id.slice(1);
+  };
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
@@ -232,34 +253,85 @@ const TodayPage: React.FC = () => {
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
                     <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">
                       star
                     </span>
                     <span>Important Emails</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={resetImportantEmails}
-                    className="text-xs font-semibold text-[#f9ab7b] underline underline-offset-4 transition-colors hover:text-[#f0a068]"
-                  >
-                    Reset (temp)
-                  </button>
+                  <div className="flex items-center gap-2 pr-1">
+                    <div className="relative" ref={filterMenuRef}>
+                      <button
+                        type="button"
+                        onClick={() => setIsFilterOpen((o) => !o)}
+                        className="inline-flex items-center justify-center rounded-full border border-transparent bg-transparent px-0.5 py-0.5 transition hover:opacity-80 focus:outline-none focus:ring-0"
+                        aria-haspopup="listbox"
+                        aria-expanded={isFilterOpen}
+                        aria-label="Filter important emails"
+                      >
+                        <img
+                          src={filterIcon}
+                          alt=""
+                          className="h-6 w-6"
+                          style={{
+                            filter:
+                              "invert(81%) sepia(52%) saturate(1330%) hue-rotate(324deg) brightness(99%) contrast(98%)",
+                          }}
+                        />
+                      </button>
+                      {isFilterOpen && (
+                        <div className="absolute right-0 z-20 mt-2 w-36 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_14px_32px_rgba(0,0,0,0.12)]">
+                          <button
+                            type="button"
+                            className={`flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs transition hover:bg-[#f8fafc] ${selectedFilter === "all" ? "bg-[#f0fdf4] font-semibold text-[#065f46]" : "text-[#111827]"}`}
+                            onClick={() => {
+                              setSelectedFilter("all");
+                              setIsFilterOpen(false);
+                            }}
+                          >
+                            <span>All</span>
+                            {selectedFilter === "all" && (
+                              <span className="material-symbols-outlined text-[14px] text-[#10b981] opacity-80">done</span>
+                            )}
+                          </button>
+                          {availableCategories.map((category) => (
+                            <button
+                              key={category}
+                              type="button"
+                              className={`flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs transition hover:bg-[#f8fafc] ${selectedFilter === category ? "bg-[#f0fdf4] font-semibold text-[#065f46]" : "text-[#111827]"}`}
+                              onClick={() => {
+                                setSelectedFilter(category);
+                                setIsFilterOpen(false);
+                              }}
+                            >
+                              <span className="capitalize">{formatCategoryLabel(category)}</span>
+                              {selectedFilter === category && (
+                                <span className="material-symbols-outlined text-[14px] text-[#10b981] opacity-80">done</span>
+                              )}
+                            </button>
+                          ))}
+                          {availableCategories.length === 0 && (
+                            <div className="px-2.5 py-1.5 text-xs text-[#6B7280]">No categories yet</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="mt-3 pl-2.5 sm:pl-3.5">
-                  {importantEmails.length === 0 ? (
+                  {filteredEmails.length === 0 ? (
                     <div className="flex items-center justify-center gap-2 py-3 text-sm font-semibold text-[#6B7280]">
                       <span className="material-symbols-outlined text-base text-[#34d399]">task_alt</span>
                       <span>That’s everything!</span>
                     </div>
                   ) : (
-                    importantEmails.map((mail, index) => {
+                    filteredEmails.map((mail, index) => {
                       const isSliding = slidingEmailIds.has(mail.id);
                       const isClosing = closingEmailIds.has(mail.id);
                       const visualStyle: React.CSSProperties = {
-                        borderBottom: index === importantEmails.length - 1 ? "none" : "0.5px solid #E5E7EB",
+                        borderBottom: index === filteredEmails.length - 1 ? "none" : "0.5px solid #E5E7EB",
                       };
                       if (isSliding || isClosing) {
                         visualStyle.boxShadow = isClosing
@@ -368,7 +440,7 @@ const TodayPage: React.FC = () => {
         {toast && (
           <div className="pointer-events-auto fixed bottom-6 left-1/2 z-50 -translate-x-1/2 transform">
             <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#111827] shadow-[0_12px_32px_rgba(0,0,0,0.18)] border border-[#E5E7EB]">
-              <span>Marked as read —</span>
+              <span>Marked as read </span>
               <button
                 type="button"
                 onClick={undoLastRemoval}
