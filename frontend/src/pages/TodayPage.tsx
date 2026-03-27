@@ -263,9 +263,10 @@ const TodayPage: React.FC = () => {
                       };
                       if (isSliding || isClosing) {
                         visualStyle.boxShadow = isClosing
-                          ? "0 6px 18px rgba(34, 197, 94, 0.22), 0 0 0 1px rgba(34, 197, 94, 0.14)"
-                          : "0 10px 26px rgba(34, 197, 94, 0.30), 0 0 0 1px rgba(34, 197, 94, 0.18)";
-                        visualStyle.backgroundColor = "rgba(236, 253, 243, 0.9)";
+                          ? "0 8px 14px rgba(34, 197, 94, 0.12)"
+                          : "0 10px 18px rgba(34, 197, 94, 0.16)";
+                        visualStyle.borderBottom = "1px solid rgba(34, 197, 94, 0.45)";
+                        visualStyle.backgroundColor = "transparent";
                       }
 
                       return (
