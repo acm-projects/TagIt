@@ -1,66 +1,10 @@
-import React, { useState } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import PageTopBar from "../components/PageTopBar";
 import authenticationBg from "../assets/AuthenticationBg.png";
-import { signup, storeToken } from "../services/api";
 
 const SignupPage: React.FC = () => {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleSignup = async () => {
-    if (!username.trim()) {
-      setError("Username is required");
-      return;
-    }
-
-    if (!password.trim()) {
-      setError("Password is required");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
-
-    setError("");
-    setLoading(true);
-
-    try {
-      const response = await signup(username, password);
-
-      if (!response.success) {
-        setError(response.error || "Signup failed");
-        setLoading(false);
-        return;
-      }
-
-      if (response.data?.token) {
-        await storeToken(response.data.token);
-        // Navigate to setup page for user to configure preferences
-        navigate("/setup");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-      setLoading(false);
-    }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleSignup();
-    }
-  };
 
   return (
     <div
@@ -78,12 +22,6 @@ const SignupPage: React.FC = () => {
         </h1>
 
         <div className="w-full max-w-md space-y-6 text-left">
-          {error && (
-            <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
           <div className="space-y-2">
             <label className="block text-base font-medium text-[#1F2933]">
               Create Username
@@ -91,11 +29,7 @@ const SignupPage: React.FC = () => {
             <input
               type="text"
               placeholder="Enter your username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={loading}
-              className="w-full rounded-xl border border-[#EFE7DC] bg-white px-4 py-3 text-base text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] placeholder:text-[#9CA3AF] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#f9ab7b]/25 disabled:opacity-50"
+              className="w-full rounded-xl border border-[#EFE7DC] bg-white px-4 py-3 text-base text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] placeholder:text-[#9CA3AF] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#f9ab7b]/25"
             />
           </div>
 
@@ -106,11 +40,7 @@ const SignupPage: React.FC = () => {
             <input
               type="password"
               placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={loading}
-              className="w-full rounded-xl border border-[#EFE7DC] bg-white px-4 py-3 text-base text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] placeholder:text-[#9CA3AF] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#f9ab7b]/25 disabled:opacity-50"
+              className="w-full rounded-xl border border-[#EFE7DC] bg-white px-4 py-3 text-base text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] placeholder:text-[#9CA3AF] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#f9ab7b]/25"
             />
           </div>
 
@@ -121,27 +51,21 @@ const SignupPage: React.FC = () => {
             <input
               type="password"
               placeholder="Re-enter password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={loading}
-              className="w-full rounded-xl border border-[#EFE7DC] bg-white px-4 py-3 text-base text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] placeholder:text-[#9CA3AF] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#f9ab7b]/25 disabled:opacity-50"
+              className="w-full rounded-xl border border-[#EFE7DC] bg-white px-4 py-3 text-base text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] placeholder:text-[#9CA3AF] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#f9ab7b]/25"
             />
           </div>
         </div>
 
         <button
-          className="mt-10 w-full max-w-md rounded-full bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_6px_14px_rgba(249,171,123,0.35)] transition-colors transition-transform duration-200 hover:scale-[1.02] hover:bg-[#f0a068] disabled:opacity-50 disabled:cursor-not-allowed"
-          onClick={handleSignup}
-          disabled={loading}
+          className="mt-10 w-full max-w-md rounded-full bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_6px_14px_rgba(249,171,123,0.35)] transition-colors transition-transform duration-200 hover:scale-[1.02] hover:bg-[#f0a068]"
+          onClick={() => navigate("/authenticate")}
         >
-          {loading ? "Creating Account..." : "Create Account"}
+          Create Account
         </button>
 
         <button
-          className="mt-6 text-base text-[#1F2933] underline decoration-[#EFE7DC] underline-offset-2 transition-colors hover:text-[#f9ab7b] disabled:opacity-50"
+          className="mt-6 text-base text-[#1F2933] underline decoration-[#EFE7DC] underline-offset-2 transition-colors hover:text-[#f9ab7b]"
           onClick={() => navigate("/login")}
-          disabled={loading}
         >
           Back again? Log in
         </button>

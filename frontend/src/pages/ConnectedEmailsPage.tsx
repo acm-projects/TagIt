@@ -37,10 +37,13 @@ const ConnectedEmailsPage: React.FC = () => {
     if (google?.email) list.push({ provider: "google", email: google.email });
     if (microsoft?.email) list.push({ provider: "microsoft", email: microsoft.email });
     setEmails(list);
+    setLoading(false);
   }, []);
 
+  // Initial load fetches external auth state before rendering the list.
   useEffect(() => {
-    loadEmails().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadEmails();
   }, [loadEmails]);
 
   // Refresh list when storage changes (e.g. new account connected in another flow)
