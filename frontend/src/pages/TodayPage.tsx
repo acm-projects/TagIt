@@ -101,6 +101,11 @@ const TodayPage: React.FC = () => {
     return subscribeToTaskUpdates(refreshProgress);
   }, []);
 
+  // Reset important emails to the placeholder set on mount (helps restore if any were dismissed previously)
+  useEffect(() => {
+    setImportantEmails([...IMPORTANT_EMAILS_FILLER]);
+  }, []);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
@@ -126,8 +131,7 @@ const TodayPage: React.FC = () => {
     );
   };
 
-  const handleOpenEmail = (email: ImportantEmailPreview) => {
-    void email;
+  const handleOpenEmail = (_email: ImportantEmailPreview) => {
     // Placeholder until mail detail/open workflow is wired.
   };
 

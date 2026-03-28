@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
 import deleteIcon from "../assets/page_buttons/delete.png";
+
 const STORAGE_KEY_PRIORITIES = "tagit-settings-priorities";
 
 type Priority = {

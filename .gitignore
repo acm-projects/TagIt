@@ -1,22 +1,3 @@
-# Repository-level ignores
-
-# Ignore local environment files (do NOT commit secrets)
-/backend/.env
-/backend/backend.env
-*.env
-.env
-
-# Node modules (local installs)
-node_modules/
-**/node_modules/
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-backend/.env
-
-
 # Logs
 logs
 *.log
@@ -40,3 +21,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local env files
+.env
+*.env.local
+*.env.*.local
+
+
+# System Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db

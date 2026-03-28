@@ -112,13 +112,11 @@ const MailPage: React.FC = () => {
     [filteredMails],
   );
 
-  const handleOpenMail = (mail: MailItem) => {
-    void mail;
+  const handleOpenMail = (_mail: MailItem) => {
     // Placeholder until mail detail workflow is wired.
   };
 
-  const handleOpenDraft = (draft: DraftItem) => {
-    void draft;
+  const handleOpenDraft = (_draft: DraftItem) => {
     // Placeholder until draft editor is wired.
   };
 
