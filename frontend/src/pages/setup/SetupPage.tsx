@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { updatePreferences } from "../../services/api";
 
 type Priority = {
   id: string;
@@ -16,11 +17,16 @@ const initialPriorities: Priority[] = [
   { id: "7", label: "Low Priority" },
 ];
 
+let nextId = initialPriorities.length + 1;
+
 const SetupPage: React.FC = () => {
   const navigate = useNavigate();
   const [priorities, setPriorities] = useState<Priority[]>(initialPriorities);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [newPriority, setNewPriority] = useState("");
+  const [showInput, setShowInput] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleDragStart = (id: string) => setDragId(id);
 
@@ -39,15 +45,36 @@ const SetupPage: React.FC = () => {
   };
 
   const handleDrop = () => setDragId(null);
+
+  const handleAddPriority = () => {
+    const trimmed = newPriority.trim();
+    if (!trimmed) return;
+    if (priorities.some((p) => p.label.toLowerCase() === trimmed.toLowerCase())) {
+      return; // duplicate
+    }
+    setPriorities((prev) => [...prev, { id: String(nextId++), label: trimmed }]);
+    setNewPriority("");
+    setShowInput(false);
+  };
+
+  const handleRemovePriority = (id: string) => {
+    setPriorities((prev) => prev.filter((p) => p.id !== id));
+  };
   
   const handleFinishSetup = async () => {
     setLoading(true);
+    setError(null);
     try {
-      // TODO: Save priorities to backend if needed
-      // For now, just navigate to the main dashboard
+      const topics = priorities.map((p) => p.label);
+      const res = await updatePreferences(undefined, topics);
+      if (!res.success) {
+        setError(res.error ?? "Failed to save priorities.");
+        return;
+      }
       navigate("/today");
     } catch (err) {
       console.error("Error finishing setup:", err);
+      setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -58,6 +85,12 @@ const SetupPage: React.FC = () => {
       <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center rounded-3xl bg-[#FFF9F4] px-8">
         <div className="w-full max-w-3xl space-y-8 text-center">
           <h1 className="text-4xl font-semibold tracking-wide text-[#A34712]">Setup</h1>
+
+          {error && (
+            <div className="rounded-xl border border-[#fecdd3] bg-[#fee2e2] px-4 py-3">
+              <p className="text-sm font-medium text-[#ef4444]">{error}</p>
+            </div>
+          )}
 
           <div className="text-left">
             <p className="mb-4 text-lg font-medium text-[#A34712]">Order Priorities:</p>
@@ -77,18 +110,59 @@ const SetupPage: React.FC = () => {
                     </span>
                     <span>{priority.label}</span>
                   </div>
-                  <span className="text-lg text-[#3F2A1E]" aria-hidden>
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePriority(priority.id)}
+                    className="text-lg text-[#3F2A1E] hover:text-[#ef4444] transition-colors"
+                    aria-label={`Remove ${priority.label}`}
+                  >
                     🗑️
-                  </span>
+                  </button>
                 </div>
               ))}
             </div>
           </div>
 
           <div className="space-y-6">
-            <button className="flex w-full items-center justify-center rounded-[24px] border border-dashed border-[#7A4A2D] bg-[#FFF9F4] px-4 py-4 text-lg font-medium text-[#3F2A1E] shadow-sm">
-              + Add Priorities
-            </button>
+            {showInput ? (
+              <div className="flex w-full items-center gap-2">
+                <input
+                  type="text"
+                  value={newPriority}
+                  onChange={(e) => setNewPriority(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleAddPriority();
+                    if (e.key === "Escape") { setShowInput(false); setNewPriority(""); }
+                  }}
+                  placeholder="Type a priority name..."
+                  autoFocus
+                  className="flex-1 rounded-full border border-[#C86C2F] bg-white px-4 py-3 text-base text-[#3F2A1E] placeholder:text-[#9CA3AF] focus:border-[#A34712] focus:outline-none focus:ring-2 focus:ring-[#A34712]/25"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddPriority}
+                  disabled={!newPriority.trim()}
+                  className="rounded-full bg-[#A34712] px-5 py-3 text-base font-medium text-white transition hover:bg-[#8B3A0F] disabled:opacity-50"
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowInput(false); setNewPriority(""); }}
+                  className="rounded-full border border-[#C86C2F] bg-white px-4 py-3 text-base text-[#3F2A1E] transition hover:bg-[#FFF9F4]"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowInput(true)}
+                className="flex w-full items-center justify-center rounded-[24px] border border-dashed border-[#7A4A2D] bg-[#FFF9F4] px-4 py-4 text-lg font-medium text-[#3F2A1E] shadow-sm transition hover:bg-[#F8E7DD]"
+              >
+                + Add Priorities
+              </button>
+            )}
 
             <button
               onClick={handleFinishSetup}

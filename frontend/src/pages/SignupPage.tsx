@@ -1,10 +1,47 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageTopBar from "../components/PageTopBar";
+import { signup, storeToken } from "../services/api";
+import { useAuth } from "../services/auth/AuthContext";
 import authenticationBg from "../assets/AuthenticationBg.png";
 
 const SignupPage: React.FC = () => {
   const navigate = useNavigate();
+  const { checkAuth } = useAuth();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSignup = async () => {
+    setError(null);
+
+    if (!username.trim() || !password) {
+      setError("Username and password are required.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await signup(username.trim(), password);
+      if (res.success && res.data?.token) {
+        await storeToken(res.data.token);
+        await checkAuth();
+        navigate("/authenticate");
+      } else {
+        setError(res.error ?? "Signup failed.");
+      }
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div
@@ -21,6 +58,12 @@ const SignupPage: React.FC = () => {
           Create Account
         </h1>
 
+        {error && (
+          <div className="mb-6 w-full max-w-md rounded-xl border border-[#fecdd3] bg-[#fee2e2] px-4 py-3">
+            <p className="text-sm font-medium text-[#ef4444]">{error}</p>
+          </div>
+        )}
+
         <div className="w-full max-w-md space-y-6 text-left">
           <div className="space-y-2">
             <label className="block text-base font-medium text-[#1F2933]">
@@ -29,6 +72,8 @@ const SignupPage: React.FC = () => {
             <input
               type="text"
               placeholder="Enter your username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded-xl border border-[#EFE7DC] bg-white px-4 py-3 text-base text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] placeholder:text-[#9CA3AF] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#f9ab7b]/25"
             />
           </div>
@@ -40,6 +85,8 @@ const SignupPage: React.FC = () => {
             <input
               type="password"
               placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-xl border border-[#EFE7DC] bg-white px-4 py-3 text-base text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] placeholder:text-[#9CA3AF] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#f9ab7b]/25"
             />
           </div>
@@ -51,16 +98,19 @@ const SignupPage: React.FC = () => {
             <input
               type="password"
               placeholder="Re-enter password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full rounded-xl border border-[#EFE7DC] bg-white px-4 py-3 text-base text-[#111827] shadow-[0_6px_14px_rgba(17,24,39,0.05)] placeholder:text-[#9CA3AF] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#f9ab7b]/25"
             />
           </div>
         </div>
 
         <button
-          className="mt-10 w-full max-w-md rounded-full bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_6px_14px_rgba(249,171,123,0.35)] transition-colors transition-transform duration-200 hover:scale-[1.02] hover:bg-[#f0a068]"
-          onClick={() => navigate("/authenticate")}
+          className="mt-10 w-full max-w-md rounded-full bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_6px_14px_rgba(249,171,123,0.35)] transition-colors transition-transform duration-200 hover:scale-[1.02] hover:bg-[#f0a068] disabled:opacity-60"
+          onClick={handleSignup}
+          disabled={loading}
         >
-          Create Account
+          {loading ? "Creating Account..." : "Create Account"}
         </button>
 
         <button

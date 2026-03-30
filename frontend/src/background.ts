@@ -5,8 +5,7 @@
 
 import {
   buildGoogleAuthUrl,
-  fetchGoogleUserEmail,
-  parseTokenFromRedirect,
+  parseCodeFromRedirect,
 } from "./services/auth/googleOAuth";
 import {
   buildMicrosoftAuthUrl,
@@ -14,6 +13,9 @@ import {
   fetchMicrosoftUserEmail,
 } from "./services/auth/microsoftOAuth";
 import { saveToken } from "./services/auth/tokenStorage";
+import { getStoredToken } from "./services/api";
+
+const NODE_BACKEND_URL = "http://localhost:3000";
 
 const enableSidePanelOnClick = async () => {
   try {
@@ -95,11 +97,35 @@ async function runGoogleOAuth(): Promise<{ email: string }> {
     );
   });
 
-  const accessToken = parseTokenFromRedirect(redirectUrl);
-  const email = await fetchGoogleUserEmail(accessToken);
+  // Parse the authorization code from the redirect URL
+  const code = parseCodeFromRedirect(redirectUrl);
 
+  // Get the user's JWT so the Node backend can associate the tokens
+  const jwt = await getStoredToken();
+  if (!jwt) {
+    throw new Error("You must be logged in before connecting a Gmail account.");
+  }
+
+  // Forward the redirect URL to the Node backend for token exchange + DB storage
+  const resp = await fetch(`${NODE_BACKEND_URL}/auth/google/exchange`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({ redirectUrl }),
+  });
+
+  const data = (await resp.json()) as { success?: boolean; email?: string; error?: string };
+  if (!resp.ok || !data.success) {
+    throw new Error(data.error ?? "Failed to exchange Google code for tokens");
+  }
+
+  const email = data.email ?? "unknown@gmail.com";
+
+  // Also save locally so the ConnectedEmailsPage can show it immediately
   await saveToken("google", {
-    access_token: accessToken,
+    access_token: code, // placeholder — real tokens are on the server
     email,
   });
 

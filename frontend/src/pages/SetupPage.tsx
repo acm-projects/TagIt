@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
+import { updatePreferences } from "../services/api";
 import deleteIcon from "../assets/page_buttons/delete.png";
 
 const STORAGE_KEY_PRIORITIES = "tagit-settings-priorities";
@@ -39,6 +40,8 @@ const SetupPage: React.FC = () => {
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [newPriority, setNewPriority] = useState("");
   const [showInput, setShowInput] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleDragStart = (id: number, e: React.DragEvent<HTMLDivElement>) => {
     setDragId(id);
@@ -210,12 +213,35 @@ const SetupPage: React.FC = () => {
                 </button>
               )}
 
+              {error && (
+                <div className="rounded-xl border border-[#fecdd3] bg-[#fee2e2] px-4 py-3">
+                  <p className="text-sm font-medium text-[#ef4444]">{error}</p>
+                </div>
+              )}
+
               <button
                 type="button"
-                onClick={() => navigate("/today")}
-                className="mx-auto block w-52 rounded-lg bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_10px_24px_rgba(249,171,123,0.32)] transition hover:bg-[#f59c65]"
+                disabled={saving}
+                onClick={async () => {
+                  setSaving(true);
+                  setError(null);
+                  try {
+                    const topics = priorities.map((p) => p.label);
+                    const res = await updatePreferences(undefined, topics);
+                    if (!res.success) {
+                      setError(res.error ?? "Failed to save priorities.");
+                      return;
+                    }
+                    navigate("/today");
+                  } catch {
+                    setError("Something went wrong. Please try again.");
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+                className="mx-auto block w-52 rounded-lg bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_10px_24px_rgba(249,171,123,0.32)] transition hover:bg-[#f59c65] disabled:opacity-50"
               >
-                Finish setup
+                {saving ? "Saving..." : "Finish setup"}
               </button>
             </div>
           </div>

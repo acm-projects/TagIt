@@ -1,6 +1,7 @@
 /**
  * Google OAuth 2.0 for Chrome extension.
- * Uses implicit (token) flow so no client_secret is needed — works with a "Web application" client.
+ * Uses authorization code flow — the code is forwarded to the Node backend
+ * which exchanges it for tokens (including a refresh_token) and stores them.
  * Redirect URI from chrome.identity.getRedirectURL().
  */
 
@@ -15,12 +16,12 @@ const SCOPES = [
 ];
 
 export function getRedirectUrl(): string {
-  return chrome.identity.getRedirectURL();
+  return chrome.identity.getRedirectURL("oauth2callback");
 }
 
 /**
- * Build auth URL for implicit flow (response_type=token).
- * Google returns access_token in the redirect URL fragment — no token exchange, no client_secret.
+ * Build auth URL for authorization code flow (response_type=code).
+ * The code is exchanged server-side for access + refresh tokens.
  */
 export function buildGoogleAuthUrl(): string {
   const clientId = getGoogleClientId();
@@ -29,8 +30,9 @@ export function buildGoogleAuthUrl(): string {
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
-    response_type: "token",
+    response_type: "code",
     scope: SCOPES.join(" "),
+    access_type: "offline",
     prompt: "consent",
   });
 
@@ -38,20 +40,21 @@ export function buildGoogleAuthUrl(): string {
 }
 
 /**
- * Parse access_token from the redirect URL fragment after implicit flow.
- * Example redirect: https://...chromiumapp.org/#access_token=...&token_type=Bearer&expires_in=...
+ * Parse authorization code from the redirect URL query string.
+ * Example redirect: https://...chromiumapp.org/oauth2callback?code=...
  */
-export function parseTokenFromRedirect(redirectUrl: string): string {
-  const hashIndex = redirectUrl.indexOf("#");
-  if (hashIndex === -1) throw new Error("No fragment in redirect URL");
-  const fragment = redirectUrl.slice(hashIndex + 1);
-  const params = new URLSearchParams(fragment);
-  const accessToken = params.get("access_token");
-  if (!accessToken) {
-    const error = params.get("error") ?? params.get("error_description") ?? "No access_token in redirect";
-    throw new Error(`Google OAuth: ${error}`);
+export function parseCodeFromRedirect(redirectUrl: string): string {
+  const parsed = new URL(redirectUrl);
+  const error = parsed.searchParams.get("error");
+  if (error) {
+    const desc = parsed.searchParams.get("error_description") ?? error;
+    throw new Error(`Google OAuth: ${desc}`);
   }
-  return accessToken;
+  const code = parsed.searchParams.get("code");
+  if (!code) {
+    throw new Error("Google OAuth: No code in redirect URL");
+  }
+  return code;
 }
 
 export async function fetchGoogleUserEmail(accessToken: string): Promise<string> {
