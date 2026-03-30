@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
 import SectionHeader from "../components/SectionHeader";
-import { removeToken } from "../services/auth/tokenStorage";
+import { useAuth } from "../services/auth/AuthContext";
+import { getToken, removeToken } from "../services/auth/tokenStorage";
+import { clearToken } from "../services/api";
 import {
   getCategoryIdForPriority,
   loadUserPriorities,
@@ -142,13 +144,31 @@ const SortablePriorityRow: React.FC<SortablePriorityRowProps> = ({
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { username, logout: authLogout } = useAuth();
 
-  // Connected user and emails; updated when user authenticates new accounts.
-  // Backend will use these to connect and read inboxes for the AI pipeline.
+  // Connected user and emails; loaded from stored OAuth tokens.
   const [connectedUser, setConnectedUser] = useState<ConnectedUser>(() => ({
-    username: "username",
-    emails: ["email1@gmail.com", "email2@outlook.com", "email3@utdallas.edu"],
+    username: "...",
+    emails: [],
   }));
+
+  // Load real username + connected emails on mount
+  useEffect(() => {
+    const load = async () => {
+      const [google, microsoft] = await Promise.all([
+        getToken("google"),
+        getToken("microsoft"),
+      ]);
+      const emails: string[] = [];
+      if (google?.email) emails.push(google.email);
+      if (microsoft?.email) emails.push(microsoft.email);
+      setConnectedUser({
+        username: username ?? "...",
+        emails,
+      });
+    };
+    void load();
+  }, [username]);
 
   // Priorities: load from localStorage so changes are permanent across sessions.
   const [priorities, setPriorities] = useState<PriorityRule[]>(() => loadUserPriorities());
@@ -232,8 +252,13 @@ const SettingsPage: React.FC = () => {
   }, [priorities]);
 
   const handleLogout = async () => {
-    await Promise.all([removeToken("google"), removeToken("microsoft")]);
-    navigate("/login");
+    await Promise.all([
+      removeToken("google"),
+      removeToken("microsoft"),
+      clearToken(),
+    ]);
+    await authLogout();
+    navigate("/");
   };
 
   const handlePriorityDragStart = (id: number, event: React.DragEvent<HTMLDivElement>) => {
