@@ -1,9 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
   ConnectedDaysFilter,
-  eventOccursOnLocalDay,
-  getDateForWeekdayInAnchorWeek,
+  type WeekdayShort,
   useDayFilter,
   useWeekAnchorWithSharedDayFilter,
 } from "../components/DaysFilter";
@@ -64,20 +63,74 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
 ];
 
 const CalendarPage: React.FC = () => {
-  const { selectedDay } = useDayFilter();
-  const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
+  const { selectedDay, setSelectedDay } = useDayFilter();
+  const { handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
   const categories = useUserCategories();
 
-  const selectedCalendarDate = useMemo(
-    () => getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay),
-    [weekAnchor, selectedDay],
-  );
+  const [calendarDay, setCalendarDay] = useState<WeekdayShort | null>(selectedDay);
+  const [events, setEvents] = useState<CalendarEvent[]>(CALENDAR_EVENTS);
+  const [isAddingEvent, setIsAddingEvent] = useState(false);
+  const [newEventTitle, setNewEventTitle] = useState("");
+  const [newEventDate, setNewEventDate] = useState("");
+  const [newEventTime, setNewEventTime] = useState("09:00 - 10:00");
+  const [newEventSource, setNewEventSource] = useState<CalendarEvent["source"]>("google");
 
-  const filteredEvents = useMemo(
-    () =>
-      CALENDAR_EVENTS.filter((event) => eventOccursOnLocalDay(event, selectedCalendarDate)),
-    [selectedCalendarDate],
-  );
+  useEffect(() => {
+    if (calendarDay === null) return;
+    if (calendarDay !== selectedDay) {
+      setCalendarDay(selectedDay);
+    }
+  }, [calendarDay, selectedDay]);
+
+  const dayCode = (dayLabel?: string) => dayLabel?.slice(0, 3).toLowerCase();
+  const filteredEvents = useMemo(() => {
+    if (!calendarDay) return events;
+    const target = dayCode(calendarDay);
+    return events.filter(
+      (event) =>
+        dayCode(event.day1) === target ||
+        (event.day2 && dayCode(event.day2) === target),
+    );
+  }, [calendarDay, events]);
+
+  const handleDayChange = (day: WeekdayShort | null) => {
+    if (day === null) {
+      setCalendarDay(null);
+      return;
+    }
+    setCalendarDay(day);
+    setSelectedDay(day);
+  };
+
+  const parseDateInput = (value: string) => {
+    const [year, month, day] = value.split("-").map(Number);
+    if (!year || !month || !day) return null;
+    const dt = new Date(year, month - 1, day);
+    const dayLabel = dt.toLocaleDateString("en-US", { weekday: "short" });
+    const dateLabel = `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}/${year}`;
+    return { dayLabel, dateLabel };
+  };
+
+  const handleSaveEvent = () => {
+    if (!newEventTitle.trim() || !newEventDate.trim()) return;
+    const parsed = parseDateInput(newEventDate);
+    const dayLabel = parsed?.dayLabel ?? "Mon";
+    const dateLabel = parsed?.dateLabel ?? newEventDate;
+    const nextEvent: CalendarEvent = {
+      title: newEventTitle.trim(),
+      date1: dateLabel,
+      day1: dayLabel,
+      time: newEventTime.trim() || "09:00 - 10:00",
+      source: newEventSource,
+      tagCategoryId: "priority-2",
+    };
+    setEvents((prev) => [nextEvent, ...prev]);
+    setIsAddingEvent(false);
+    setNewEventTitle("");
+    setNewEventDate("");
+    setNewEventTime("09:00 - 10:00");
+    setNewEventSource("google");
+  };
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
@@ -86,7 +139,14 @@ const CalendarPage: React.FC = () => {
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
-            <ConnectedDaysFilter className="!mt-0" />
+            <div className="sticky top-0 z-20 bg-[#F9F8F6] pb-1">
+              <ConnectedDaysFilter
+                className="!mt-0"
+                allowToggleOff
+                value={calendarDay}
+                onChange={handleDayChange}
+              />
+            </div>
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
@@ -99,13 +159,12 @@ const CalendarPage: React.FC = () => {
 
                 <div className="mt-3">
                   {filteredEvents.length === 0 ? (
-                    <p className="py-2 text-[12px] text-[#6B7280]">No events on this day.</p>
+                    <p className="py-2 text-[12px] text-[#6B7280]">
+                      {calendarDay ? "No events on this day." : "No events this week."}
+                    </p>
                   ) : (
                     filteredEvents.map((event, index) => {
-                      const sourceChipStyles =
-                        event.source === "google"
-                          ? "bg-[#DBEAFE] text-[#1D4ED8]"
-                          : "bg-[#E7F6EA] text-[#22A06B]";
+                      const sourceChipStyles = "text-[#6B7280]";
                       const categoryColor = getCategoryColorById(categories, event.tagCategoryId);
 
                       return (
@@ -121,7 +180,7 @@ const CalendarPage: React.FC = () => {
                         >
                           <span
                             aria-hidden="true"
-                            className="h-12 w-[6px] self-center rounded-full"
+                            className="h-14 w-[6px] self-center rounded-full"
                             style={{ backgroundColor: categoryColor }}
                           />
 
@@ -131,7 +190,7 @@ const CalendarPage: React.FC = () => {
                                 {event.title}
                               </p>
                               <span
-                                className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium capitalize ${sourceChipStyles}`}
+                                className={`self-center text-[12px] font-medium capitalize leading-[1.1] ${sourceChipStyles}`}
                               >
                                 {event.source}
                               </span>
@@ -154,10 +213,10 @@ const CalendarPage: React.FC = () => {
                             <button
                               type="button"
                               aria-label="Add"
-                              className="inline-flex h-8 w-8 items-center justify-center text-[#f9ab7b] transition-colors hover:text-[#e58a58]"
+                              className="inline-flex h-9 w-9 items-center justify-center text-[#22c55e] transition-colors hover:text-[#16a34a]"
                             >
                               <span
-                                className="inline-block h-3.5 w-3.5 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
+                                className="inline-block h-4 w-4 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
                                 style={{
                                   maskImage: `url(${addIcon})`,
                                   WebkitMaskImage: `url(${addIcon})`,
@@ -168,10 +227,10 @@ const CalendarPage: React.FC = () => {
                             <button
                               type="button"
                               aria-label="Delete"
-                              className="inline-flex h-8 w-8 items-center justify-center text-[#f9ab7b] transition-colors hover:text-[#e58a58]"
+                              className="inline-flex h-9 w-9 items-center justify-center text-[#ef4444] transition-colors hover:text-[#dc2626]"
                             >
                               <span
-                                className="inline-block h-3.5 w-3.5 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
+                                className="inline-block h-4 w-4 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
                                 style={{
                                   maskImage: `url(${deleteIcon})`,
                                   WebkitMaskImage: `url(${deleteIcon})`,
@@ -184,6 +243,95 @@ const CalendarPage: React.FC = () => {
                       );
                     })
                   )}
+                  {isAddingEvent && (
+                    <div className="mt-3 grid gap-3 rounded-xl border border-dashed border-[#E5E7EB] bg-[#FBFBFB] px-4 py-3 sm:grid-cols-2">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[12px] font-semibold text-[#374151]">Title</label>
+                        <input
+                          type="text"
+                          value={newEventTitle}
+                          onChange={(e) => setNewEventTitle(e.target.value)}
+                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
+                          placeholder="Event title"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[12px] font-semibold text-[#374151]">Date</label>
+                        <input
+                          type="date"
+                          value={newEventDate}
+                          onChange={(e) => setNewEventDate(e.target.value)}
+                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[12px] font-semibold text-[#374151]">Time</label>
+                        <input
+                          type="text"
+                          value={newEventTime}
+                          onChange={(e) => setNewEventTime(e.target.value)}
+                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
+                          placeholder="09:00 - 10:00"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[12px] font-semibold text-[#374151]">Source</label>
+                        <select
+                          value={newEventSource}
+                          onChange={(e) => setNewEventSource(e.target.value as CalendarEvent["source"])}
+                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
+                        >
+                          <option value="google">google</option>
+                          <option value="outlook">outlook</option>
+                        </select>
+                      </div>
+                      <div className="flex gap-2 sm:col-span-2">
+                        <button
+                          type="button"
+                          onClick={handleSaveEvent}
+                          className="inline-flex flex-1 items-center justify-center rounded-full bg-[#f9ab7b] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#f29a63]"
+                        >
+                          Save Event
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingEvent(false);
+                            setNewEventTitle("");
+                            setNewEventDate("");
+                            setNewEventTime("09:00 - 10:00");
+                            setNewEventSource("google");
+                          }}
+                          className="inline-flex flex-1 items-center justify-center rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#F9FAFB]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-4 flex">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingEvent((v) => !v)}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#F9FAFB]"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="h-4 w-4 shrink-0 bg-[#374151]"
+                        style={{
+                          WebkitMaskImage: `url(${addIcon})`,
+                          maskImage: `url(${addIcon})`,
+                          WebkitMaskRepeat: "no-repeat",
+                          maskRepeat: "no-repeat",
+                          WebkitMaskPosition: "center",
+                          maskPosition: "center",
+                          WebkitMaskSize: "contain",
+                          maskSize: "contain",
+                        }}
+                      />
+                      <span>Add Event</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>
