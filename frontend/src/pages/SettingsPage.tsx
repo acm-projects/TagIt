@@ -63,6 +63,11 @@ const SortablePriorityRow: React.FC<SortablePriorityRowProps> = ({
   onDragEnd,
   categories,
 }) => {
+  const colorValue = getCategoryColorById(
+    categories,
+    getCategoryIdForPriority(rule.id),
+  );
+
   return (
     <div
       draggable
@@ -78,7 +83,7 @@ const SortablePriorityRow: React.FC<SortablePriorityRowProps> = ({
       <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
-          className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b] active:cursor-grabbing"
+          className="inline-flex h-7 w-7 cursor-grab items-center justify-center text-[#f9ab7b] active:cursor-grabbing"
           aria-label={`Drag to reorder ${rule.label}`}
         >
           <span className="material-symbols-outlined text-[16px]">drag_indicator</span>
@@ -106,17 +111,20 @@ const SortablePriorityRow: React.FC<SortablePriorityRowProps> = ({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 text-xs">
-        <label
-          className="flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-[#F3E6D9] bg-white"
-          aria-label={`Change color for ${rule.label}`}
-        >
+        <label className="relative inline-flex h-8 w-8 cursor-pointer items-center justify-center">
+          <span className="absolute inset-0 rounded-full bg-white shadow-[0_6px_14px_rgba(17,24,39,0.08)] ring-1 ring-[#efe7dc]" />
+          <span
+            className="relative h-5 w-5 rounded-full"
+            style={{ backgroundColor: colorValue }}
+          />
           <input
             type="color"
-            value={getCategoryColorById(categories, getCategoryIdForPriority(rule.id))}
+            value={colorValue}
             onChange={(event) =>
               setUserCategoryColor(getCategoryIdForPriority(rule.id), event.target.value)
             }
-            className="h-10 w-10 cursor-pointer border-0 bg-transparent p-0"
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            aria-label={`Change color for ${rule.label}`}
           />
         </label>
         <button

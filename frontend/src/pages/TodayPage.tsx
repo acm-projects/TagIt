@@ -33,6 +33,7 @@ type ImportantEmailPreview = {
  */
 type TodayEvent = {
   time: string;
+  date: string;
   title: string;
   tagCategoryId?: string;
 };
@@ -72,12 +73,21 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     priority: "urgent",
     tagCategoryId: "priority-2",
   },
+  {
+    id: "mail-5",
+    sender: "Career Center Digest",
+    source: "gmail",
+    tone: "soon",
+    summary: "Two on-campus career fairs open registration this week; RSVP to reserve an early slot.",
+    tagCategoryId: "priority-3",
+  },
 ];
 
 const EVENTS: TodayEvent[] = [
-  { time: "03:00 - 03:30", title: "Exam Prep", tagCategoryId: "priority-2" },
-  { time: "04:00 - 05:30", title: "Government Class", tagCategoryId: "priority-2" },
-  { time: "08:30 - 10:00", title: "ACM Meeting @ SLC", tagCategoryId: "priority-1" },
+  { date: "Tue, Apr 01", time: "03:00 - 03:30", title: "Exam Prep", tagCategoryId: "priority-2" },
+  { date: "Tue, Apr 01", time: "04:00 - 05:30", title: "Government Class", tagCategoryId: "priority-2" },
+  { date: "Wed, Apr 02", time: "08:30 - 10:00", title: "ACM Meeting @ SLC", tagCategoryId: "priority-1" },
+  { date: "Thu, Apr 03", time: "12:15 - 01:00", title: "Resume Review Drop-In", tagCategoryId: "priority-3" },
 ];
 
 const TodayPage: React.FC = () => {
@@ -323,7 +333,7 @@ const TodayPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-3 pl-2.5 sm:pl-3.5">
+                <div className="mt-3 pl-2.5 sm:pl-3.5 space-y-0.5">
                   {filteredEmails.length === 0 ? (
                     <div className="flex items-center justify-center gap-2 py-3 text-sm font-semibold text-[#6B7280]">
                       <span className="material-symbols-outlined text-base text-[#34d399]">task_alt</span>
@@ -347,12 +357,12 @@ const TodayPage: React.FC = () => {
                       return (
                         <div
                           key={mail.id}
-                          className={`tagged-item group flex items-start gap-3 py-2 email-row ${isSliding ? "email-row--slide-up" : ""} ${isClosing ? "email-row--closing" : ""}`}
+                          className={`tagged-item group flex items-start gap-2.5 py-1.5 text-[13px] email-row ${isSliding ? "email-row--slide-up" : ""} ${isClosing ? "email-row--closing" : ""}`}
                           style={visualStyle}
                         >
                           <div
                             aria-hidden="true"
-                            className="color-line h-12 w-[6px] self-center rounded-full"
+                            className="color-line h-10 w-[6px] self-center rounded-full"
                             style={{
                               backgroundColor: getCategoryColorById(categories, mail.tagCategoryId),
                             }}
@@ -363,12 +373,12 @@ const TodayPage: React.FC = () => {
                             onClick={() => handleOpenEmail(mail)}
                             className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <span className="text-sm font-semibold text-[#111827]">
                                 {mail.sender}
                               </span>
                             </div>
-                            <p className="w-full truncate text-[12px] text-[#6B7280]">
+                            <p className="w-full truncate text-[12px] text-[#6B7280] leading-tight">
                               {mail.summary}
                             </p>
                             {mail.source !== "gmail" && (
@@ -406,17 +416,17 @@ const TodayPage: React.FC = () => {
                   <span>Upcoming Events</span>
                 </div>
 
-                <div className="mt-3 space-y-1 pl-2.5 sm:pl-3.5">
+                <div className="mt-3 space-y-0.5 pl-2.5 sm:pl-3.5">
                   {EVENTS.map((event, index) => {
                     return (
                       <div
                         key={event.title}
-                        className="tagged-item group flex items-start gap-3 py-1 text-sm text-[#1F2933]"
+                        className="tagged-item group flex items-start gap-2.5 py-0.5 text-sm text-[#1F2933]"
                         style={{ borderBottom: index === EVENTS.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
                       >
                         <div
                           aria-hidden="true"
-                          className="color-line h-10 w-[6px] self-center rounded-full"
+                          className="color-line h-9 w-[6px] self-center rounded-full"
                           style={{ backgroundColor: getCategoryColorById(categories, event.tagCategoryId) }}
                         />
 
@@ -425,9 +435,11 @@ const TodayPage: React.FC = () => {
                             <span className="text-sm font-semibold text-[#111827] truncate">
                               {event.title}
                             </span>
-                            <span className="text-xs font-medium text-[#6B7280] whitespace-nowrap">
-                              {event.time}
-                            </span>
+                            <div className="flex items-center gap-2 whitespace-nowrap text-[12px] font-medium text-[#6B7280]">
+                              <span>{event.date}</span>
+                              <span className="text-[#D1D5DB]">•</span>
+                              <span>{event.time}</span>
+                            </div>
                           </div>
                         </div>
 
