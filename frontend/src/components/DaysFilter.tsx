@@ -198,10 +198,11 @@ export const useWeekAnchorWithSharedDayFilter = () => {
 // ——— UI ———
 
 export interface DaysFilterProps {
-  value: WeekdayShort;
-  onChange: (day: WeekdayShort) => void;
+  value: WeekdayShort | null;
+  onChange: (day: WeekdayShort | null) => void;
   days?: WeekdayShort[];
   className?: string;
+  allowToggleOff?: boolean;
 }
 
 const DaysFilter: React.FC<DaysFilterProps> = ({
@@ -209,6 +210,7 @@ const DaysFilter: React.FC<DaysFilterProps> = ({
   onChange,
   days = WEEKDAY_ORDER,
   className = "",
+  allowToggleOff = false,
 }) => {
   return (
     <div
@@ -223,7 +225,13 @@ const DaysFilter: React.FC<DaysFilterProps> = ({
             <button
               key={day}
               type="button"
-              onClick={() => onChange(day)}
+              onClick={() => {
+                if (allowToggleOff && isActive) {
+                  onChange(null);
+                  return;
+                }
+                onChange(day);
+              }}
               className={`days-filter__chip ${isActive ? "days-filter__chip--active" : "days-filter__chip--inactive"}`}
               aria-pressed={isActive}
             >
@@ -241,9 +249,24 @@ export default DaysFilter;
 export const ConnectedDaysFilter: React.FC<{
   className?: string;
   days?: WeekdayShort[];
-}> = ({ className, days }) => {
+  allowToggleOff?: boolean;
+  value?: WeekdayShort | null;
+  onChange?: (day: WeekdayShort | null) => void;
+}> = ({ className, days, allowToggleOff, value, onChange }) => {
   const { selectedDay, setSelectedDay } = useDayFilter();
+  const handleChange = (day: WeekdayShort | null) => {
+    if (!day) return;
+    setSelectedDay(day);
+  };
+  const effectiveValue = typeof value === "undefined" ? selectedDay : value;
+  const effectiveOnChange = onChange ?? handleChange;
   return (
-    <DaysFilter value={selectedDay} onChange={setSelectedDay} className={className} days={days} />
+    <DaysFilter
+      value={effectiveValue}
+      onChange={effectiveOnChange}
+      className={className}
+      days={days}
+      allowToggleOff={allowToggleOff}
+    />
   );
 };

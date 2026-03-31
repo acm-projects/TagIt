@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
   ConnectedDaysFilter,
@@ -36,7 +36,7 @@ type DraftItem = {
 };
 
 const MailPage: React.FC = () => {
-  const { selectedDay } = useDayFilter();
+  const { selectedDay, setSelectedDay } = useDayFilter();
 
   /**
    * Seed data for UI prototyping.
@@ -102,9 +102,27 @@ const MailPage: React.FC = () => {
     },
   ]);
 
+  const [mailDay, setMailDay] = useState<WeekdayShort | null>(selectedDay);
+
+  useEffect(() => {
+    if (mailDay === null) return;
+    if (mailDay !== selectedDay) {
+      setMailDay(selectedDay);
+    }
+  }, [mailDay, selectedDay]);
+
+  const handleDayChange = (day: WeekdayShort | null) => {
+    if (day === null) {
+      setMailDay(null);
+      return;
+    }
+    setMailDay(day);
+    setSelectedDay(day);
+  };
+
   const filteredMails = useMemo(
-    () => mails.filter((mail) => mail.day === selectedDay),
-    [mails, selectedDay],
+    () => mails.filter((mail) => (mailDay ? mail.day === mailDay : true)),
+    [mails, mailDay],
   );
 
   const sortedMails = useMemo(
@@ -127,7 +145,7 @@ const MailPage: React.FC = () => {
           <WeekHeader showYear={false} />
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
-            <ConnectedDaysFilter className="!mt-0" />
+            <ConnectedDaysFilter className="!mt-0" allowToggleOff value={mailDay} onChange={handleDayChange} />
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
@@ -138,7 +156,9 @@ const MailPage: React.FC = () => {
 
                 <div className="mt-3">
                   {sortedMails.length === 0 ? (
-                    <p className="py-2 text-[12px] text-[#6B7280]">No messages for this day.</p>
+                    <p className="py-2 text-[12px] text-[#6B7280]">
+                      {mailDay ? "No messages for this day." : "No messages this week."}
+                    </p>
                   ) : (
                     sortedMails.map((mail, index) => (
                       <div
@@ -173,8 +193,12 @@ const MailPage: React.FC = () => {
                           </div>
                           <div className="mt-2 space-y-1 text-[11px] leading-snug text-[#6B7280] sm:max-w-[32rem]">
                             <p className="truncate text-[12px]">{mail.sender}</p>
-                            <p className="line-clamp-2 text-[12px]">{mail.body}</p>
-                            {mail.extra && <p className="truncate text-[12px]">{mail.extra}</p>}
+                            <div className="overflow-hidden max-h-10 transition-[max-height] duration-200 ease-out group-hover:max-h-52">
+                              <p className="text-[12px] text-[#4B5563] whitespace-pre-line">{mail.body}</p>
+                              {mail.extra && (
+                                <p className="mt-1 text-[12px] text-[#6B7280] whitespace-pre-line">{mail.extra}</p>
+                              )}
+                            </div>
                           </div>
                         </button>
 
@@ -202,32 +226,35 @@ const MailPage: React.FC = () => {
                   <span>Drafted Replies</span>
                 </div>
 
-                <div className="mt-3 space-y-3">
-                  {draftReplies.map((draft) => (
+                <div className="mt-3 space-y-0.5 pl-2.5 sm:pl-3.5">
+                  {draftReplies.map((draft, index) => (
                     <div
                       key={draft.id}
-                      className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2 shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
+                      className="tagged-item group flex items-start gap-3 py-1.5 text-sm text-[#1F2933]"
+                      style={{
+                        borderBottom: index === draftReplies.length - 1 ? "none" : "0.5px solid #E5E7EB",
+                      }}
                     >
-                      <div className="group flex items-start gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDraft(draft)}
+                        className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
+                      >
+                        <span className="text-sm font-semibold text-[#111827] truncate">
+                          {draft.sender}
+                        </span>
+                        <p className="w-full truncate text-[12px] text-[#6B7280] leading-tight">Draft reply</p>
+                      </button>
+
+                      <div className="flex shrink-0 items-center gap-2">
                         <button
                           type="button"
                           onClick={() => handleOpenDraft(draft)}
-                          className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
+                          className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                          aria-label={`Open draft for ${draft.sender}`}
                         >
-                          <span className="text-sm font-semibold text-[#111827]">{draft.sender}</span>
-                          <p className="w-full truncate text-[12px] text-[#6B7280]">Draft reply</p>
+                          <span className="material-symbols-outlined text-[16px]">check</span>
                         </button>
-
-                        <div className="flex shrink-0 items-center gap-2 pt-0.5">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDraft(draft)}
-                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
-                            aria-label={`Open draft for ${draft.sender}`}
-                          >
-                            <span className="material-symbols-outlined text-[16px]">check</span>
-                          </button>
-                        </div>
                       </div>
                     </div>
                   ))}
