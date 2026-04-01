@@ -4,7 +4,7 @@ import AppNavbar from "../components/AppNavbar";
 import SectionHeader from "../components/SectionHeader";
 import { useAuth } from "../services/auth/AuthContext";
 import { getToken, removeToken } from "../services/auth/tokenStorage";
-import { clearToken } from "../services/api";
+import { clearToken, getPreferences, updatePreferences, getConnectedEmails } from "../services/api";
 import {
   getCategoryIdForPriority,
   loadUserPriorities,
@@ -146,15 +146,21 @@ const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const { username, logout: authLogout } = useAuth();
 
-  // Connected user and emails; loaded from stored OAuth tokens.
+  // Connected user and emails; loaded from the database.
   const [connectedUser, setConnectedUser] = useState<ConnectedUser>(() => ({
     username: "...",
     emails: [],
   }));
 
-  // Load real username + connected emails on mount
-  useEffect(() => {
-    const load = async () => {
+  const loadConnectedEmails = useCallback(async () => {
+    // Try database first, fall back to local token storage
+    const res = await getConnectedEmails();
+    if (res.success && res.data?.emails) {
+      setConnectedUser((prev) => ({
+        ...prev,
+        emails: res.data!.emails.map((e: { email: string }) => e.email),
+      }));
+    } else {
       const [google, microsoft] = await Promise.all([
         getToken("google"),
         getToken("microsoft"),
@@ -162,17 +168,48 @@ const SettingsPage: React.FC = () => {
       const emails: string[] = [];
       if (google?.email) emails.push(google.email);
       if (microsoft?.email) emails.push(microsoft.email);
-      setConnectedUser({
-        username: username ?? "...",
-        emails,
-      });
+      setConnectedUser((prev) => ({ ...prev, emails }));
+    }
+  }, []);
+
+  // Load real username + connected emails on mount
+  useEffect(() => {
+    setConnectedUser((prev) => ({ ...prev, username: username ?? "..." }));
+    void loadConnectedEmails();
+  }, [username, loadConnectedEmails]);
+
+  // Also refresh when chrome storage changes (new account connected)
+  useEffect(() => {
+    const listener = () => void loadConnectedEmails();
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, [loadConnectedEmails]);
+
+  // Priorities: seed from localStorage, then overwrite with backend data.
+  const [priorities, setPriorities] = useState<PriorityRule[]>(() => loadUserPriorities());
+  const [prioritiesLoaded, setPrioritiesLoaded] = useState(false);
+  const categories = useUserCategories();
+
+  // Load priorities from the backend on mount
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await getPreferences();
+        if (res.success && res.data?.priorityTopics && res.data.priorityTopics.length > 0) {
+          const backendPriorities: PriorityRule[] = res.data.priorityTopics.map(
+            (label: string, i: number) => ({ id: i + 1, label })
+          );
+          setPriorities(backendPriorities);
+          saveUserPriorities(backendPriorities);
+        }
+      } catch {
+        // fall back to localStorage values already loaded
+      } finally {
+        setPrioritiesLoaded(true);
+      }
     };
     void load();
-  }, [username]);
-
-  // Priorities: load from localStorage so changes are permanent across sessions.
-  const [priorities, setPriorities] = useState<PriorityRule[]>(() => loadUserPriorities());
-  const categories = useUserCategories();
+  }, []);
 
   // Track which priority (if any) is currently being edited inline.
   const [editingPriorityId, setEditingPriorityId] = useState<number | null>(
@@ -181,10 +218,14 @@ const SettingsPage: React.FC = () => {
   const [editingPriorityValue, setEditingPriorityValue] = useState<string>("");
   const [dragId, setDragId] = useState<number | null>(null);
 
-  // Persist priorities to localStorage whenever they change (reorder, add, remove, edit).
+  // Persist priorities to localStorage + backend whenever they change.
   useEffect(() => {
     saveUserPriorities(priorities);
-  }, [priorities]);
+    if (prioritiesLoaded) {
+      const topics = priorities.map((p) => p.label);
+      void updatePreferences(undefined, topics);
+    }
+  }, [priorities, prioritiesLoaded]);
 
   // Connect-email modal: user can add Gmail/Outlook etc.; backend will authenticate and read.
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -323,7 +364,7 @@ const SettingsPage: React.FC = () => {
                   </button>
                 </div>
 
-                {/* Modal: authenticate a new email account for the AI backend */}
+                {/* Modal: authenticate a new email account */}
                 {showConnectModal && (
                   <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -347,10 +388,10 @@ const SettingsPage: React.FC = () => {
                           type="button"
                           onClick={() => {
                             setShowConnectModal(false);
-                            setConnectedUser((u) => ({
-                              ...u,
-                              emails: [...u.emails, "your@gmail.com"],
-                            }));
+                            chrome.runtime.sendMessage(
+                              { type: "startGoogleOAuth" },
+                              () => void loadConnectedEmails()
+                            );
                           }}
                           className="rounded-lg bg-[#f9ab7b] px-4 py-2 text-sm font-semibold text-white hover:bg-[#ef9967]"
                         >
@@ -360,10 +401,10 @@ const SettingsPage: React.FC = () => {
                           type="button"
                           onClick={() => {
                             setShowConnectModal(false);
-                            setConnectedUser((u) => ({
-                              ...u,
-                              emails: [...u.emails, "your@outlook.com"],
-                            }));
+                            chrome.runtime.sendMessage(
+                              { type: "startMicrosoftOAuth" },
+                              () => void loadConnectedEmails()
+                            );
                           }}
                           className="rounded-lg bg-[#DBEAFE] px-4 py-2 text-sm font-semibold text-[#1D4ED8] hover:bg-[#bfdbfe]"
                         >

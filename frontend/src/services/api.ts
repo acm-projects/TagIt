@@ -162,3 +162,14 @@ export async function updatePreferences(
     body: JSON.stringify(body),
   });
 }
+
+/**
+ * Get connected email accounts from the database
+ */
+export async function getConnectedEmails(): Promise<
+  ApiResponse<{ emails: { provider: string; email: string }[] }>
+> {
+  return apiRequest("/auth/connected-emails", {
+    method: "GET",
+  });
+}

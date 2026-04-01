@@ -161,12 +161,16 @@ def save_oauth_tokens():
         return jsonify({"error": "Unauthorized."}), 401
 
     data = request.json
-    # Accepts: { googleRefreshToken, msRefreshToken } - either or both
+    # Accepts: { googleRefreshToken, msRefreshToken, googleEmail, msEmail } - any combination
     update = {}
     if "googleRefreshToken" in data:
         update["googleRefreshToken"] = data["googleRefreshToken"]
     if "msRefreshToken" in data:
         update["msRefreshToken"] = data["msRefreshToken"]
+    if "googleEmail" in data:
+        update["googleEmail"] = data["googleEmail"]
+    if "msEmail" in data:
+        update["msEmail"] = data["msEmail"]
 
     if not update:
         return jsonify({"error": "No tokens provided."}), 400
@@ -190,3 +194,23 @@ def get_oauth_tokens():
         "googleRefreshToken": user.get("googleRefreshToken"),
         "msRefreshToken": user.get("msRefreshToken"),
     }), 200
+
+
+@auth_bp.route("/auth/connected-emails", methods=["GET"])
+def get_connected_emails():
+    """Return the list of connected email addresses for the current user."""
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    user = users_col.find_one({"username": username}, {"googleEmail": 1, "msEmail": 1})
+    if not user:
+        return jsonify({"error": "User not found."}), 404
+
+    emails = []
+    if user.get("googleEmail"):
+        emails.append({"provider": "google", "email": user["googleEmail"]})
+    if user.get("msEmail"):
+        emails.append({"provider": "microsoft", "email": user["msEmail"]})
+
+    return jsonify({"emails": emails}), 200
