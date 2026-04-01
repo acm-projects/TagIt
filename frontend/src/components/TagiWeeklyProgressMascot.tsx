@@ -26,7 +26,7 @@ export type TagiWeeklyProgressMascotProps = {
 
 const TagiWeeklyProgressMascot: React.FC<TagiWeeklyProgressMascotProps> = ({
   progressPercentage,
-  message = "Hello there! Today you have tasks to complete.",
+  message = "Hello there!",
 }) => {
   const clipPathId = `tagi-weekly-env-${useId().replace(/:/g, "")}`;
   const [blink, setBlink] = useState(false);
@@ -68,16 +68,16 @@ const TagiWeeklyProgressMascot: React.FC<TagiWeeklyProgressMascotProps> = ({
     <div className="w-full overflow-visible">
       <div className="relative w-full overflow-visible">
         <div
-          className="pointer-events-none absolute right-1 z-10 flex flex-col items-end gap-1 overflow-visible sm:right-2"
+          className="pointer-events-none absolute right-1 left-24 z-10 flex flex-col items-end gap-1 overflow-visible sm:right-2 sm:left-[28%]"
           style={{ bottom: `${BAR_H_PX + GAP_ENVELOPE_TO_BAR_PX}px` }}
         >
           {showBubble && (
             <div
-              className="relative w-max max-w-[min(36rem,calc(100%_-_5.5rem))] translate-y-2 rounded-2xl border border-[#EFE7DC] bg-white px-3 py-1.5 text-left shadow-[0_4px_14px_rgba(15,23,42,0.06)] sm:max-w-[min(40.5rem,calc(100%_-_6rem))] sm:translate-y-2.5"
+              className="relative inline-flex min-h-0 min-w-0 w-max max-w-full translate-y-2 flex-col rounded-2xl border border-[#EFE7DC] bg-white px-3 py-1.5 text-left shadow-[0_4px_14px_rgba(15,23,42,0.06)] sm:translate-y-2.5"
               role="status"
               aria-live="polite"
             >
-              <p className="whitespace-pre-wrap text-[11px] font-medium leading-snug text-[#1F2933] sm:text-xs">
+              <p className="min-w-0 max-w-full whitespace-pre-wrap break-words text-[11px] font-medium leading-snug text-[#1F2933] sm:text-xs">
                 {trimmedMessage}
               </p>
               <span

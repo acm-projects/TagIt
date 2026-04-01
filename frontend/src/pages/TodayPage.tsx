@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import WeekHeader from "../components/WeekHeader";
 import {
@@ -102,13 +102,7 @@ const TodayPage: React.FC = () => {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
   const categories = useUserCategories();
-  const tagiWeeklyLine = useMemo(() => {
-    const n = progress.totalTasks;
-    if (n === 0) {
-      return "Hello there! You have no tasks on your list this week.";
-    }
-    return `Hello there! Today you have ${n} task${n === 1 ? "" : "s"} to complete.`;
-  }, [progress.totalTasks]);
+  const tagiWeeklyLine = "Hello there!";
 
   useEffect(() => {
     const refreshProgress = () => {
