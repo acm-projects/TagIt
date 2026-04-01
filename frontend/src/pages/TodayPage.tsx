@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import WeekHeader from "../components/WeekHeader";
 import {
@@ -7,6 +7,7 @@ import {
   subscribeToTaskUpdates,
 } from "../services/taskProgress";
 import filterIcon from "../assets/page_buttons/filter.png";
+import TagiWeeklyProgressMascot from "../components/TagiWeeklyProgressMascot";
 import {
   getCategoryById,
   getCategoryColorById,
@@ -101,6 +102,13 @@ const TodayPage: React.FC = () => {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
   const categories = useUserCategories();
+  const tagiWeeklyLine = useMemo(() => {
+    const n = progress.totalTasks;
+    if (n === 0) {
+      return "Hello there! You have no tasks on your list this week.";
+    }
+    return `Hello there! Today you have ${n} task${n === 1 ? "" : "s"} to complete.`;
+  }, [progress.totalTasks]);
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -237,28 +245,30 @@ const TodayPage: React.FC = () => {
           <div className="mt-2.5 space-y-4 sm:mt-3">
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_6px_14px_rgba(15,23,42,0.05)]">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
-                    <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">
-                      workspace_premium
-                    </span>
-                    <span>Weekly Progress</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-[#6B7280]">
-                    <span className="text-right">Tasks Completed</span>
-                    <span className="text-sm text-right">
-                      <span className="font-semibold text-[#f9ab7b]">
-                        {progress.completedTasks}
+                <div className="flex items-start gap-2">
+                  <span className="material-symbols-outlined shrink-0 text-[18px] text-[#f9ab7b]">
+                    workspace_premium
+                  </span>
+                  <div className="min-w-0 flex-1 pr-16 sm:pr-20">
+                    <div className="text-[15px] font-semibold leading-tight text-[#1F2933]">
+                      Weekly Progress
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs leading-tight text-[#6B7280]">
+                      <span>Tasks Completed</span>
+                      <span className="text-sm">
+                        <span className="font-semibold text-[#f9ab7b]">
+                          {progress.completedTasks}
+                        </span>
+                        <span className="text-[#9CA3AF]">/{progress.totalTasks}</span>
                       </span>
-                      <span className="text-[#9CA3AF]">/{progress.totalTasks}</span>
-                    </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-3 h-2 w-full rounded-full bg-[#fde6d7]">
-                  <div
-                    className="h-2 rounded-full bg-[#f9ab7b] transition-[width] duration-200 ease-out"
-                    style={{ width: `${progress.progressPercentage}%` }}
+                <div className="mt-[5px]">
+                  <TagiWeeklyProgressMascot
+                    progressPercentage={progress.progressPercentage}
+                    message={tagiWeeklyLine}
                   />
                 </div>
               </div>
