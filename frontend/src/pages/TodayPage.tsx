@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
 import WeekHeader from "../components/WeekHeader";
 import {
@@ -91,6 +92,7 @@ const EVENTS: TodayEvent[] = [
 ];
 
 const TodayPage: React.FC = () => {
+  const navigate = useNavigate();
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
   const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(() => [...IMPORTANT_EMAILS_FILLER]);
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
@@ -466,6 +468,15 @@ const TodayPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        <button
+          type="button"
+          onClick={() => navigate("/chatbot")}
+          className="fixed bottom-[4.9rem] left-[70%] z-40 inline-flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-full border border-[#F3D4C0] bg-[#f9ab7b] text-white shadow-[0_10px_24px_rgba(249,171,123,0.35)] transition-transform hover:scale-[1.03] hover:bg-[#ef9c69]"
+          aria-label="Open chatbot"
+        >
+          <span className="material-symbols-outlined text-[22px]">chat</span>
+        </button>
 
         <AppNavbar />
       </div>
