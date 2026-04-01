@@ -808,4 +808,96 @@ function successHtml() {
         </body></html>`;
 }
 
+// ——— Sync emails: fetch last 50 from each connected provider ———
+
+app.post('/sync-emails', requireAuth, async (req, res) => {
+    const allEmails = [];
+
+    // — Gmail —
+    try {
+        const authClient = await getGoogleClientForUser(req.userToken);
+        const gmail = google.gmail({ version: 'v1', auth: authClient });
+
+        const list = await gmail.users.messages.list({ userId: 'me', maxResults: 50 });
+        if (list.data?.messages?.length) {
+            const details = await Promise.all(
+                list.data.messages.map(({ id }) =>
+                    gmail.users.messages.get({ userId: 'me', id, format: 'full' })
+                        .then(r => ({ id, data: r.data }))
+                )
+            );
+
+            for (const { id, data } of details) {
+                const plainBody = extractPlainBody(data);
+                const headers = data.payload?.headers || [];
+                const getH = (name) => (headers.find(h => h.name.toLowerCase() === name.toLowerCase()) || {}).value || '';
+
+                allEmails.push({
+                    id,
+                    subject: getH('subject') || '(no subject)',
+                    body: plainBody || data.snippet || '',
+                    snippet: data.snippet || '',
+                    sender: getH('from'),
+                    receivedAt: data.internalDate
+                        ? new Date(parseInt(data.internalDate, 10)).toISOString()
+                        : getH('date'),
+                    source: 'google',
+                });
+            }
+        }
+    } catch (err) {
+        if (err.message !== 'NO_GOOGLE_TOKEN') {
+            console.error('[sync] Gmail error:', err.message);
+        }
+    }
+
+    // — Outlook —
+    try {
+        const token = await getMsAccessTokenForUser(req.userToken);
+        const data = await graphGet(
+            '/me/messages?$top=50&$orderby=receivedDateTime desc&$select=id,subject,bodyPreview,body,receivedDateTime,from',
+            token,
+        );
+
+        if (data.value?.length) {
+            for (const msg of data.value) {
+                const plainBody = msg.body?.contentType === 'text' ? msg.body.content : msg.bodyPreview || '';
+                const fromAddr = msg.from?.emailAddress;
+                allEmails.push({
+                    id: msg.id,
+                    subject: msg.subject || '(no subject)',
+                    body: plainBody,
+                    snippet: msg.bodyPreview || '',
+                    sender: fromAddr ? `${fromAddr.name || ''} <${fromAddr.address || ''}>`.trim() : '',
+                    receivedAt: msg.receivedDateTime || '',
+                    source: 'outlook',
+                });
+            }
+        }
+    } catch (err) {
+        if (err.message !== 'NO_MS_TOKEN') {
+            console.error('[sync] Outlook error:', err.message);
+        }
+    }
+
+    if (allEmails.length === 0) {
+        return res.json({ message: 'No connected email accounts or no messages found.', count: 0, results: [] });
+    }
+
+    // Forward to Flask in batches of 25 (Flask limit)
+    const results = [];
+    for (let i = 0; i < allEmails.length; i += 25) {
+        const batch = allEmails.slice(i, i + 25);
+        try {
+            const batchResult = await forwardBatchToFlask(batch, req.userToken);
+            results.push(...(batchResult.results || []));
+        } catch (err) {
+            console.error('[sync] Batch error:', err.message);
+            results.push(...batch.map(e => ({ id: e.id, error: err.message })));
+        }
+    }
+
+    res.json({ message: `Synced ${results.length} emails.`, count: results.length, results });
+});
+
 app.listen(PORT, () => console.log(`Server listening on http://localhost:${PORT}`));

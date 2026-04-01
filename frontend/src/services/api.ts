@@ -4,11 +4,30 @@
  */
 
 const BACKEND_URL = "http://localhost:8000";
+const NODE_BACKEND_URL = "http://localhost:3000";
 
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
   error?: string;
+}
+
+export interface ProcessedEmail {
+  id: string;
+  subject: string;
+  summary: string;
+  assignedCategory: string;
+  priorityLevel: number;
+  uiBadges: string[];
+  tasks: string[];
+  deadlines: string[];
+  events: string[];
+  location: string;
+  time: string;
+  isSpam: boolean;
+  sender: string;
+  receivedAt: string;
+  source: string;
 }
 
 /**
@@ -172,4 +191,57 @@ export async function getConnectedEmails(): Promise<
   return apiRequest("/auth/connected-emails", {
     method: "GET",
   });
+}
+
+async function nodeApiRequest<T = any>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<ApiResponse<T>> {
+  const token = await getStoredToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  if (options.headers && typeof options.headers === "object") {
+    Object.assign(headers, options.headers);
+  }
+
+  try {
+    const response = await fetch(`${NODE_BACKEND_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.error || `HTTP ${response.status}`,
+      };
+    }
+
+    return { success: true, data };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Network error",
+    };
+  }
+}
+
+export async function syncEmails(): Promise<
+  ApiResponse<{ count: number; results: ProcessedEmail[] }>
+> {
+  return nodeApiRequest("/sync-emails", { method: "POST" });
+}
+
+export async function getUserEmails(): Promise<
+  ApiResponse<{ emails: ProcessedEmail[] }>
+> {
+  return apiRequest("/api/emails/user", { method: "GET" });
 }

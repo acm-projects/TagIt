@@ -20,8 +20,12 @@ app.register_blueprint(auth_bp)
 try:
     client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
     db = client.get_default_database()
-    # Unique index on provider email id so duplicate inserts are rejected at DB level too
-    db.emails.create_index("id", unique=True, sparse=True)
+    # Migrate: drop old single-field index if it exists, create compound (id, username)
+    try:
+        db.emails.drop_index("id_1")
+    except Exception:
+        pass
+    db.emails.create_index([("id", 1), ("username", 1)], unique=True, sparse=True)
     client.admin.command('ping')
     print("Connected to MongoDB and pinged")
 except Exception as e:
@@ -45,6 +49,9 @@ def _format_email_result(doc):
         "time":             analysis.get("time", ""),
         "isSpam":           doc.get("isSpam", False),
         "spamReason":       doc.get("spamReason", ""),
+        "sender":           doc.get("sender", ""),
+        "receivedAt":       doc.get("receivedAt", ""),
+        "source":           doc.get("source", ""),
         "mongo_id":         str(doc.get("_id", "")),
         "cached":           True,
     }
@@ -58,6 +65,21 @@ def _get_user_preferences(username):
     if not user:
         return "", []
     return user.get("school", ""), user.get("priorityTopics", [])
+
+
+@app.route("/api/emails/user", methods=["GET"])
+def get_user_emails():
+    """Return all non-spam emails for the authenticated user, newest first."""
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    docs = list(db.emails.find(
+        {"username": username, "isSpam": {"$ne": True}},
+    ).sort("_id", -1).limit(200))
+
+    emails = [_format_email_result(doc) for doc in docs]
+    return jsonify({"emails": emails}), 200
 
 
 @app.route("/", methods=["GET"])
@@ -74,9 +96,12 @@ def add_email():
     body     = incoming_data.get("body", "No Body Content")
     sender   = incoming_data.get("sender", "")
 
+    username = get_username_from_request() or ""
+    incoming_data["username"] = username
+
     # Return cached version if this email id was already processed
     if email_id:
-        existing = db.emails.find_one({"id": email_id})
+        existing = db.emails.find_one({"id": email_id, "username": username})
         if existing:
             print(f"Cache hit for email id {email_id}")
             result = _format_email_result(existing)
@@ -115,7 +140,6 @@ def add_email():
         }), 201
 
     # Step 2: full analysis for legitimate emails
-    username = get_username_from_request()
     school, priority_topics = _get_user_preferences(username)
     print(f"Processing email: {subject}")
     ai_results = analyze_email_with_gemini(subject, body, sender, school, priority_topics)
@@ -156,10 +180,12 @@ def add_emails_batch():
     new_indices = []   # their original positions
     results_map = {}   # index -> result dict
 
+    username = get_username_from_request() or ""
+
     all_ids = [e.get("id") for e in incoming_emails if e.get("id")]
     existing_docs = {
         doc["id"]: doc
-        for doc in db.emails.find({"id": {"$in": all_ids}})
+        for doc in db.emails.find({"id": {"$in": all_ids}, "username": username})
         if "id" in doc
     } if all_ids else {}
 
@@ -182,6 +208,10 @@ def add_emails_batch():
         legit_emails  = [e for e, (f, _) in zip(new_emails, spam_flags) if not f]
         legit_indices = [idx for idx, (f, _) in zip(new_indices, spam_flags) if not f]
         spam_emails   = [(e, idx, r) for e, idx, (f, r) in zip(new_emails, new_indices, spam_flags) if f]
+
+        # Tag every new email with the current user before insert
+        for email_data in new_emails:
+            email_data["username"] = username
 
         # Handle spam right away — no Gemini analysis needed
         for email_data, orig_idx, reason in spam_emails:
@@ -214,7 +244,6 @@ def add_emails_batch():
 
         print(f"[batch] Processing {len(legit_emails)} new email(s) via Gemini...")
         if legit_emails:
-            username = get_username_from_request()
             school, priority_topics = _get_user_preferences(username)
             ai_results = analyze_emails_batch(legit_emails, school, priority_topics)
 

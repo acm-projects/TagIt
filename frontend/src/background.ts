@@ -168,5 +168,33 @@ async function runMicrosoftOAuth(): Promise<{ email: string }> {
     email,
   });
 
+  // Save the MS refresh token + email to the DB so the Node server can
+  // fetch Outlook emails during sync-emails
+  const jwt = await getStoredToken();
+  if (jwt && tokens.refresh_token) {
+    try {
+      await fetch(`${NODE_BACKEND_URL}/auth/microsoft/exchange`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${jwt}`,
+        },
+        body: JSON.stringify({ redirectUrl }),
+      }).catch(() => {
+        // Fallback: save tokens directly to Flask
+        fetch("http://localhost:8000/auth/oauth-tokens", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${jwt}`,
+          },
+          body: JSON.stringify({ msRefreshToken: tokens.refresh_token, msEmail: email }),
+        }).catch(() => {});
+      });
+    } catch {
+      // Non-critical — emails just won't sync from Outlook
+    }
+  }
+
   return { email };
 }

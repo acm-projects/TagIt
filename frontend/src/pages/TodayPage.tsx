@@ -1,5 +1,12 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
+import {
+  ConnectedDaysFilter,
+  getDateForWeekdayInAnchorWeek,
+  isSameLocalDay,
+  useDayFilter,
+  useWeekAnchorWithSharedDayFilter,
+} from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
 import {
   getTaskProgress,
@@ -12,6 +19,11 @@ import {
   getCategoryColorById,
   useUserCategories,
 } from "../services/categories";
+import {
+  getUserEmails,
+  syncEmails,
+  type ProcessedEmail,
+} from "../services/api";
 
 /**
  * Important email preview shown on Today.
@@ -20,11 +32,12 @@ import {
 type ImportantEmailPreview = {
   id: string;
   sender: string;
-  source: "gmail" | "handshake";
+  source: "gmail" | "outlook";
   tone: "urgent" | "soon" | "done";
   summary: string;
   priority?: "urgent";
   tagCategoryId?: string;
+  date: string;
 };
 
 /**
@@ -35,54 +48,69 @@ type TodayEvent = {
   time: string;
   title: string;
   tagCategoryId?: string;
+  date: string;
 };
 
-const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
-  {
-    id: "mail-1",
-    sender: "Internship Application Update @Amazon",
-    source: "gmail",
-    tone: "urgent",
-    summary: "Recruiter requested availability for next round; check attached timeline and confirm slots.",
-    priority: "urgent",
-    tagCategoryId: "priority-3",
-  },
-  {
-    id: "mail-2",
-    sender: "Club meeting today",
-    source: "gmail",
-    tone: "soon",
-    summary: "Agenda covers officer elections, budget approval, and venue change for next semester events.",
-    tagCategoryId: "priority-1",
-  },
-  {
-    id: "mail-3",
-    sender: "Tution deadline reminder",
-    source: "gmail",
-    tone: "done",
-    summary: "Billing portal shows outstanding balance due Friday; late fee applies after 5 PM CST.",
-    tagCategoryId: "priority-4",
-  },
-  {
-    id: "mail-4",
-    sender: "John Dollinger @CS 3377",
-    source: "gmail",
-    tone: "soon",
-    summary: "Project checkpoint moved to next Monday; submit design doc draft before lab session.",
-    priority: "urgent",
-    tagCategoryId: "priority-2",
-  },
-];
+const extractSenderName = (raw: string): string => {
+  if (!raw) return "Unknown sender";
+  const match = raw.match(/^"?([^"<]+)"?\s*</);
+  return match ? match[1].trim() : raw.replace(/<[^>]+>/, "").trim() || raw;
+};
 
-const EVENTS: TodayEvent[] = [
-  { time: "03:00 - 03:30", title: "Exam Prep", tagCategoryId: "priority-2" },
-  { time: "04:00 - 05:30", title: "Government Class", tagCategoryId: "priority-2" },
-  { time: "08:30 - 10:00", title: "ACM Meeting @ SLC", tagCategoryId: "priority-1" },
-];
+const mapEmailToPreview = (e: ProcessedEmail): ImportantEmailPreview => {
+  const dateStr = e.receivedAt ? e.receivedAt.slice(0, 10) : "";
+  const tone: ImportantEmailPreview["tone"] =
+    e.priorityLevel === 1 ? "urgent" : e.priorityLevel <= 3 ? "soon" : "done";
+  return {
+    id: e.id,
+    sender: extractSenderName(e.sender),
+    source: e.source === "outlook" ? "outlook" : "gmail",
+    tone,
+    summary: e.summary || e.subject,
+    priority: e.priorityLevel === 1 ? "urgent" : undefined,
+    tagCategoryId: `priority-${e.priorityLevel}`,
+    date: dateStr,
+  };
+};
+
+const extractEventsFromEmails = (emails: ProcessedEmail[]): TodayEvent[] => {
+  const events: TodayEvent[] = [];
+  for (const e of emails) {
+    if (e.events?.length) {
+      const dateStr = e.receivedAt ? e.receivedAt.slice(0, 10) : "";
+      for (const ev of e.events) {
+        events.push({
+          time: e.time || "",
+          title: ev,
+          tagCategoryId: `priority-${e.priorityLevel}`,
+          date: dateStr,
+        });
+      }
+    }
+  }
+  return events;
+};
+
+const parseIsoDate = (value?: string): Date | null => {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
 
 const TodayPage: React.FC = () => {
+  const { selectedDay } = useDayFilter();
+  const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
+
+  const selectedCalendarDate = useMemo(
+    () => getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay),
+    [weekAnchor, selectedDay],
+  );
+
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
-  const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(() => [...IMPORTANT_EMAILS_FILLER]);
+  const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>([]);
+  const [events, setEvents] = useState<TodayEvent[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [slidingEmailIds, setSlidingEmailIds] = useState<Set<string>>(new Set());
@@ -91,6 +119,14 @@ const TodayPage: React.FC = () => {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
   const categories = useUserCategories();
+
+  const loadEmails = useCallback(async () => {
+    const resp = await getUserEmails();
+    if (resp.success && resp.data?.emails) {
+      setImportantEmails(resp.data.emails.map(mapEmailToPreview));
+      setEvents(extractEventsFromEmails(resp.data.emails));
+    }
+  }, []);
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -101,10 +137,14 @@ const TodayPage: React.FC = () => {
     return subscribeToTaskUpdates(refreshProgress);
   }, []);
 
-  // Reset important emails to the placeholder set on mount (helps restore if any were dismissed previously)
   useEffect(() => {
-    setImportantEmails([...IMPORTANT_EMAILS_FILLER]);
-  }, []);
+    void loadEmails();
+
+    setIsSyncing(true);
+    syncEmails()
+      .then(() => loadEmails())
+      .finally(() => setIsSyncing(false));
+  }, [loadEmails]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -126,7 +166,7 @@ const TodayPage: React.FC = () => {
 
     return (
       <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-[#5C9BFF] text-[10px] font-bold text-white">
-        H
+        O
       </span>
     );
   };
@@ -205,13 +245,31 @@ const TodayPage: React.FC = () => {
     setToast(null);
   };
 
+  const dateFilteredEmails = useMemo(
+    () =>
+      importantEmails.filter((mail) => {
+        const d = parseIsoDate(mail.date);
+        return d ? isSameLocalDay(d, selectedCalendarDate) : true;
+      }),
+    [importantEmails, selectedCalendarDate],
+  );
+
+  const filteredEvents = useMemo(
+    () =>
+      events.filter((event) => {
+        const d = parseIsoDate(event.date);
+        return d ? isSameLocalDay(d, selectedCalendarDate) : true;
+      }),
+    [events, selectedCalendarDate],
+  );
+
   const availableCategories = Array.from(
-    new Set(importantEmails.map((mail) => mail.tagCategoryId).filter(Boolean))
+    new Set(dateFilteredEmails.map((mail) => mail.tagCategoryId).filter(Boolean))
   ) as string[];
   const filteredEmails =
     selectedFilter === "all"
-      ? importantEmails
-      : importantEmails.filter((mail) => mail.tagCategoryId === selectedFilter);
+      ? dateFilteredEmails
+      : dateFilteredEmails.filter((mail) => mail.tagCategoryId === selectedFilter);
 
   const formatCategoryLabel = (id?: string) => {
     if (!id) return "Uncategorized";
@@ -222,9 +280,11 @@ const TodayPage: React.FC = () => {
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
-          <WeekHeader showYear={false} />
+          <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
+            <ConnectedDaysFilter className="!mt-0" />
+
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_6px_14px_rgba(15,23,42,0.05)]">
                 <div className="flex items-center justify-between gap-3">
@@ -262,6 +322,9 @@ const TodayPage: React.FC = () => {
                       star
                     </span>
                     <span>Important Emails</span>
+                    {isSyncing && (
+                      <span className="ml-1 text-[11px] font-normal text-[#9CA3AF]">syncing…</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 pr-1">
                     <div className="relative" ref={filterMenuRef}>
@@ -407,12 +470,15 @@ const TodayPage: React.FC = () => {
                 </div>
 
                 <div className="mt-3 space-y-1 pl-2.5 sm:pl-3.5">
-                  {EVENTS.map((event, index) => {
+                  {filteredEvents.length === 0 ? (
+                    <p className="py-2 text-[12px] text-[#6B7280]">No events on this day.</p>
+                  ) : (
+                  filteredEvents.map((event, index) => {
                     return (
                       <div
                         key={event.title}
                         className="tagged-item group flex items-start gap-3 py-1 text-sm text-[#1F2933]"
-                        style={{ borderBottom: index === EVENTS.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
+                        style={{ borderBottom: index === filteredEvents.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
                       >
                         <div
                           aria-hidden="true"
@@ -433,7 +499,8 @@ const TodayPage: React.FC = () => {
 
                       </div>
                     );
-                  })}
+                  })
+                  )}
                 </div>
               </div>
             </section>

@@ -1,19 +1,25 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
   ConnectedDaysFilter,
+  getDateForWeekdayInAnchorWeek,
+  isSameLocalDay,
   useDayFilter,
-  type WeekdayShort,
+  useWeekAnchorWithSharedDayFilter,
 } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
 import {
   getCategoryColorById,
   useUserCategories,
 } from "../services/categories";
+import {
+  getUserEmails,
+  syncEmails,
+  type ProcessedEmail,
+} from "../services/api";
 
 /**
  * A prioritized mail card item.
- * Backend message ranking can map directly to `priorityScore`.
  */
 type MailItem = {
   id: string;
@@ -23,77 +29,73 @@ type MailItem = {
   extra?: string;
   tagCategoryId?: string;
   priorityScore: number;
-  day: WeekdayShort;
+  date: string;
+  source?: string;
 };
 
-/**
- * Simple draft item shown in the "Drafted Replies" section.
- * Backend integration can attach thread ids/message ids later.
- */
 type DraftItem = {
   id: string;
   sender: string;
 };
 
+const parseIsoDate = (value?: string): Date | null => {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const extractSenderName = (raw: string): string => {
+  if (!raw) return "Unknown sender";
+  const match = raw.match(/^"?([^"<]+)"?\s*</);
+  return match ? match[1].trim() : raw.replace(/<[^>]+>/, "").trim() || raw;
+};
+
+const mapEmailToMailItem = (e: ProcessedEmail): MailItem => {
+  const dateStr = e.receivedAt ? e.receivedAt.slice(0, 10) : "";
+  const deadlineStr = e.deadlines?.length ? e.deadlines.join("; ") : undefined;
+  return {
+    id: e.id,
+    summary: e.subject,
+    sender: extractSenderName(e.sender),
+    body: e.summary,
+    extra: deadlineStr,
+    tagCategoryId: `priority-${e.priorityLevel}`,
+    priorityScore: (5 - e.priorityLevel) * 3,
+    date: dateStr,
+    source: e.source,
+  };
+};
+
 const MailPage: React.FC = () => {
   const { selectedDay } = useDayFilter();
+  const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
 
-  /**
-   * Seed data for UI prototyping.
-   * Replace these with API responses once backend integration is ready.
-   */
-  const [mails] = useState<MailItem[]>([
-    {
-      id: "m1",
-      summary: "Transfer Credit",
-      sender: "Joshua Montogermy",
-      body: "Need a screenshot of your current enrollment.",
-      tagCategoryId: "priority-4",
-      priorityScore: 10,
-      day: "mon",
-    },
-    {
-      id: "m1b",
-      summary: "Club Budget Follow-Up",
-      sender: "Student Activities Board",
-      body: "Please review the revised budget request before Monday evening so the funding vote can stay on schedule. We added notes to the travel line items, updated the projected turnout numbers, and included a revised breakdown for equipment, catering, and room setup so the committee can approve everything in one pass.",
-      extra: "Meeting: March 29, 2026 at 6:30 PM in the Student Union conference room. Bring the updated spreadsheet and the reimbursement receipts if you have them.",
-      tagCategoryId: "priority-1",
-      priorityScore: 8,
-      day: "mon",
-    },
-    {
-      id: "m2",
-      summary: "Internship Offer",
-      sender: "John Mathew @Verizon @Handshake",
-      body: "Internship offer. Respond with your resume and portfolio.",
-      extra: "Deadline : March 15, 2026",
-      tagCategoryId: "priority-3",
-      priorityScore: 9,
-      day: "tue",
-    },
-    {
-      id: "m3",
-      summary: "Resume Request",
-      sender: "John Mathew @Verizon @Handshake",
-      body: "Internship offer. Respond with your resume and portfolio.",
-      extra: "Deadline : March 15, 2026",
-      tagCategoryId: "priority-3",
-      priorityScore: 6,
-      day: "wed",
-    },
-    {
-      id: "m4",
-      summary: "Deadline Reminder",
-      sender: "Registrar Office",
-      body: "Reminder to submit your semester enrollment confirmation before the stated deadline.",
-      extra: "Due: March 20, 2026",
-      tagCategoryId: "priority-4",
-      priorityScore: 7,
-      day: "fri",
-    },
-  ]);
+  const selectedCalendarDate = useMemo(
+    () => getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay),
+    [weekAnchor, selectedDay],
+  );
+
+  const [mails, setMails] = useState<MailItem[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
   const categories = useUserCategories();
+
+  const loadEmails = useCallback(async () => {
+    const resp = await getUserEmails();
+    if (resp.success && resp.data?.emails) {
+      setMails(resp.data.emails.map(mapEmailToMailItem));
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadEmails();
+
+    // Kick off background sync, then refresh
+    setIsSyncing(true);
+    syncEmails()
+      .then(() => loadEmails())
+      .finally(() => setIsSyncing(false));
+  }, [loadEmails]);
 
   const [draftReplies] = useState<DraftItem[]>([
     {
@@ -103,8 +105,12 @@ const MailPage: React.FC = () => {
   ]);
 
   const filteredMails = useMemo(
-    () => mails.filter((mail) => mail.day === selectedDay),
-    [mails, selectedDay],
+    () =>
+      mails.filter((mail) => {
+        const d = parseIsoDate(mail.date);
+        return d ? isSameLocalDay(d, selectedCalendarDate) : true;
+      }),
+    [mails, selectedCalendarDate],
   );
 
   const sortedMails = useMemo(
@@ -124,7 +130,7 @@ const MailPage: React.FC = () => {
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
-          <WeekHeader showYear={false} />
+          <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
             <ConnectedDaysFilter className="!mt-0" />
@@ -134,6 +140,9 @@ const MailPage: React.FC = () => {
                 <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
                   <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">mail</span>
                   <span>Mails</span>
+                  {isSyncing && (
+                    <span className="ml-1 text-[11px] font-normal text-[#9CA3AF]">syncing…</span>
+                  )}
                 </div>
 
                 <div className="mt-3">
