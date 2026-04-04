@@ -265,6 +265,7 @@ const TodayPage: React.FC = () => {
                   <TagiWeeklyProgressMascot
                     progressPercentage={progress.progressPercentage}
                     message={tagiWeeklyLine}
+                    onClick={() => navigate("/chatbot")}
                   />
                 </div>
               </div>
@@ -472,15 +473,6 @@ const TodayPage: React.FC = () => {
             </div>
           </div>
         )}
-
-        <button
-          type="button"
-          onClick={() => navigate("/chatbot")}
-          className="fixed bottom-[4.9rem] left-[70%] z-40 inline-flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-full border border-[#F3D4C0] bg-[#f9ab7b] text-white shadow-[0_10px_24px_rgba(249,171,123,0.35)] transition-transform hover:scale-[1.03] hover:bg-[#ef9c69]"
-          aria-label="Open chatbot"
-        >
-          <span className="material-symbols-outlined text-[22px]">chat</span>
-        </button>
 
         <AppNavbar />
       </div>

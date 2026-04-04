@@ -22,11 +22,13 @@ export type TagiWeeklyProgressMascotProps = {
   progressPercentage: number;
   /** Shown in the speech bubble; wire to your AI / copy layer later. Empty string hides the bubble. */
   message?: string;
+  onClick?: () => void;
 };
 
 const TagiWeeklyProgressMascot: React.FC<TagiWeeklyProgressMascotProps> = ({
   progressPercentage,
   message = "Hello there!",
+  onClick,
 }) => {
   const clipPathId = `tagi-weekly-env-${useId().replace(/:/g, "")}`;
   const [blink, setBlink] = useState(false);
@@ -63,6 +65,12 @@ const TagiWeeklyProgressMascot: React.FC<TagiWeeklyProgressMascotProps> = ({
   const ENVELOPE_BOTTOM_SHIFT = "translateY(calc(70 * 100% / 235))";
   const trimmedMessage = message.trim();
   const showBubble = trimmedMessage.length > 0;
+  const isClickable = typeof onClick === "function";
+  const handleActivate = () => {
+    if (onClick) {
+      onClick();
+    }
+  };
 
   return (
     <div className="w-full overflow-visible">
@@ -87,8 +95,24 @@ const TagiWeeklyProgressMascot: React.FC<TagiWeeklyProgressMascotProps> = ({
             </div>
           )}
           <div
-            className="relative h-[47px] w-20 shrink-0 sm:h-[51px] sm:w-[87px]"
+            className={`relative h-[47px] w-20 shrink-0 sm:h-[51px] sm:w-[87px] ${
+              isClickable ? "pointer-events-auto cursor-pointer focus:outline-none" : ""
+            }`}
             style={{ transform: ENVELOPE_BOTTOM_SHIFT }}
+            onClick={handleActivate}
+            onKeyDown={
+              isClickable
+                ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handleActivate();
+                    }
+                  }
+                : undefined
+            }
+            role={isClickable ? "button" : undefined}
+            tabIndex={isClickable ? 0 : undefined}
+            aria-label={isClickable ? "Open chatbot" : undefined}
           >
             <div
               className="absolute bottom-0 left-1/2 h-1.5 w-10 -translate-x-1/2 rounded-full bg-black/[0.07] blur-sm"
