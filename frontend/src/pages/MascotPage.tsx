@@ -7,23 +7,18 @@ const MascotPage: React.FC = () => {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#F9F8F6] px-4">
-      <div className="-translate-y-6 flex flex-col items-center gap-4">
-        <EnvelopeMascotWaving />
-        <h1 className="font-instrument text-5xl italic text-[#F9A36E]">TagIt</h1>
+      <div className="-translate-y-6 flex flex-col items-center gap-3">
+        <h1 className="mt-20 leading-none font-instrument text-7xl italic text-[#F9A36E]">TagIt</h1>
+        <div className="scale-90">
+          <EnvelopeMascotWaving />
+        </div>
         <div className="mt-2 flex flex-wrap justify-center gap-4">
           <button
             type="button"
             className="rounded-2xl bg-[#F9A36E] px-8 py-3 font-serif text-xl text-white shadow-md transition hover:bg-[#E8945F] active:bg-[#D9854F]"
-            onClick={() => navigate("/signup")}
-          >
-            Get Started
-          </button>
-          <button
-            type="button"
-            className="rounded-2xl bg-[#F9A36E] px-10 py-3 font-serif text-xl text-white shadow-md transition hover:bg-[#E8945F] active:bg-[#D9854F]"
             onClick={() => navigate("/login")}
           >
-            Login
+            Get Started
           </button>
         </div>
         <button
