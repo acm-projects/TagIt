@@ -13,16 +13,16 @@ import {
   setUserCategoryColor,
   useUserCategories,
 } from "../services/categories";
+import {
+  loadConnectedUser,
+  saveConnectedUser,
+  type ConnectedUser,
+} from "../services/connectedUser";
 /**
  * Represents the currently connected user account and emails.
  * Connected accounts are authenticated via the backend; the AI backend
  * will read and process these inboxes.
  */
-type ConnectedUser = {
-  username: string;
-  emails: string[];
-};
-
 /**
  * A single priority rule describing what the user cares about.
  *
@@ -153,10 +153,7 @@ const SettingsPage: React.FC = () => {
 
   // Connected user and emails; updated when user authenticates new accounts.
   // Backend will use these to connect and read inboxes for the AI pipeline.
-  const [connectedUser, setConnectedUser] = useState<ConnectedUser>(() => ({
-    username: "username",
-    emails: ["email1@gmail.com", "email2@outlook.com", "email3@utdallas.edu"],
-  }));
+  const [connectedUser, setConnectedUser] = useState<ConnectedUser>(() => loadConnectedUser());
 
   // Priorities: load from localStorage so changes are permanent across sessions.
   const [priorities, setPriorities] = useState<PriorityRule[]>(() => loadUserPriorities());
@@ -173,6 +170,11 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     saveUserPriorities(priorities);
   }, [priorities]);
+
+  // Persist connected user whenever their accounts change.
+  useEffect(() => {
+    saveConnectedUser(connectedUser);
+  }, [connectedUser]);
 
   // Connect-email modal: user can add Gmail/Outlook etc.; backend will authenticate and read.
   const [showConnectModal, setShowConnectModal] = useState(false);

@@ -7,13 +7,13 @@ import {
   loadTasks,
   subscribeToTaskUpdates,
 } from "../services/taskProgress";
-import filterIcon from "../assets/page_buttons/filter.png";
 import TagiWeeklyProgressMascot from "../components/TagiWeeklyProgressMascot";
 import {
-  getCategoryById,
   getCategoryColorById,
   useUserCategories,
 } from "../services/categories";
+import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
+import { loadConnectedEmails } from "../services/connectedUser";
 
 /**
  * Important email preview shown on Today.
@@ -25,6 +25,8 @@ type ImportantEmailPreview = {
   source: "gmail" | "handshake";
   tone: "urgent" | "soon" | "done";
   summary: string;
+  /** Email account the message belongs to (user can have multiple accounts). */
+  accountEmail: string;
   priority?: "urgent";
   tagCategoryId?: string;
 };
@@ -47,6 +49,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     source: "gmail",
     tone: "urgent",
     summary: "Recruiter requested availability for next round; check attached timeline and confirm slots.",
+    accountEmail: "primary@university.edu",
     priority: "urgent",
     tagCategoryId: "priority-3",
   },
@@ -56,6 +59,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     source: "gmail",
     tone: "soon",
     summary: "Agenda covers officer elections, budget approval, and venue change for next semester events.",
+    accountEmail: "primary@university.edu",
     tagCategoryId: "priority-1",
   },
   {
@@ -64,6 +68,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     source: "gmail",
     tone: "done",
     summary: "Billing portal shows outstanding balance due Friday; late fee applies after 5 PM CST.",
+    accountEmail: "finance@university.edu",
     tagCategoryId: "priority-4",
   },
   {
@@ -72,6 +77,7 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     source: "gmail",
     tone: "soon",
     summary: "Project checkpoint moved to next Monday; submit design doc draft before lab session.",
+    accountEmail: "primary@university.edu",
     priority: "urgent",
     tagCategoryId: "priority-2",
   },
@@ -81,9 +87,18 @@ const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
     source: "gmail",
     tone: "soon",
     summary: "Two on-campus career fairs open registration this week; RSVP to reserve an early slot.",
+    accountEmail: "career@university.edu",
     tagCategoryId: "priority-3",
   },
 ];
+
+const assignAccountsToEmails = (emails: string[]): ImportantEmailPreview[] => {
+  if (emails.length === 0) return IMPORTANT_EMAILS_FILLER;
+  return IMPORTANT_EMAILS_FILLER.map((mail, index) => ({
+    ...mail,
+    accountEmail: emails[index % emails.length],
+  }));
+};
 
 const EVENTS: TodayEvent[] = [
   { date: "Tue, Apr 01", time: "03:00 - 03:30", title: "Exam Prep", tagCategoryId: "priority-2" },
@@ -95,14 +110,15 @@ const EVENTS: TodayEvent[] = [
 const TodayPage: React.FC = () => {
   const navigate = useNavigate();
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
-  const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(() => [...IMPORTANT_EMAILS_FILLER]);
+  const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
+  const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(() =>
+    assignAccountsToEmails(loadConnectedEmails())
+  );
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [slidingEmailIds, setSlidingEmailIds] = useState<Set<string>>(new Set());
   const [closingEmailIds, setClosingEmailIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ email: ImportantEmailPreview; index: number } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const filterMenuRef = useRef<HTMLDivElement | null>(null);
   const categories = useUserCategories();
   const tagiWeeklyLine = "Hello there!";
 
@@ -117,21 +133,14 @@ const TodayPage: React.FC = () => {
 
   // Reset important emails to the placeholder set on mount (helps restore if any were dismissed previously)
   useEffect(() => {
-    setImportantEmails([...IMPORTANT_EMAILS_FILLER]);
+    setImportantEmails(assignAccountsToEmails(connectedEmails));
   }, []);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
-        setIsFilterOpen(false);
-      }
-    };
-
-    if (isFilterOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isFilterOpen]);
+    const emails = loadConnectedEmails();
+    setConnectedEmails(emails);
+    setImportantEmails(assignAccountsToEmails(emails));
+  }, []);
 
   const getSourceIcon = (source: ImportantEmailPreview["source"]) => {
     if (source === "gmail") {
@@ -219,18 +228,24 @@ const TodayPage: React.FC = () => {
     setToast(null);
   };
 
-  const availableCategories = Array.from(
-    new Set(importantEmails.map((mail) => mail.tagCategoryId).filter(Boolean))
-  ) as string[];
+  const availableAccounts =
+    connectedEmails.length > 0
+      ? connectedEmails
+      : Array.from(new Set(importantEmails.map((mail) => mail.accountEmail || "Unknown account")));
+
   const filteredEmails =
     selectedFilter === "all"
       ? importantEmails
-      : importantEmails.filter((mail) => mail.tagCategoryId === selectedFilter);
+      : importantEmails.filter(
+          (mail) => (mail.accountEmail || "Unknown account") === selectedFilter
+        );
 
-  const formatCategoryLabel = (id?: string) => {
-    if (!id) return "Uncategorized";
-    return getCategoryById(categories, id)?.name ?? id;
-  };
+  const filterOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
+    availableAccounts.map((account) => ({
+      value: account,
+      label: account,
+    }))
+  );
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
@@ -281,62 +296,13 @@ const TodayPage: React.FC = () => {
                     <span>Important Emails</span>
                   </div>
                   <div className="flex items-center gap-2 pr-1">
-                    <div className="relative" ref={filterMenuRef}>
-                      <button
-                        type="button"
-                        onClick={() => setIsFilterOpen((o) => !o)}
-                        className="inline-flex items-center justify-center rounded-full border border-transparent bg-transparent px-0.5 py-0.5 transition hover:opacity-80 focus:outline-none focus:ring-0"
-                        aria-haspopup="listbox"
-                        aria-expanded={isFilterOpen}
-                        aria-label="Filter important emails"
-                      >
-                        <img
-                          src={filterIcon}
-                          alt=""
-                          className="h-6 w-6"
-                          style={{
-                            filter:
-                              "invert(81%) sepia(52%) saturate(1330%) hue-rotate(324deg) brightness(99%) contrast(98%)",
-                          }}
-                        />
-                      </button>
-                      {isFilterOpen && (
-                        <div className="absolute right-0 z-20 mt-2 w-36 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_14px_32px_rgba(0,0,0,0.12)]">
-                          <button
-                            type="button"
-                            className={`flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs transition hover:bg-[#f8fafc] ${selectedFilter === "all" ? "bg-[#f0fdf4] font-semibold text-[#065f46]" : "text-[#111827]"}`}
-                            onClick={() => {
-                              setSelectedFilter("all");
-                              setIsFilterOpen(false);
-                            }}
-                          >
-                            <span>All</span>
-                            {selectedFilter === "all" && (
-                              <span className="material-symbols-outlined text-[14px] text-[#10b981] opacity-80">done</span>
-                            )}
-                          </button>
-                          {availableCategories.map((category) => (
-                            <button
-                              key={category}
-                              type="button"
-                              className={`flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs transition hover:bg-[#f8fafc] ${selectedFilter === category ? "bg-[#f0fdf4] font-semibold text-[#065f46]" : "text-[#111827]"}`}
-                              onClick={() => {
-                                setSelectedFilter(category);
-                                setIsFilterOpen(false);
-                              }}
-                            >
-                              <span className="capitalize">{formatCategoryLabel(category)}</span>
-                              {selectedFilter === category && (
-                                <span className="material-symbols-outlined text-[14px] text-[#10b981] opacity-80">done</span>
-                              )}
-                            </button>
-                          ))}
-                          {availableCategories.length === 0 && (
-                            <div className="px-2.5 py-1.5 text-xs text-[#6B7280]">No categories yet</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    <FilterMenuButton
+                      options={filterOptions}
+                      selectedValue={selectedFilter}
+                      onSelect={setSelectedFilter}
+                      ariaLabel="Filter important emails"
+                      emptyMessage="No accounts yet"
+                    />
                   </div>
                 </div>
 
