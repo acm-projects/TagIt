@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
-  ConnectedDaysFilter,
+  NullableConnectedDaysFilter,
   getDateForWeekdayInAnchorWeek,
   isSameLocalDay,
-  useDayFilter,
+  useNullableDayFilter,
   useWeekAnchorWithSharedDayFilter,
 } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
@@ -66,7 +66,7 @@ const iconMaskStyle = (src: string): React.CSSProperties => ({
 
 const TasksPage: React.FC = () => {
   const editingTimeInputRef = useRef<HTMLInputElement | null>(null);
-  const { selectedDay } = useDayFilter();
+  const { nullableDay: taskDay, setNullableDay: setTaskDay } = useNullableDayFilter();
   const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
   const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
   const [isAddingTask, setIsAddingTask] = useState(false);
@@ -84,11 +84,12 @@ const TasksPage: React.FC = () => {
   }, [tasks]);
 
   const selectedCalendarDay = useMemo(
-    () => getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay),
-    [weekAnchor, selectedDay],
+    () => (taskDay ? getDateForWeekdayInAnchorWeek(weekAnchor, taskDay) : null),
+    [weekAnchor, taskDay],
   );
 
   const visibleTasks = useMemo(() => {
+    if (!selectedCalendarDay) return tasks;
     return tasks.filter((task) => {
       const d = parseIsoDate(task.date);
       if (!d) return false;
@@ -105,6 +106,7 @@ const TasksPage: React.FC = () => {
   };
 
   const clearAllTasks = () => {
+    if (!selectedCalendarDay) return;
     setTasks((previousTasks) =>
       previousTasks.filter((task) => {
         const taskDate = parseIsoDate(task.date);
@@ -117,7 +119,8 @@ const TasksPage: React.FC = () => {
   const startAddingTask = () => {
     setIsAddingTask(true);
     setNewTaskLabel("");
-    setNewTaskDate(formatIsoDate(selectedCalendarDay));
+    const defaultDate = selectedCalendarDay ?? new Date();
+    setNewTaskDate(formatIsoDate(defaultDate));
     setNewTaskTime("");
     setEditingTaskId(null);
     setEditingLabel("");
@@ -139,7 +142,7 @@ const TasksPage: React.FC = () => {
         id: nextId,
         label: trimmedLabel,
         done: false,
-        date: newTaskDate || formatIsoDate(selectedCalendarDay),
+        date: newTaskDate || formatIsoDate(selectedCalendarDay ?? new Date()),
         time: newTaskTime || undefined,
       },
     ]);
@@ -159,9 +162,7 @@ const TasksPage: React.FC = () => {
   const startEditingTask = (task: TaskItem) => {
     setEditingTaskId(task.id);
     setEditingLabel(task.label);
-    setEditingDate(
-      task.date ?? formatIsoDate(getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay)),
-    );
+    setEditingDate(task.date ?? formatIsoDate((selectedCalendarDay ?? new Date())));
     setEditingTime(task.time ?? "09:00");
     setIsEditingTimeEnabled(Boolean(task.time));
     setIsAddingTask(false);
@@ -248,7 +249,7 @@ const TasksPage: React.FC = () => {
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
-            <ConnectedDaysFilter className="!mt-0" />
+            <NullableConnectedDaysFilter className="!mt-0" value={taskDay} onChange={setTaskDay} />
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
@@ -375,9 +376,9 @@ const TasksPage: React.FC = () => {
                           </div>
 
                           <span className="shrink-0 whitespace-nowrap text-[12px] font-medium tabular-nums text-[#6B7280]">
-                            {formatDisplayDate(
-                              parseIsoDate(task.date) ?? selectedCalendarDay,
-                            )}
+                              {formatDisplayDate(
+                                parseIsoDate(task.date) ?? selectedCalendarDay ?? new Date(),
+                              )}
                             {task.time ? ` · ${formatDisplayTime(task.time)}` : ""}
                           </span>
 

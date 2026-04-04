@@ -1,11 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
-import {
-  ConnectedDaysFilter,
-  type WeekdayShort,
-  useDayFilter,
-  useWeekAnchorWithSharedDayFilter,
-} from "../components/DaysFilter";
+import { useWeekAnchorWithSharedDayFilter, useNullableDayFilter, NullableConnectedDaysFilter } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
@@ -63,24 +58,16 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
 ];
 
 const CalendarPage: React.FC = () => {
-  const { selectedDay, setSelectedDay } = useDayFilter();
+  const { nullableDay: calendarDay, setNullableDay: setCalendarDay } = useNullableDayFilter();
   const { handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
   const categories = useUserCategories();
 
-  const [calendarDay, setCalendarDay] = useState<WeekdayShort | null>(selectedDay);
   const [events, setEvents] = useState<CalendarEvent[]>(CALENDAR_EVENTS);
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventDate, setNewEventDate] = useState("");
   const [newEventTime, setNewEventTime] = useState("09:00 - 10:00");
   const [newEventSource, setNewEventSource] = useState<CalendarEvent["source"]>("google");
-
-  useEffect(() => {
-    if (calendarDay === null) return;
-    if (calendarDay !== selectedDay) {
-      setCalendarDay(selectedDay);
-    }
-  }, [calendarDay, selectedDay]);
 
   const dayCode = (dayLabel?: string) => dayLabel?.slice(0, 3).toLowerCase();
   const filteredEvents = useMemo(() => {
@@ -92,15 +79,6 @@ const CalendarPage: React.FC = () => {
         (event.day2 && dayCode(event.day2) === target),
     );
   }, [calendarDay, events]);
-
-  const handleDayChange = (day: WeekdayShort | null) => {
-    if (day === null) {
-      setCalendarDay(null);
-      return;
-    }
-    setCalendarDay(day);
-    setSelectedDay(day);
-  };
 
   const parseDateInput = (value: string) => {
     const [year, month, day] = value.split("-").map(Number);
@@ -140,12 +118,7 @@ const CalendarPage: React.FC = () => {
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
             <div className="sticky top-0 z-20 bg-[#F9F8F6] pb-1">
-              <ConnectedDaysFilter
-                className="!mt-0"
-                allowToggleOff
-                value={calendarDay}
-                onChange={handleDayChange}
-              />
+              <NullableConnectedDaysFilter className="!mt-0" value={calendarDay} onChange={setCalendarDay} />
             </div>
 
             <section className="w-full max-w-4xl">

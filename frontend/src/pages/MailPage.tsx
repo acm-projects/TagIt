@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
-  ConnectedDaysFilter,
-  useDayFilter,
+  NullableConnectedDaysFilter,
   type WeekdayShort,
+  useNullableDayFilter,
 } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
 import {
@@ -24,6 +24,7 @@ type MailItem = {
   tagCategoryId?: string;
   priorityScore: number;
   day: WeekdayShort;
+  needsReply?: boolean;
 };
 
 /**
@@ -36,7 +37,7 @@ type DraftItem = {
 };
 
 const MailPage: React.FC = () => {
-  const { selectedDay, setSelectedDay } = useDayFilter();
+  const { nullableDay: mailDay, setNullableDay: setMailDay } = useNullableDayFilter();
 
   /**
    * Seed data for UI prototyping.
@@ -61,6 +62,7 @@ const MailPage: React.FC = () => {
       tagCategoryId: "priority-1",
       priorityScore: 8,
       day: "mon",
+      needsReply: true,
     },
     {
       id: "m2",
@@ -71,6 +73,7 @@ const MailPage: React.FC = () => {
       tagCategoryId: "priority-3",
       priorityScore: 9,
       day: "tue",
+      needsReply: true,
     },
     {
       id: "m3",
@@ -81,6 +84,7 @@ const MailPage: React.FC = () => {
       tagCategoryId: "priority-3",
       priorityScore: 6,
       day: "wed",
+      needsReply: true,
     },
     {
       id: "m4",
@@ -102,24 +106,6 @@ const MailPage: React.FC = () => {
     },
   ]);
 
-  const [mailDay, setMailDay] = useState<WeekdayShort | null>(selectedDay);
-
-  useEffect(() => {
-    if (mailDay === null) return;
-    if (mailDay !== selectedDay) {
-      setMailDay(selectedDay);
-    }
-  }, [mailDay, selectedDay]);
-
-  const handleDayChange = (day: WeekdayShort | null) => {
-    if (day === null) {
-      setMailDay(null);
-      return;
-    }
-    setMailDay(day);
-    setSelectedDay(day);
-  };
-
   const filteredMails = useMemo(
     () => mails.filter((mail) => (mailDay ? mail.day === mailDay : true)),
     [mails, mailDay],
@@ -138,6 +124,10 @@ const MailPage: React.FC = () => {
     // Placeholder until draft editor is wired.
   };
 
+  const handleDraftReply = (_mail: MailItem) => {
+    // Placeholder: open draft composer prefilled with this mail's context.
+  };
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
@@ -145,7 +135,7 @@ const MailPage: React.FC = () => {
           <WeekHeader showYear={false} />
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
-            <ConnectedDaysFilter className="!mt-0" allowToggleOff value={mailDay} onChange={handleDayChange} />
+            <NullableConnectedDaysFilter className="!mt-0" value={mailDay} onChange={setMailDay} />
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
@@ -203,6 +193,16 @@ const MailPage: React.FC = () => {
                         </button>
 
                         <div className="flex shrink-0 items-center gap-2 self-center">
+                          {mail.needsReply && (
+                            <button
+                              type="button"
+                              onClick={() => handleDraftReply(mail)}
+                              className="inline-flex h-7 items-center justify-center rounded-full border border-[#E5E7EB] px-3 text-[11px] font-semibold text-[#374151] opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                              aria-label={`Draft reply to ${mail.summary}`}
+                            >
+                              Draft reply
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleOpenMail(mail)}
