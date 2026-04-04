@@ -26,6 +26,13 @@ const MascotPage: React.FC = () => {
             Login
           </button>
         </div>
+        <button
+          type="button"
+          className="rounded-full border border-[#F3D4C0] bg-white px-5 py-2 text-sm font-semibold text-[#F9A36E] shadow-sm transition hover:bg-[#FFF5EE]"
+          onClick={() => navigate("/setup")}
+        >
+          Dummy Setup Button
+        </button>
       </div>
     </div>
   );
