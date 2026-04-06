@@ -229,17 +229,17 @@ const CalendarPage: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="flex shrink-0 items-center gap-1.5 self-center">
+                          <div className="flex shrink-0 items-center gap-2 self-center">
                             <button
                               type="button"
-                              aria-label="Add"
+                              aria-label="Add to Google Calendar"
                               className="inline-flex h-9 w-9 items-center justify-center text-[#22c55e] transition-colors hover:text-[#16a34a]"
                             >
                               <span
                                 className="inline-block h-4 w-4 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
                                 style={{
-                                  maskImage: `url(${addIcon})`,
                                   WebkitMaskImage: `url(${addIcon})`,
+                                  maskImage: `url(${addIcon})`,
                                 }}
                                 aria-hidden
                               />
@@ -329,32 +329,33 @@ const CalendarPage: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  <div className="mt-4 flex">
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingEvent((v) => !v)}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#F9FAFB]"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="h-4 w-4 shrink-0 bg-[#374151]"
-                        style={{
-                          WebkitMaskImage: `url(${addIcon})`,
-                          maskImage: `url(${addIcon})`,
-                          WebkitMaskRepeat: "no-repeat",
-                          maskRepeat: "no-repeat",
-                          WebkitMaskPosition: "center",
-                          maskPosition: "center",
-                          WebkitMaskSize: "contain",
-                          maskSize: "contain",
-                        }}
-                      />
-                      <span>Add Event</span>
-                    </button>
-                  </div>
                 </div>
               </div>
             </section>
+
+            <div className="flex justify-end pr-1">
+              <button
+                type="button"
+                onClick={() => setIsAddingEvent((v) => !v)}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#f9ab7b] px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e89960]"
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 bg-white"
+                  style={{
+                    WebkitMaskImage: `url(${addIcon})`,
+                    maskImage: `url(${addIcon})`,
+                    WebkitMaskRepeat: "no-repeat",
+                    maskRepeat: "no-repeat",
+                    WebkitMaskPosition: "center",
+                    maskPosition: "center",
+                    WebkitMaskSize: "contain",
+                    maskSize: "contain",
+                  }}
+                />
+                <span>{isAddingEvent ? "Close" : "Add Event"}</span>
+              </button>
+            </div>
           </div>
         </main>
 
