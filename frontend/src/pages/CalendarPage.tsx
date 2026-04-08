@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import { useWeekAnchorWithSharedDayFilter, useNullableDayFilter, NullableConnectedDaysFilter } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
@@ -12,6 +12,7 @@ import FilterMenuButton, { type FilterOption } from "../components/FilterMenuBut
 import { loadConnectedEmails } from "../services/connectedUser";
 
 type CalendarEvent = {
+  id: string;
   title: string;
   date1: string;
   day1: string;
@@ -25,6 +26,7 @@ type CalendarEvent = {
 
 const CALENDAR_EVENTS: CalendarEvent[] = [
   {
+    id: "cal-seed-acm-social",
     title: "ACM Social Night #1",
     date1: "03/28/2026",
     day1: "Sat",
@@ -33,6 +35,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     tagCategoryId: "priority-1",
   },
   {
+    id: "cal-seed-wehack",
     title: "WeHack - Hackathon",
     date1: "03/27/2026",
     day1: "Fri",
@@ -43,6 +46,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     tagCategoryId: "priority-3",
   },
   {
+    id: "cal-seed-resume",
     title: "Resume Review Drop-In",
     date1: "03/24/2026",
     day1: "Tue",
@@ -51,6 +55,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     tagCategoryId: "priority-3",
   },
   {
+    id: "cal-seed-systems",
     title: "Systems Project Checkpoint",
     date1: "03/26/2026",
     day1: "Thu",
@@ -68,6 +73,15 @@ const assignAccountsToEvents = (events: CalendarEvent[], emails: string[]): Cale
   }));
 };
 
+const newCalendarEventId = (): string =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `cal-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+type CalendarToast =
+  | { type: "added" }
+  | { type: "removed"; event: CalendarEvent; insertIndex: number };
+
 const CalendarPage: React.FC = () => {
   const { nullableDay: calendarDay, setNullableDay: setCalendarDay } = useNullableDayFilter();
   const { handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
@@ -79,6 +93,13 @@ const CalendarPage: React.FC = () => {
     assignAccountsToEvents(CALENDAR_EVENTS, loadConnectedEmails())
   );
   const [isAddingEvent, setIsAddingEvent] = useState(false);
+  const [slidingEventIds, setSlidingEventIds] = useState<Set<string>>(() => new Set());
+  const [closingEventIds, setClosingEventIds] = useState<Set<string>>(() => new Set());
+  const [rowToneById, setRowToneById] = useState<Record<string, "green" | "red">>({});
+  const [calendarToast, setCalendarToast] = useState<CalendarToast | null>(null);
+  const calendarToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dismissingEventIdsRef = useRef<Set<string>>(new Set());
+
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventDate, setNewEventDate] = useState("");
   const [newEventTime, setNewEventTime] = useState("09:00 - 10:00");
@@ -118,6 +139,7 @@ const CalendarPage: React.FC = () => {
         ? selectedAccount
         : connectedEmails[0] ?? "primary@university.edu";
     const nextEvent: CalendarEvent = {
+      id: newCalendarEventId(),
       title: newEventTitle.trim(),
       date1: dateLabel,
       day1: dayLabel,
@@ -140,6 +162,108 @@ const CalendarPage: React.FC = () => {
     setEvents((prev) => assignAccountsToEvents(prev, emails));
   }, []);
 
+  const clearCalendarToastTimer = () => {
+    if (calendarToastTimerRef.current !== null) {
+      clearTimeout(calendarToastTimerRef.current);
+      calendarToastTimerRef.current = null;
+    }
+  };
+
+  const showCalendarToast = (next: CalendarToast, durationMs = 4200) => {
+    clearCalendarToastTimer();
+    setCalendarToast(next);
+    calendarToastTimerRef.current = setTimeout(() => {
+      calendarToastTimerRef.current = null;
+      setCalendarToast(null);
+    }, durationMs);
+  };
+
+  const triggerEventSlide = (eventId: string) => {
+    setSlidingEventIds((prev) => {
+      const next = new Set(prev);
+      next.add(eventId);
+      return next;
+    });
+  };
+
+  const finishDismissEvent = (eventId: string) => {
+    setSlidingEventIds((prev) => {
+      const next = new Set(prev);
+      next.delete(eventId);
+      return next;
+    });
+    setClosingEventIds((prev) => {
+      const next = new Set(prev);
+      next.delete(eventId);
+      return next;
+    });
+    setRowToneById((prev) => {
+      const { [eventId]: _, ...rest } = prev;
+      return rest;
+    });
+    dismissingEventIdsRef.current.delete(eventId);
+  };
+
+  const handleAddToCalendar = (event: CalendarEvent) => {
+    const eventId = event.id;
+    if (dismissingEventIdsRef.current.has(eventId)) return;
+    dismissingEventIdsRef.current.add(eventId);
+    setRowToneById((prev) => ({ ...prev, [eventId]: "green" }));
+    triggerEventSlide(eventId);
+
+    window.setTimeout(() => {
+      setClosingEventIds((prev) => {
+        const next = new Set(prev);
+        next.add(eventId);
+        return next;
+      });
+    }, 220);
+
+    window.setTimeout(() => {
+      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+      finishDismissEvent(eventId);
+      showCalendarToast({ type: "added" });
+    }, 520);
+  };
+
+  const handleDeleteEvent = (event: CalendarEvent) => {
+    const eventId = event.id;
+    if (dismissingEventIdsRef.current.has(eventId)) return;
+    dismissingEventIdsRef.current.add(eventId);
+    const insertIndex = Math.max(0, events.findIndex((e) => e.id === eventId));
+    setRowToneById((prev) => ({ ...prev, [eventId]: "red" }));
+    triggerEventSlide(eventId);
+
+    window.setTimeout(() => {
+      setClosingEventIds((prev) => {
+        const next = new Set(prev);
+        next.add(eventId);
+        return next;
+      });
+    }, 220);
+
+    window.setTimeout(() => {
+      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+      finishDismissEvent(eventId);
+      showCalendarToast({ type: "removed", event, insertIndex });
+    }, 520);
+  };
+
+  const undoRemovedEvent = () => {
+    if (!calendarToast || calendarToast.type !== "removed") return;
+    const { event, insertIndex } = calendarToast;
+    setEvents((prev) => {
+      const next = [...prev];
+      const at = Math.min(Math.max(0, insertIndex), next.length);
+      next.splice(at, 0, event);
+      return next;
+    });
+    clearCalendarToastTimer();
+    setCalendarToast(null);
+  };
+
+  useEffect(() => () => clearCalendarToastTimer(), []);
+
   const accountOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
     (connectedEmails.length ? connectedEmails : Array.from(new Set(events.map((e) => e.accountEmail).filter(Boolean) as string[]))).map(
       (email) => ({ value: email, label: email })
@@ -148,7 +272,7 @@ const CalendarPage: React.FC = () => {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
-      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
@@ -186,17 +310,44 @@ const CalendarPage: React.FC = () => {
                     filteredEvents.map((event, index) => {
                       const sourceChipStyles = "text-[#6B7280]";
                       const categoryColor = getCategoryColorById(categories, event.tagCategoryId);
+                      const isSliding = slidingEventIds.has(event.id);
+                      const isClosing = closingEventIds.has(event.id);
+                      const tone = rowToneById[event.id];
+                      const slideClass =
+                        tone === "red"
+                          ? "calendar-event-row--slide-up-red"
+                          : "calendar-event-row--slide-up-green";
+                      const closingClass =
+                        tone === "red"
+                          ? "calendar-event-row--closing-red"
+                          : "calendar-event-row--closing-green";
+
+                      const visualStyle: React.CSSProperties = {
+                        borderBottom:
+                          index === filteredEvents.length - 1
+                            ? "none"
+                            : "0.5px solid #E5E7EB",
+                      };
+                      if (isSliding || isClosing) {
+                        if (tone === "red") {
+                          visualStyle.boxShadow = isClosing
+                            ? "0 8px 14px rgba(239, 68, 68, 0.14)"
+                            : "0 10px 18px rgba(239, 68, 68, 0.2)";
+                          visualStyle.borderBottom = "1px solid rgba(239, 68, 68, 0.45)";
+                        } else {
+                          visualStyle.boxShadow = isClosing
+                            ? "0 8px 14px rgba(34, 197, 94, 0.12)"
+                            : "0 10px 18px rgba(34, 197, 94, 0.16)";
+                          visualStyle.borderBottom = "1px solid rgba(34, 197, 94, 0.45)";
+                        }
+                        visualStyle.backgroundColor = "transparent";
+                      }
 
                       return (
                         <div
-                          key={event.title + index}
-                          className="grid grid-cols-[4px_minmax(0,1fr)_auto] items-center gap-x-4 py-4"
-                          style={{
-                            borderBottom:
-                              index === filteredEvents.length - 1
-                                ? "none"
-                                : "0.5px solid #E5E7EB",
-                          }}
+                          key={event.id}
+                          className={`calendar-event-row grid grid-cols-[4px_minmax(0,1fr)_auto] items-center gap-x-4 py-4 ${isSliding ? slideClass : ""} ${isClosing ? closingClass : ""}`}
+                          style={visualStyle}
                         >
                           <span
                             aria-hidden="true"
@@ -232,7 +383,8 @@ const CalendarPage: React.FC = () => {
                           <div className="flex shrink-0 items-center gap-2 self-center">
                             <button
                               type="button"
-                              aria-label="Add to Google Calendar"
+                              aria-label="Add to calendar"
+                              onClick={() => handleAddToCalendar(event)}
                               className="inline-flex h-9 w-9 items-center justify-center text-[#22c55e] transition-colors hover:text-[#16a34a]"
                             >
                               <span
@@ -246,7 +398,8 @@ const CalendarPage: React.FC = () => {
                             </button>
                             <button
                               type="button"
-                              aria-label="Delete"
+                              aria-label="Remove event"
+                              onClick={() => handleDeleteEvent(event)}
                               className="inline-flex h-9 w-9 items-center justify-center text-[#ef4444] transition-colors hover:text-[#dc2626]"
                             >
                               <span
@@ -358,6 +511,27 @@ const CalendarPage: React.FC = () => {
             </div>
           </div>
         </main>
+
+        {calendarToast && (
+          <div className="pointer-events-auto absolute bottom-[70px] left-1/2 z-50 -translate-x-1/2">
+            <div className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-semibold text-[#111827] shadow-[0_2px_8px_rgba(15,23,42,0.06)]">
+              {calendarToast.type === "added" ? (
+                <span>Added to calendar</span>
+              ) : (
+                <>
+                  <span>Removed event</span>
+                  <button
+                    type="button"
+                    onClick={undoRemovedEvent}
+                    className="rounded-full border border-[#ef4444] px-3 py-1 text-xs font-semibold text-[#b91c1c] transition-colors hover:bg-[#fef2f2] focus:outline-none focus:ring-2 focus:ring-[#fca5a5]"
+                  >
+                    Undo
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <AppNavbar />
       </div>

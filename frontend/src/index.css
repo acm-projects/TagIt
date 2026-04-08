@@ -84,3 +84,51 @@
   box-shadow:
     0 8px 14px rgba(34, 197, 94, 0.12);
 }
+
+/* Calendar event rows — same motion as important-email check; green (add) or red (delete) */
+.calendar-event-row {
+  max-height: 220px;
+  overflow: hidden;
+  transition:
+    transform 260ms ease,
+    opacity 260ms ease,
+    max-height 300ms ease,
+    margin 300ms ease,
+    padding 300ms ease,
+    box-shadow 260ms ease,
+    background-color 260ms ease;
+}
+
+.calendar-event-row--slide-up-green {
+  transform: translateY(-6px);
+  opacity: 0.92;
+  box-shadow: 0 10px 18px rgba(34, 197, 94, 0.16);
+}
+
+.calendar-event-row--closing-green {
+  transform: translateY(-10px);
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  box-shadow: 0 8px 14px rgba(34, 197, 94, 0.12);
+}
+
+.calendar-event-row--slide-up-red {
+  transform: translateY(-6px);
+  opacity: 0.92;
+  box-shadow: 0 10px 18px rgba(239, 68, 68, 0.2);
+}
+
+.calendar-event-row--closing-red {
+  transform: translateY(-10px);
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  box-shadow: 0 8px 14px rgba(239, 68, 68, 0.14);
+}
