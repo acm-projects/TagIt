@@ -1,18 +1,26 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import EnvelopeMascotWaving from "../components/EnvelopeMascotWaving";
+import background from "../assets/NewBg.png";
 
 const MascotPage: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#F9F8F6] px-4">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_44%,_rgba(255,252,247,0.98)_0%,_rgba(250,233,213,0.72)_18%,_rgba(249,163,110,0.14)_40%,_rgba(249,248,246,0.9)_62%,_#F9F8F6_78%)]" />
+    <div
+      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4"
+      style={{
+        backgroundImage: `url(${background})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-white/20" />
 
       <div className="relative z-10 -translate-y-6 flex flex-col items-center gap-3">
         <h1 className="mt-20 leading-none font-instrument text-7xl italic text-[#F9A36E]">TagIt</h1>
         <div className="relative scale-90">
-          <div className="pointer-events-none absolute top-1/2 left-1/2 h-[22rem] w-[22rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,_rgba(255,253,249,0.98)_0%,_rgba(250,233,213,0.84)_24%,_rgba(249,163,110,0.18)_50%,_rgba(249,163,110,0.05)_68%,_transparent_78%)] blur-2xl" />
+          <div className="pointer-events-none absolute top-1/2 left-1/2 h-[22rem] w-[22rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,_rgba(255,255,255,0.92)_0%,_rgba(210,233,255,0.45)_38%,_rgba(99,179,237,0.25)_62%,_rgba(99,179,237,0.08)_78%,_transparent_90%)] blur-2xl" />
           <EnvelopeMascotWaving />
         </div>
         <div className="mt-4 flex flex-wrap justify-center gap-4">

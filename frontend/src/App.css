@@ -9,4 +9,8 @@ body,
 body {
   min-width: 380px;
   background: #f8e7dd;
+  background-image: url("./assets/NewBg.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
