@@ -13,6 +13,7 @@ import {
   setUserCategoryColor,
   useUserCategories,
 } from "../services/categories";
+import deleteIcon from "../assets/page_buttons/delete.png";
 import {
   loadConnectedUser,
   saveConnectedUser,
@@ -165,6 +166,7 @@ const SettingsPage: React.FC = () => {
   );
   const [editingPriorityValue, setEditingPriorityValue] = useState<string>("");
   const [dragId, setDragId] = useState<number | null>(null);
+  const [confirmEmailIndex, setConfirmEmailIndex] = useState<number | null>(null);
 
   // Persist priorities to localStorage whenever they change (reorder, add, remove, edit).
   useEffect(() => {
@@ -276,6 +278,13 @@ const SettingsPage: React.FC = () => {
     setDragId(null);
   };
 
+  const removeEmailAtIndex = (index: number) => {
+    setConnectedUser((prev) => {
+      const nextEmails = prev.emails.filter((_, i) => i !== index);
+      return { ...prev, emails: nextEmails };
+    });
+  };
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
@@ -382,10 +391,31 @@ const SettingsPage: React.FC = () => {
                         key={email}
                         className="flex items-center gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
                       >
-                        <span className="text-xs font-semibold text-[#9CA3AF]">
+                        <span className="text-xs font-semibold text-[#9CA3AF] w-5 text-right">
                           {index + 1}.
                         </span>
-                        <span className="font-medium text-[#111827]">{email}</span>
+                        <span className="min-w-0 flex-1 truncate font-medium text-[#111827]">{email}</span>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmEmailIndex(index)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#ef4444] transition-colors hover:text-[#dc2626] focus:outline-none focus:ring-2 focus:ring-[#fecdd3]"
+                          aria-label={`Remove ${email}`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="h-4 w-4 bg-current"
+                            style={{
+                              WebkitMaskImage: `url(${deleteIcon})`,
+                              maskImage: `url(${deleteIcon})`,
+                              WebkitMaskRepeat: "no-repeat",
+                              maskRepeat: "no-repeat",
+                              WebkitMaskPosition: "center",
+                              maskPosition: "center",
+                              WebkitMaskSize: "contain",
+                              maskSize: "contain",
+                            }}
+                          />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -452,6 +482,36 @@ const SettingsPage: React.FC = () => {
             </section>
           </div>
         </main>
+
+        {confirmEmailIndex !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-sm rounded-2xl border border-[#EFE7DC] bg-white p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-[#111827]">Delete email?</h3>
+              <p className="mt-2 text-sm text-[#4B5563]">
+                Are you sure you want to delete this email from your connected accounts?
+              </p>
+              <div className="mt-5 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirmEmailIndex !== null) removeEmailAtIndex(confirmEmailIndex);
+                    setConfirmEmailIndex(null);
+                  }}
+                  className="inline-flex items-center justify-center rounded-full bg-[#22c55e] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#16a34a]"
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmEmailIndex(null)}
+                  className="inline-flex items-center justify-center rounded-full bg-[#ef4444] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#dc2626]"
+                >
+                  No
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <AppNavbar />
       </div>
