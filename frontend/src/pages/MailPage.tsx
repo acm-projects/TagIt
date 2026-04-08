@@ -190,7 +190,7 @@ const MailPage: React.FC = () => {
                     sortedMails.map((mail, index) => (
                       <div
                         key={mail.id}
-                        className="group grid grid-cols-[6px_minmax(0,1fr)_auto] items-center gap-x-4 py-4"
+                        className="group grid grid-cols-[6px_minmax(0,1fr)_auto] items-center gap-x-4 py-4 px-3 -mx-3 rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:shadow-[0_10px_26px_rgba(15,23,42,0.06)]"
                         style={{
                           borderBottom:
                             index === sortedMails.length - 1 ? "none" : "0.5px solid #E5E7EB",
@@ -220,7 +220,7 @@ const MailPage: React.FC = () => {
                           </div>
                           <div className="mt-2 space-y-1 text-[11px] leading-snug text-[#6B7280] sm:max-w-[32rem]">
                             <p className="truncate text-[12px]">{mail.sender}</p>
-                            <div className="overflow-hidden max-h-10 transition-[max-height] duration-200 ease-out group-hover:max-h-52">
+                            <div className="overflow-hidden max-h-10 opacity-80 transition-[max-height,opacity] duration-900 ease-[cubic-bezier(0.16,1,0.3,1)] delay-1500 group-hover:max-h-52 group-hover:opacity-100 group-hover:delay-0">
                               <p className="text-[12px] text-[#4B5563] whitespace-pre-line">{mail.body}</p>
                               {mail.extra && (
                                 <p className="mt-1 text-[12px] text-[#6B7280] whitespace-pre-line">{mail.extra}</p>
@@ -234,7 +234,7 @@ const MailPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => handleDraftReply(mail)}
-                              className="inline-flex h-7 items-center justify-center rounded-full border border-[#E5E7EB] px-3 text-[11px] font-semibold text-[#374151] opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                              className="inline-flex h-7 items-center justify-center rounded-full border border-[#E5E7EB] px-3 text-[11px] font-semibold text-[#374151] opacity-0 transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0"
                               aria-label={`Draft reply to ${mail.summary}`}
                             >
                               Draft reply
@@ -243,7 +243,7 @@ const MailPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleOpenMail(mail)}
-                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0"
                             aria-label={`Open ${mail.summary}`}
                           >
                             <span className="material-symbols-outlined text-[16px]">check</span>
