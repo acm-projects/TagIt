@@ -48,7 +48,7 @@ const MailPage: React.FC = () => {
    * Seed data for UI prototyping.
    * Replace these with API responses once backend integration is ready.
    */
-  const [mails] = useState<MailItem[]>([
+  const [mails, setMails] = useState<MailItem[]>([
     {
       id: "m1",
       summary: "Transfer Credit",
@@ -116,6 +116,9 @@ const MailPage: React.FC = () => {
     },
   ]);
 
+  const [slidingMailIds, setSlidingMailIds] = useState<Set<string>>(new Set());
+  const [closingMailIds, setClosingMailIds] = useState<Set<string>>(new Set());
+
   const filteredMails = useMemo(
     () =>
       mails.filter((mail) => {
@@ -142,6 +145,47 @@ const MailPage: React.FC = () => {
 
   const handleDraftReply = (_mail: MailItem) => {
     // Placeholder: open draft composer prefilled with this mail's context.
+  };
+
+  const triggerMailSlide = (mailId: string) => {
+    setSlidingMailIds((prev) => {
+      const next = new Set(prev);
+      next.add(mailId);
+      return next;
+    });
+  };
+
+  const completeMail = (mail: MailItem) => {
+    triggerMailSlide(mail.id);
+
+    // Start closing slightly after slide begins so glow is visible
+    const closeTimer = setTimeout(() => {
+      setClosingMailIds((prev) => {
+        const next = new Set(prev);
+        next.add(mail.id);
+        return next;
+      });
+    }, 220);
+
+    const removeTimer = setTimeout(() => {
+      setMails((prev) => prev.filter((m) => m.id !== mail.id));
+      setSlidingMailIds((prev) => {
+        const next = new Set(prev);
+        next.delete(mail.id);
+        return next;
+      });
+      setClosingMailIds((prev) => {
+        const next = new Set(prev);
+        next.delete(mail.id);
+        return next;
+      });
+    }, 520);
+
+    // Optional: clear timers if component unmounts soon (not critical here)
+    return () => {
+      clearTimeout(closeTimer);
+      clearTimeout(removeTimer);
+    };
   };
 
   useEffect(() => {
@@ -187,10 +231,14 @@ const MailPage: React.FC = () => {
                       {mailDay ? "No messages for this day." : "No messages this week."}
                     </p>
                   ) : (
-                    sortedMails.map((mail, index) => (
+                    sortedMails.map((mail, index) => {
+                      const isSliding = slidingMailIds.has(mail.id);
+                      const isClosing = closingMailIds.has(mail.id);
+
+                      return (
                       <div
                         key={mail.id}
-                        className="group grid grid-cols-[6px_minmax(0,1fr)_auto] items-center gap-x-4 py-4 px-3 -mx-3 rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:shadow-[0_10px_26px_rgba(15,23,42,0.06)]"
+                        className={`group grid grid-cols-[6px_minmax(0,1fr)_auto] items-center gap-x-4 py-4 px-3 -mx-3 rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:shadow-[0_10px_26px_rgba(15,23,42,0.06)] email-row ${isSliding ? "email-row--slide-up" : ""} ${isClosing ? "email-row--closing" : ""}`}
                         style={{
                           borderBottom:
                             index === sortedMails.length - 1 ? "none" : "0.5px solid #E5E7EB",
@@ -242,15 +290,16 @@ const MailPage: React.FC = () => {
                           )}
                           <button
                             type="button"
-                            onClick={() => handleOpenMail(mail)}
-                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0"
+                            onClick={() => completeMail(mail)}
+                            className="inline-flex h-7 w-7 items-center justify-center text-[#22c55e] opacity-0 transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0"
                             aria-label={`Open ${mail.summary}`}
                           >
                             <span className="material-symbols-outlined text-[16px]">check</span>
                           </button>
                         </div>
                       </div>
-                    ))
+                    );
+                    })
                   )}
                 </div>
               </div>
