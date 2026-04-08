@@ -73,6 +73,14 @@ const assignAccountsToEvents = (events: CalendarEvent[], emails: string[]): Cale
   }));
 };
 
+/** Local calendar date for `<input type="date" />` (YYYY-MM-DD). */
+const formatIsoDateLocal = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
 const newCalendarEventId = (): string =>
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
@@ -103,7 +111,6 @@ const CalendarPage: React.FC = () => {
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventDate, setNewEventDate] = useState("");
   const [newEventTime, setNewEventTime] = useState("09:00 - 10:00");
-  const [newEventSource, setNewEventSource] = useState<CalendarEvent["source"]>("google");
 
   const dayCode = (dayLabel?: string) => dayLabel?.slice(0, 3).toLowerCase();
   const filteredEvents = useMemo(() => {
@@ -144,17 +151,33 @@ const CalendarPage: React.FC = () => {
       date1: dateLabel,
       day1: dayLabel,
       time: newEventTime.trim() || "09:00 - 10:00",
-      source: newEventSource,
+      source: "google",
       tagCategoryId: "priority-2",
       accountEmail,
     };
     setEvents((prev) => [nextEvent, ...prev]);
     setIsAddingEvent(false);
     setNewEventTitle("");
-    setNewEventDate("");
+    setNewEventDate(formatIsoDateLocal(new Date()));
     setNewEventTime("09:00 - 10:00");
-    setNewEventSource("google");
   };
+
+  const startAddingEvent = () => {
+    setIsAddingEvent(true);
+    setNewEventTitle("");
+    setNewEventDate(formatIsoDateLocal(new Date()));
+    setNewEventTime("09:00 - 10:00");
+  };
+
+  const cancelAddingEvent = () => {
+    setIsAddingEvent(false);
+    setNewEventTitle("");
+    setNewEventDate(formatIsoDateLocal(new Date()));
+    setNewEventTime("09:00 - 10:00");
+  };
+
+  const fieldClass =
+    "rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fde6d7]";
 
   useEffect(() => {
     const emails = loadConnectedEmails();
@@ -416,80 +439,14 @@ const CalendarPage: React.FC = () => {
                       );
                     })
                   )}
-                  {isAddingEvent && (
-                    <div className="mt-3 grid gap-3 rounded-xl border border-dashed border-[#E5E7EB] bg-[#FBFBFB] px-4 py-3 sm:grid-cols-2">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[12px] font-semibold text-[#374151]">Title</label>
-                        <input
-                          type="text"
-                          value={newEventTitle}
-                          onChange={(e) => setNewEventTitle(e.target.value)}
-                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
-                          placeholder="Event title"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[12px] font-semibold text-[#374151]">Date</label>
-                        <input
-                          type="date"
-                          value={newEventDate}
-                          onChange={(e) => setNewEventDate(e.target.value)}
-                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[12px] font-semibold text-[#374151]">Time</label>
-                        <input
-                          type="text"
-                          value={newEventTime}
-                          onChange={(e) => setNewEventTime(e.target.value)}
-                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
-                          placeholder="09:00 - 10:00"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[12px] font-semibold text-[#374151]">Source</label>
-                        <select
-                          value={newEventSource}
-                          onChange={(e) => setNewEventSource(e.target.value as CalendarEvent["source"])}
-                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
-                        >
-                          <option value="google">google</option>
-                          <option value="outlook">outlook</option>
-                        </select>
-                      </div>
-                      <div className="flex gap-2 sm:col-span-2">
-                        <button
-                          type="button"
-                          onClick={handleSaveEvent}
-                          className="inline-flex flex-1 items-center justify-center rounded-full bg-[#f9ab7b] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#f29a63]"
-                        >
-                          Save Event
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsAddingEvent(false);
-                            setNewEventTitle("");
-                            setNewEventDate("");
-                            setNewEventTime("09:00 - 10:00");
-                            setNewEventSource("google");
-                          }}
-                          className="inline-flex flex-1 items-center justify-center rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#F9FAFB]"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </section>
 
-            <div className="flex justify-end pr-1">
+            <div className="mx-auto flex w-full max-w-4xl justify-end pr-1">
               <button
                 type="button"
-                onClick={() => setIsAddingEvent((v) => !v)}
+                onClick={startAddingEvent}
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#f9ab7b] px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e89960]"
               >
                 <span
@@ -506,9 +463,69 @@ const CalendarPage: React.FC = () => {
                     maskSize: "contain",
                   }}
                 />
-                <span>{isAddingEvent ? "Close" : "Add Event"}</span>
+                <span>Add Event</span>
               </button>
             </div>
+
+            {isAddingEvent && (
+              <div className="mx-auto w-full max-w-4xl rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] p-4 shadow-[0_6px_14px_rgba(17,24,39,0.05)]">
+                <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-[#6B7280]">
+                  New Event
+                </label>
+                <input
+                  type="text"
+                  value={newEventTitle}
+                  onChange={(e) => setNewEventTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveEvent();
+                    if (e.key === "Escape") cancelAddingEvent();
+                  }}
+                  className={`mt-2 w-full ${fieldClass}`}
+                  placeholder="Event title"
+                  aria-label="Event title"
+                  autoFocus
+                />
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[12px] font-semibold text-[#374151]">Date</span>
+                    <input
+                      type="date"
+                      value={newEventDate}
+                      onChange={(e) => setNewEventDate(e.target.value)}
+                      className={fieldClass}
+                      aria-label="Event date"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[12px] font-semibold text-[#374151]">Time</span>
+                    <input
+                      type="text"
+                      value={newEventTime}
+                      onChange={(e) => setNewEventTime(e.target.value)}
+                      className={fieldClass}
+                      placeholder="09:00 - 10:00"
+                      aria-label="Event time"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSaveEvent}
+                    className="inline-flex items-center justify-center rounded-full bg-[#f9ab7b] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e89960]"
+                  >
+                    Save Event
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelAddingEvent}
+                    className="inline-flex items-center justify-center rounded-full bg-[#F3F4F6] px-5 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#E5E7EB]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </main>
 
