@@ -407,7 +407,7 @@ const SettingsPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => setConfirmEmailIndex(index)}
-                              className="inline-flex h-7 w-7 items-center justify-center text-[#ef4444] opacity-0 transition-opacity duration-150 ease-out hover:text-[#dc2626] focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-[#fecdd3] group-hover:opacity-100 group-focus-within:opacity-100"
+                              className="inline-flex h-7 w-7 items-center justify-center text-[#ef4444] opacity-0 transition-opacity duration-150 ease-out hover:text-[#dc2626] focus:opacity-100 focus:outline-none group-hover:opacity-100 group-focus-within:opacity-100"
                               aria-label={`Remove ${email}`}
                             >
                               <span
