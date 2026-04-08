@@ -220,7 +220,7 @@ const SetupPage: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate("/today")}
-              className="flex w-full items-center justify-center rounded-lg bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_10px_24px_rgba(249,171,123,0.32)] transition hover:bg-[#f59c65]"
+              className="mx-auto flex w-full max-w-md items-center justify-center rounded-full bg-[#f9ab7b] py-3 text-base font-semibold text-white shadow-[0_6px_14px_rgba(249,171,123,0.35)] transition-colors transition-transform duration-200 hover:scale-[1.02] hover:bg-[#f0a068]"
             >
               Finish setup
             </button>
