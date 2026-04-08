@@ -59,7 +59,7 @@ const EnvelopeMascotWaving: React.FC = () => {
   const currentWaveCPY = 225 + (200 - 225) * waveWeight;
 
   return (
-    <div className="relative flex h-80 w-80 shrink-0 items-center justify-center rounded-2xl bg-[#F9F8F6]">
+    <div className="relative flex h-80 w-80 shrink-0 items-center justify-center rounded-2xl bg-transparent">
       <div
         className="absolute bottom-6 h-3 w-36 rounded-full bg-black/[0.08] blur-lg transition-all duration-100"
         style={{
