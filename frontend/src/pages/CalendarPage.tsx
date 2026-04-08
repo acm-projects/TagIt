@@ -300,9 +300,11 @@ const CalendarPage: React.FC = () => {
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
-            <div className="sticky top-0 z-20 bg-[#F9F8F6] pb-1">
-              <NullableConnectedDaysFilter className="!mt-0" value={calendarDay} onChange={setCalendarDay} />
-            </div>
+            <NullableConnectedDaysFilter
+              className="!mt-0 sticky top-0 z-20 bg-[#F9F8F6]"
+              value={calendarDay}
+              onChange={setCalendarDay}
+            />
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
@@ -331,7 +333,6 @@ const CalendarPage: React.FC = () => {
                     </p>
                   ) : (
                     filteredEvents.map((event, index) => {
-                      const sourceChipStyles = "text-[#6B7280]";
                       const categoryColor = getCategoryColorById(categories, event.tagCategoryId);
                       const isSliding = slidingEventIds.has(event.id);
                       const isClosing = closingEventIds.has(event.id);
@@ -379,16 +380,9 @@ const CalendarPage: React.FC = () => {
                           />
 
                           <div className="min-w-0">
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                              <p className="truncate text-[13px] font-semibold text-[#111827] sm:text-sm">
-                                {event.title}
-                              </p>
-                              <span
-                                className={`self-center text-[12px] font-medium capitalize leading-[1.1] ${sourceChipStyles}`}
-                              >
-                                {event.source}
-                              </span>
-                            </div>
+                            <p className="truncate text-[13px] font-semibold text-[#111827] sm:text-sm">
+                              {event.title}
+                            </p>
 
                             <div className="mt-2 grid grid-cols-2 gap-x-5 text-[11px] leading-snug text-[#6B7280] sm:max-w-[22rem]">
                               <div>
@@ -443,7 +437,7 @@ const CalendarPage: React.FC = () => {
               </div>
             </section>
 
-            <div className="mx-auto flex w-full max-w-4xl justify-end pr-1">
+            <div className="flex w-full max-w-4xl justify-end pr-1">
               <button
                 type="button"
                 onClick={startAddingEvent}
@@ -468,7 +462,7 @@ const CalendarPage: React.FC = () => {
             </div>
 
             {isAddingEvent && (
-              <div className="mx-auto w-full max-w-4xl rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] p-4 shadow-[0_6px_14px_rgba(17,24,39,0.05)]">
+              <div className="w-full max-w-4xl rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] p-4 shadow-[0_6px_14px_rgba(17,24,39,0.05)]">
                 <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-[#6B7280]">
                   New Event
                 </label>
