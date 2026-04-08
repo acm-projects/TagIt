@@ -10,13 +10,13 @@ import {
   type TaskProgress,
 } from "../services/taskProgress";
 import TagiWeeklyProgressMascot from "../components/TagiWeeklyProgressMascot";
+import tagiMascotCopy from "../data/tagiMascotMessages.json";
 import {
   getCategoryColorById,
   useUserCategories,
 } from "../services/categories";
 import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
 import { loadConnectedEmails } from "../services/connectedUser";
-import tagiMascotCopy from "../data/tagiMascotMessages.json";
 
 /**
  * Important email preview shown on Today.
@@ -110,7 +110,7 @@ const EVENTS: TodayEvent[] = [
   { date: "Thu, Apr 03", time: "12:15 - 01:00", title: "Resume Review Drop-In", tagCategoryId: "priority-3" },
 ];
 
-const TAGI_EXCITED_MS = 2 * 60 * 1000;
+const TAGI_EXCITED_MS = 10_000;
 const TAGI_NORMAL_ROTATE_MIN_MS = 12 * 60 * 1000;
 const TAGI_NORMAL_ROTATE_MAX_MS = 18 * 60 * 1000;
 
@@ -129,69 +129,70 @@ const MONTH_ABBR: Record<string, number> = {
   Dec: 11,
 };
 
-function parseTodayEventStart(ev: TodayEvent): Date | null {
-  const dateMatch = ev.date.match(/,\s*(\w+)\s+(\d{1,2})\b/);
-  const timeMatch = ev.time.match(/(\d{1,2}):(\d{2})/);
-  if (!dateMatch || !timeMatch) return null;
-  const month = MONTH_ABBR[dateMatch[1]];
-  if (month === undefined) return null;
-  const day = Number.parseInt(dateMatch[2], 10);
-  const hour = Number.parseInt(timeMatch[1], 10);
-  const minute = Number.parseInt(timeMatch[2], 10);
+function parseTodayEventStart(event: TodayEvent): Date | null {
+  const parts = event.date.split(/,\s*/);
+  const rest = parts[parts.length - 1]?.trim();
+  if (!rest) return null;
+  const [mon, dayStr] = rest.split(/\s+/);
+  const day = parseInt(dayStr, 10);
+  const month = MONTH_ABBR[mon ?? ""];
+  if (month === undefined || Number.isNaN(day)) return null;
   const year = new Date().getFullYear();
-  return new Date(year, month, day, hour, minute, 0, 0);
+  const startTime = event.time.split("-")[0]?.trim() || "09:00";
+  const [h, m] = startTime.split(":").map((x) => parseInt(x, 10));
+  if (Number.isNaN(h)) return null;
+  return new Date(year, month, day, h, Number.isNaN(m) ? 0 : m, 0, 0);
 }
 
 function interpolateMascotTemplate(
   template: string,
-  vars: Record<string, string | number>,
+  vars: Record<string, string | number>
 ): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => String(vars[key] ?? ""));
 }
 
 function pickRandomLine(lines: string[]): string {
+  if (lines.length === 0) return "";
   return lines[Math.floor(Math.random() * lines.length)] ?? "";
 }
 
 function getApproachingEventBubbleMessage(
   events: TodayEvent[],
-  copy: typeof tagiMascotCopy,
+  copy: typeof tagiMascotCopy
 ): string | null {
   const now = Date.now();
-  const horizonMs = 4 * 60 * 60 * 1000;
-  const maxLen = copy.eventTitleMaxLength;
-  for (const ev of events) {
-    const start = parseTodayEventStart(ev);
-    if (!start || Number.isNaN(start.getTime())) continue;
-    const delta = start.getTime() - now;
-    if (delta > 0 && delta <= horizonMs) {
-      const short = ev.title.split("@")[0].trim();
-      if (short.length > 0 && short.length <= maxLen) {
-        return interpolateMascotTemplate(copy.eventSoonTemplate, { title: short });
-      }
-      return copy.eventFallback;
-    }
+  const soonMs = 2 * 60 * 60 * 1000;
+  let best: { start: number; title: string } | null = null;
+  for (const e of events) {
+    const d = parseTodayEventStart(e);
+    if (!d) continue;
+    const t = d.getTime();
+    if (t < now || t > now + soonMs) continue;
+    if (!best || t < best.start) best = { start: t, title: e.title };
   }
-  return null;
+  if (!best) return null;
+  const maxLen = copy.eventTitleMaxLength ?? 36;
+  const title =
+    best.title.length > maxLen ? `${best.title.slice(0, maxLen - 1)}…` : best.title;
+  return interpolateMascotTemplate(copy.eventSoonTemplate, { title });
 }
 
 function pickNormalMascotMessage(
-  progress: TaskProgress,
+  p: TaskProgress,
   events: TodayEvent[],
-  copy: typeof tagiMascotCopy,
+  copy: typeof tagiMascotCopy
 ): string {
-  const remaining = Math.max(0, progress.totalTasks - progress.completedTasks);
-  const eventHint = getApproachingEventBubbleMessage(events, copy);
   const pool: string[] = [...copy.motivational];
-  if (remaining === 1 && copy.tasksRemainingOne.length > 0) {
-    pool.push(pickRandomLine(copy.tasksRemainingOne));
-  } else if (remaining > 1) {
-    pool.push(
-      interpolateMascotTemplate(copy.tasksRemainingManyTemplate, { count: remaining }),
-    );
-  }
-  if (eventHint) {
-    pool.push(eventHint);
+  const eventMsg = getApproachingEventBubbleMessage(events, copy);
+  if (eventMsg) pool.push(eventMsg);
+  if (p.totalTasks > 0) {
+    const remaining = p.totalTasks - p.completedTasks;
+    if (remaining === 1) pool.push(...copy.tasksRemainingOne);
+    else if (remaining > 1) {
+      pool.push(
+        interpolateMascotTemplate(copy.tasksRemainingManyTemplate, { count: remaining })
+      );
+    }
   }
   return pickRandomLine(pool);
 }
@@ -213,53 +214,83 @@ const TodayPage: React.FC = () => {
     message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
     excited: false,
   }));
-  const tagiUntilRef = useRef<number | null>(null);
-  const clearTagiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const normalRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const progressRef = useRef(progress);
-  progressRef.current = progress;
-  const tagiHandlersRef = useRef({
-    scheduleExcitedEnd: (_until: number) => {},
-    scheduleNormalRotation: () => {},
-  });
+  const excitedEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleNormalRotateRef = useRef<() => void>(() => {});
 
-  tagiHandlersRef.current.scheduleExcitedEnd = (until: number) => {
-    if (clearTagiTimerRef.current !== null) {
-      clearTimeout(clearTagiTimerRef.current);
-      clearTagiTimerRef.current = null;
-    }
-    clearTagiTimerRef.current = setTimeout(() => {
-      clearTagiTimerRef.current = null;
-      tagiUntilRef.current = null;
-      setTagiBubble({
-        message: pickNormalMascotMessage(progressRef.current, EVENTS, tagiMascotCopy),
-        excited: false,
-      });
-      tagiHandlersRef.current.scheduleNormalRotation();
-    }, Math.max(0, until - Date.now()));
-  };
-
-  tagiHandlersRef.current.scheduleNormalRotation = () => {
-    if (normalRotateTimerRef.current !== null) {
+  const clearNormalRotateTimer = () => {
+    if (normalRotateTimerRef.current) {
       clearTimeout(normalRotateTimerRef.current);
       normalRotateTimerRef.current = null;
     }
-    const delay =
-      TAGI_NORMAL_ROTATE_MIN_MS +
-      Math.random() * (TAGI_NORMAL_ROTATE_MAX_MS - TAGI_NORMAL_ROTATE_MIN_MS);
-    normalRotateTimerRef.current = setTimeout(() => {
-      normalRotateTimerRef.current = null;
-      if (tagiUntilRef.current !== null && Date.now() < tagiUntilRef.current) {
-        tagiHandlersRef.current.scheduleNormalRotation();
-        return;
+  };
+
+  useEffect(() => {
+    const scheduleNormalRotate = () => {
+      clearNormalRotateTimer();
+      const delay =
+        TAGI_NORMAL_ROTATE_MIN_MS +
+        Math.random() * (TAGI_NORMAL_ROTATE_MAX_MS - TAGI_NORMAL_ROTATE_MIN_MS);
+      normalRotateTimerRef.current = setTimeout(() => {
+        normalRotateTimerRef.current = null;
+        setTagiBubble((b) => {
+          if (b.excited) return b;
+          return {
+            message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
+            excited: false,
+          };
+        });
+        scheduleNormalRotateRef.current();
+      }, delay);
+    };
+    scheduleNormalRotateRef.current = scheduleNormalRotate;
+    scheduleNormalRotate();
+    return () => {
+      clearNormalRotateTimer();
+      if (excitedEndTimerRef.current) {
+        clearTimeout(excitedEndTimerRef.current);
+        excitedEndTimerRef.current = null;
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    let lastSeen = progress.completedTasks;
+    try {
+      const raw = sessionStorage.getItem(MASCOT_LAST_COMPLETED_TASKS_KEY);
+      if (raw != null) {
+        const n = parseInt(raw, 10);
+        if (!Number.isNaN(n)) lastSeen = n;
+      }
+    } catch {
+      /* sessionStorage unavailable */
+    }
+
+    if (progress.completedTasks <= lastSeen) return;
+
+    const praise = pickRandomLine(tagiMascotCopy.taskPraise);
+    try {
+      sessionStorage.setItem(MASCOT_LAST_COMPLETED_TASKS_KEY, String(progress.completedTasks));
+    } catch {
+      /* ignore */
+    }
+
+    clearNormalRotateTimer();
+    if (excitedEndTimerRef.current) {
+      clearTimeout(excitedEndTimerRef.current);
+      excitedEndTimerRef.current = null;
+    }
+
+    setTagiBubble({ message: praise, excited: true });
+    excitedEndTimerRef.current = setTimeout(() => {
+      excitedEndTimerRef.current = null;
       setTagiBubble({
-        message: pickNormalMascotMessage(progressRef.current, EVENTS, tagiMascotCopy),
+        message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
         excited: false,
       });
-      tagiHandlersRef.current.scheduleNormalRotation();
-    }, delay);
-  };
+      scheduleNormalRotateRef.current();
+    }, TAGI_EXCITED_MS);
+  }, [progress.completedTasks]);
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -268,50 +299,6 @@ const TodayPage: React.FC = () => {
 
     refreshProgress();
     return subscribeToTaskUpdates(refreshProgress);
-  }, []);
-
-  useEffect(() => {
-    const current = progress.completedTasks;
-    const raw = sessionStorage.getItem(MASCOT_LAST_COMPLETED_TASKS_KEY);
-    const last =
-      raw === null || raw === "" ? null : Number.parseInt(raw, 10);
-
-    if (last === null || Number.isNaN(last)) {
-      sessionStorage.setItem(MASCOT_LAST_COMPLETED_TASKS_KEY, String(current));
-      return;
-    }
-
-    if (current > last) {
-      if (normalRotateTimerRef.current !== null) {
-        clearTimeout(normalRotateTimerRef.current);
-        normalRotateTimerRef.current = null;
-      }
-      if (clearTagiTimerRef.current !== null) {
-        clearTimeout(clearTagiTimerRef.current);
-        clearTagiTimerRef.current = null;
-      }
-      const praise = pickRandomLine(tagiMascotCopy.taskPraise);
-      const until = Date.now() + TAGI_EXCITED_MS;
-      tagiUntilRef.current = until;
-      setTagiBubble({ message: praise, excited: true });
-      tagiHandlersRef.current.scheduleExcitedEnd(until);
-    }
-
-    sessionStorage.setItem(MASCOT_LAST_COMPLETED_TASKS_KEY, String(current));
-  }, [progress.completedTasks]);
-
-  useEffect(() => {
-    tagiHandlersRef.current.scheduleNormalRotation();
-    return () => {
-      if (clearTagiTimerRef.current !== null) {
-        clearTimeout(clearTagiTimerRef.current);
-        clearTagiTimerRef.current = null;
-      }
-      if (normalRotateTimerRef.current !== null) {
-        clearTimeout(normalRotateTimerRef.current);
-        normalRotateTimerRef.current = null;
-      }
-    };
   }, []);
 
   // Reset important emails to the placeholder set on mount (helps restore if any were dismissed previously)
