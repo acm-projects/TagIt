@@ -5,7 +5,9 @@ import WeekHeader from "../components/WeekHeader";
 import {
   getTaskProgress,
   loadTasks,
+  MASCOT_LAST_COMPLETED_TASKS_KEY,
   subscribeToTaskUpdates,
+  type TaskProgress,
 } from "../services/taskProgress";
 import TagiWeeklyProgressMascot from "../components/TagiWeeklyProgressMascot";
 import {
@@ -14,6 +16,7 @@ import {
 } from "../services/categories";
 import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
 import { loadConnectedEmails } from "../services/connectedUser";
+import tagiMascotCopy from "../data/tagiMascotMessages.json";
 
 /**
  * Important email preview shown on Today.
@@ -107,6 +110,92 @@ const EVENTS: TodayEvent[] = [
   { date: "Thu, Apr 03", time: "12:15 - 01:00", title: "Resume Review Drop-In", tagCategoryId: "priority-3" },
 ];
 
+const TAGI_EXCITED_MS = 2 * 60 * 1000;
+const TAGI_NORMAL_ROTATE_MIN_MS = 12 * 60 * 1000;
+const TAGI_NORMAL_ROTATE_MAX_MS = 18 * 60 * 1000;
+
+const MONTH_ABBR: Record<string, number> = {
+  Jan: 0,
+  Feb: 1,
+  Mar: 2,
+  Apr: 3,
+  May: 4,
+  Jun: 5,
+  Jul: 6,
+  Aug: 7,
+  Sep: 8,
+  Oct: 9,
+  Nov: 10,
+  Dec: 11,
+};
+
+function parseTodayEventStart(ev: TodayEvent): Date | null {
+  const dateMatch = ev.date.match(/,\s*(\w+)\s+(\d{1,2})\b/);
+  const timeMatch = ev.time.match(/(\d{1,2}):(\d{2})/);
+  if (!dateMatch || !timeMatch) return null;
+  const month = MONTH_ABBR[dateMatch[1]];
+  if (month === undefined) return null;
+  const day = Number.parseInt(dateMatch[2], 10);
+  const hour = Number.parseInt(timeMatch[1], 10);
+  const minute = Number.parseInt(timeMatch[2], 10);
+  const year = new Date().getFullYear();
+  return new Date(year, month, day, hour, minute, 0, 0);
+}
+
+function interpolateMascotTemplate(
+  template: string,
+  vars: Record<string, string | number>,
+): string {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => String(vars[key] ?? ""));
+}
+
+function pickRandomLine(lines: string[]): string {
+  return lines[Math.floor(Math.random() * lines.length)] ?? "";
+}
+
+function getApproachingEventBubbleMessage(
+  events: TodayEvent[],
+  copy: typeof tagiMascotCopy,
+): string | null {
+  const now = Date.now();
+  const horizonMs = 4 * 60 * 60 * 1000;
+  const maxLen = copy.eventTitleMaxLength;
+  for (const ev of events) {
+    const start = parseTodayEventStart(ev);
+    if (!start || Number.isNaN(start.getTime())) continue;
+    const delta = start.getTime() - now;
+    if (delta > 0 && delta <= horizonMs) {
+      const short = ev.title.split("@")[0].trim();
+      if (short.length > 0 && short.length <= maxLen) {
+        return interpolateMascotTemplate(copy.eventSoonTemplate, { title: short });
+      }
+      return copy.eventFallback;
+    }
+  }
+  return null;
+}
+
+function pickNormalMascotMessage(
+  progress: TaskProgress,
+  events: TodayEvent[],
+  copy: typeof tagiMascotCopy,
+): string {
+  const remaining = Math.max(0, progress.totalTasks - progress.completedTasks);
+  const eventHint = getApproachingEventBubbleMessage(events, copy);
+  const pool: string[] = [...copy.motivational];
+  if (remaining === 1 && copy.tasksRemainingOne.length > 0) {
+    pool.push(pickRandomLine(copy.tasksRemainingOne));
+  } else if (remaining > 1) {
+    pool.push(
+      interpolateMascotTemplate(copy.tasksRemainingManyTemplate, { count: remaining }),
+    );
+  }
+  if (eventHint) {
+    pool.push(eventHint);
+  }
+  return pickRandomLine(pool);
+}
+
 const TodayPage: React.FC = () => {
   const navigate = useNavigate();
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
@@ -120,7 +209,57 @@ const TodayPage: React.FC = () => {
   const [toast, setToast] = useState<{ email: ImportantEmailPreview; index: number } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categories = useUserCategories();
-  const tagiWeeklyLine = "Hello there!";
+  const [tagiBubble, setTagiBubble] = useState(() => ({
+    message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
+    excited: false,
+  }));
+  const tagiUntilRef = useRef<number | null>(null);
+  const clearTagiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const normalRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+  const tagiHandlersRef = useRef({
+    scheduleExcitedEnd: (_until: number) => {},
+    scheduleNormalRotation: () => {},
+  });
+
+  tagiHandlersRef.current.scheduleExcitedEnd = (until: number) => {
+    if (clearTagiTimerRef.current !== null) {
+      clearTimeout(clearTagiTimerRef.current);
+      clearTagiTimerRef.current = null;
+    }
+    clearTagiTimerRef.current = setTimeout(() => {
+      clearTagiTimerRef.current = null;
+      tagiUntilRef.current = null;
+      setTagiBubble({
+        message: pickNormalMascotMessage(progressRef.current, EVENTS, tagiMascotCopy),
+        excited: false,
+      });
+      tagiHandlersRef.current.scheduleNormalRotation();
+    }, Math.max(0, until - Date.now()));
+  };
+
+  tagiHandlersRef.current.scheduleNormalRotation = () => {
+    if (normalRotateTimerRef.current !== null) {
+      clearTimeout(normalRotateTimerRef.current);
+      normalRotateTimerRef.current = null;
+    }
+    const delay =
+      TAGI_NORMAL_ROTATE_MIN_MS +
+      Math.random() * (TAGI_NORMAL_ROTATE_MAX_MS - TAGI_NORMAL_ROTATE_MIN_MS);
+    normalRotateTimerRef.current = setTimeout(() => {
+      normalRotateTimerRef.current = null;
+      if (tagiUntilRef.current !== null && Date.now() < tagiUntilRef.current) {
+        tagiHandlersRef.current.scheduleNormalRotation();
+        return;
+      }
+      setTagiBubble({
+        message: pickNormalMascotMessage(progressRef.current, EVENTS, tagiMascotCopy),
+        excited: false,
+      });
+      tagiHandlersRef.current.scheduleNormalRotation();
+    }, delay);
+  };
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -129,6 +268,50 @@ const TodayPage: React.FC = () => {
 
     refreshProgress();
     return subscribeToTaskUpdates(refreshProgress);
+  }, []);
+
+  useEffect(() => {
+    const current = progress.completedTasks;
+    const raw = sessionStorage.getItem(MASCOT_LAST_COMPLETED_TASKS_KEY);
+    const last =
+      raw === null || raw === "" ? null : Number.parseInt(raw, 10);
+
+    if (last === null || Number.isNaN(last)) {
+      sessionStorage.setItem(MASCOT_LAST_COMPLETED_TASKS_KEY, String(current));
+      return;
+    }
+
+    if (current > last) {
+      if (normalRotateTimerRef.current !== null) {
+        clearTimeout(normalRotateTimerRef.current);
+        normalRotateTimerRef.current = null;
+      }
+      if (clearTagiTimerRef.current !== null) {
+        clearTimeout(clearTagiTimerRef.current);
+        clearTagiTimerRef.current = null;
+      }
+      const praise = pickRandomLine(tagiMascotCopy.taskPraise);
+      const until = Date.now() + TAGI_EXCITED_MS;
+      tagiUntilRef.current = until;
+      setTagiBubble({ message: praise, excited: true });
+      tagiHandlersRef.current.scheduleExcitedEnd(until);
+    }
+
+    sessionStorage.setItem(MASCOT_LAST_COMPLETED_TASKS_KEY, String(current));
+  }, [progress.completedTasks]);
+
+  useEffect(() => {
+    tagiHandlersRef.current.scheduleNormalRotation();
+    return () => {
+      if (clearTagiTimerRef.current !== null) {
+        clearTimeout(clearTagiTimerRef.current);
+        clearTagiTimerRef.current = null;
+      }
+      if (normalRotateTimerRef.current !== null) {
+        clearTimeout(normalRotateTimerRef.current);
+        normalRotateTimerRef.current = null;
+      }
+    };
   }, []);
 
   // Reset important emails to the placeholder set on mount (helps restore if any were dismissed previously)
@@ -279,7 +462,8 @@ const TodayPage: React.FC = () => {
                 <div className="mt-[5px]">
                   <TagiWeeklyProgressMascot
                     progressPercentage={progress.progressPercentage}
-                    message={tagiWeeklyLine}
+                    message={tagiBubble.message}
+                    excited={tagiBubble.excited}
                     onClick={() => navigate("/chatbot")}
                   />
                 </div>

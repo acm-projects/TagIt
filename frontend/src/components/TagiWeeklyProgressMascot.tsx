@@ -22,22 +22,28 @@ export type TagiWeeklyProgressMascotProps = {
   progressPercentage: number;
   /** Shown in the speech bubble; wire to your AI / copy layer later. Empty string hides the bubble. */
   message?: string;
+  /** Standing/sitting excited animation (same logic as full Tagi `excited` / `sitting_excited` mode). */
+  excited?: boolean;
   onClick?: () => void;
 };
 
 const TagiWeeklyProgressMascot: React.FC<TagiWeeklyProgressMascotProps> = ({
   progressPercentage,
   message = "Hello there!",
+  excited = false,
   onClick,
 }) => {
   const clipPathId = `tagi-weekly-env-${useId().replace(/:/g, "")}`;
   const [blink, setBlink] = useState(false);
   const [frame, setFrame] = useState(0);
+  const frameRef = useRef(0);
   const requestRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const animate = (time: number) => {
-      setFrame(time * 0.005);
+      const next = time * 0.005;
+      frameRef.current = next;
+      setFrame(next);
       requestRef.current = requestAnimationFrame(animate);
     };
     requestRef.current = requestAnimationFrame(animate);
@@ -50,13 +56,20 @@ const TagiWeeklyProgressMascot: React.FC<TagiWeeklyProgressMascotProps> = ({
 
   useEffect(() => {
     const blinkInterval = window.setInterval(() => {
+      const excitedCyclePos = frameRef.current % 20;
+      const isCheering = excited && excitedCyclePos < 12.5;
+      if (isCheering) return;
       setBlink(true);
       window.setTimeout(() => setBlink(false), 150);
     }, 3500);
     return () => clearInterval(blinkInterval);
-  }, []);
+  }, [excited]);
 
   const idleHandWiggle = Math.sin(frame) * 5;
+  const excitedHandWiggle = Math.sin(frame * 4) * 8;
+  const excitedCyclePos = frame % 20;
+  const showExcitedOval = excitedCyclePos < 12.5;
+  const isExcited = excited;
 
   /** h-2 bar (8px); envelope bottom = 2px above bar top → pin SVG box bottom at 10px. */
   const BAR_H_PX = 8;
@@ -137,14 +150,22 @@ const TagiWeeklyProgressMascot: React.FC<TagiWeeklyProgressMascotProps> = ({
 
           <g>
             <path
-              d={getLimbPath(85, 215, 45, 240 + idleHandWiggle, 65, 225)}
+              d={
+                isExcited && showExcitedOval
+                  ? getLimbPath(85, 215, 60 + excitedHandWiggle, 170, 60, 200)
+                  : getLimbPath(85, 215, 45, 240 + idleHandWiggle, 65, 225)
+              }
               fill="none"
               stroke={COLORS.limbs}
               strokeWidth="16"
               strokeLinecap="round"
             />
             <path
-              d={getLimbPath(315, 215, 355, 240 + idleHandWiggle, 335, 225)}
+              d={
+                isExcited && showExcitedOval
+                  ? getLimbPath(315, 215, 340 + excitedHandWiggle, 170, 340, 200)
+                  : getLimbPath(315, 215, 355, 240 + idleHandWiggle, 335, 225)
+              }
               fill="none"
               stroke={COLORS.limbs}
               strokeWidth="16"
@@ -182,47 +203,60 @@ const TagiWeeklyProgressMascot: React.FC<TagiWeeklyProgressMascotProps> = ({
           </g>
 
           <g>
-            <rect
-              x="152"
-              y="188"
-              width="16"
-              height="26"
-              rx="8"
-              fill={COLORS.eye}
-              style={{
-                transform: `scaleY(${blink ? 0.05 : 1})`,
-                transformOrigin: "160px 200px",
-                transition: "transform 0.1s",
-              }}
-            />
-            <rect
-              x="232"
-              y="188"
-              width="16"
-              height="26"
-              rx="8"
-              fill={COLORS.eye}
-              style={{
-                transform: `scaleY(${blink ? 0.05 : 1})`,
-                transformOrigin: "240px 200px",
-                transition: "transform 0.1s",
-              }}
-            />
-            {!blink && (
+            {isExcited && showExcitedOval ? (
+              <g fill="none" stroke={COLORS.eye} strokeWidth="5" strokeLinecap="round">
+                <path d="M 145 205 Q 160 185 175 205" />
+                <path d="M 225 205 Q 240 185 255 205" />
+              </g>
+            ) : (
               <>
-                <circle cx={156} cy={196} r="5" fill="white" opacity="0.95" />
-                <circle cx={236} cy={196} r="5" fill="white" opacity="0.95" />
+                <rect
+                  x="152"
+                  y="188"
+                  width="16"
+                  height="26"
+                  rx="8"
+                  fill={COLORS.eye}
+                  style={{
+                    transform: `scaleY(${blink ? 0.05 : 1})`,
+                    transformOrigin: "160px 200px",
+                    transition: "transform 0.1s",
+                  }}
+                />
+                <rect
+                  x="232"
+                  y="188"
+                  width="16"
+                  height="26"
+                  rx="8"
+                  fill={COLORS.eye}
+                  style={{
+                    transform: `scaleY(${blink ? 0.05 : 1})`,
+                    transformOrigin: "240px 200px",
+                    transition: "transform 0.1s",
+                  }}
+                />
+                {!blink && (
+                  <>
+                    <circle cx={156} cy={196} r="5" fill="white" opacity="0.95" />
+                    <circle cx={236} cy={196} r="5" fill="white" opacity="0.95" />
+                  </>
+                )}
               </>
             )}
           </g>
 
-          <path
-            d="M180 230 Q200 250 220 230"
-            stroke={COLORS.eye}
-            strokeWidth="4"
-            fill="none"
-            strokeLinecap="round"
-          />
+          {isExcited && showExcitedOval ? (
+            <ellipse cx="200" cy="245" rx="15" ry="22" fill={COLORS.eye} />
+          ) : (
+            <path
+              d="M180 230 Q200 250 220 230"
+              stroke={COLORS.eye}
+              strokeWidth="4"
+              fill="none"
+              strokeLinecap="round"
+            />
+          )}
           <ellipse cx="135" cy="230" rx="14" ry="7" fill={COLORS.blush} opacity="0.35" />
           <ellipse cx="265" cy="230" rx="14" ry="7" fill={COLORS.blush} opacity="0.35" />
             </svg>
