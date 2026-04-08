@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
   NullableConnectedDaysFilter,
@@ -118,6 +118,8 @@ const MailPage: React.FC = () => {
 
   const [slidingMailIds, setSlidingMailIds] = useState<Set<string>>(new Set());
   const [closingMailIds, setClosingMailIds] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<{ mail: MailItem; index: number } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filteredMails = useMemo(
     () =>
@@ -181,11 +183,41 @@ const MailPage: React.FC = () => {
       });
     }, 520);
 
+    // Show undo toast
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ mail, index: filteredMails.findIndex((m) => m.id === mail.id) });
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+    }, 4200);
+
     // Optional: clear timers if component unmounts soon (not critical here)
     return () => {
       clearTimeout(closeTimer);
       clearTimeout(removeTimer);
     };
+  };
+
+  const undoLastRemoval = () => {
+    if (!toast) return;
+    const { mail, index } = toast;
+    setMails((prev) => {
+      const next = [...prev];
+      const insertAt = Math.max(0, Math.min(index, next.length));
+      next.splice(insertAt, 0, mail);
+      return next;
+    });
+    setSlidingMailIds((prev) => {
+      const next = new Set(prev);
+      next.delete(mail.id);
+      return next;
+    });
+    setClosingMailIds((prev) => {
+      const next = new Set(prev);
+      next.delete(mail.id);
+      return next;
+    });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(null);
   };
 
   useEffect(() => {
@@ -292,7 +324,7 @@ const MailPage: React.FC = () => {
                             type="button"
                             onClick={() => completeMail(mail)}
                             className="inline-flex h-7 w-7 items-center justify-center text-[#22c55e] opacity-0 transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0"
-                            aria-label={`Open ${mail.summary}`}
+                            aria-label={`Mark ${mail.summary} complete`}
                           >
                             <span className="material-symbols-outlined text-[16px]">check</span>
                           </button>
@@ -331,17 +363,6 @@ const MailPage: React.FC = () => {
                         </span>
                         <p className="w-full truncate text-[12px] text-[#6B7280] leading-tight">Draft reply</p>
                       </button>
-
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenDraft(draft)}
-                          className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
-                          aria-label={`Open draft for ${draft.sender}`}
-                        >
-                          <span className="material-symbols-outlined text-[16px]">check</span>
-                        </button>
-                      </div>
                     </div>
                   ))}
                 </div>
@@ -349,6 +370,21 @@ const MailPage: React.FC = () => {
             </section>
           </div>
         </main>
+
+        {toast && (
+          <div className="pointer-events-auto fixed bottom-24 left-1/2 z-50 -translate-x-1/2 transform">
+            <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#111827] shadow-[0_12px_32px_rgba(0,0,0,0.18)] border border-[#E5E7EB]">
+              <span>Mail cleared</span>
+              <button
+                type="button"
+                onClick={undoLastRemoval}
+                className="rounded-full border border-[#34d399] px-3 py-1 text-xs font-semibold text-[#047857] transition-colors hover:bg-[#ecfdf3] focus:outline-none focus:ring-2 focus:ring-[#34d399]"
+              >
+                Undo
+              </button>
+            </div>
+          </div>
+        )}
 
         <AppNavbar />
       </div>
