@@ -451,29 +451,29 @@ const TasksPage: React.FC = () => {
                             </span>
                           </div>
 
-                          <span className="shrink-0 whitespace-nowrap text-[12px] font-medium tabular-nums text-[#6B7280]">
+                          <span className="shrink-0 whitespace-nowrap text-[12px] font-medium tabular-nums text-[#6B7280] ml-[-40px] mr-2">
                               {formatDisplayDate(
                                 parseIsoDate(task.date) ?? selectedCalendarDay ?? new Date(),
                               )}
                             {task.time ? ` · ${formatDisplayTime(task.time)}` : ""}
                           </span>
 
-                          <div className="flex shrink-0 items-center gap-0.5">
+                          <div className="flex shrink-0 items-center gap-2">
                             <button
                               type="button"
                               onClick={() => startEditingTask(task)}
-                              className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                              className="inline-flex h-4 w-4 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
                               aria-label={`Edit ${task.label}`}
                             >
-                              <span className="material-symbols-outlined text-[16px]">edit</span>
+                              <span className="material-symbols-outlined text-[12px] leading-none">edit</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => deleteTask(task.id)}
-                              className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                              className="inline-flex h-4 w-4 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
                               aria-label={`Delete ${task.label}`}
                             >
-                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                              <span className="material-symbols-outlined text-[12px] leading-none">delete</span>
                             </button>
                           </div>
                         </div>
