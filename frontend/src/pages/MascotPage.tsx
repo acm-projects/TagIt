@@ -1,13 +1,21 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import EnvelopeMascotWaving from "../components/EnvelopeMascotWaving";
+import background from "../assets/NewBg.png";
 
 const MascotPage: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#F9F8F6] px-4">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_44%,_rgba(255,252,247,0.98)_0%,_rgba(250,233,213,0.72)_18%,_rgba(249,163,110,0.14)_40%,_rgba(249,248,246,0.9)_62%,_#F9F8F6_78%)]" />
+    <div
+      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4"
+      style={{
+        backgroundImage: `url(${background})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-white/20" />
 
       <div className="relative z-10 -translate-y-6 flex flex-col items-center gap-3">
         <h1 className="mt-20 leading-none font-instrument text-7xl italic text-[#F9A36E]">TagIt</h1>
