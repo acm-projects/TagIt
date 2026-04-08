@@ -385,40 +385,51 @@ const SettingsPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="space-y-2">
-                    {connectedUser.emails.map((email, index) => (
-                      <div
-                        key={email}
-                        className="flex items-center gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
-                      >
-                        <span className="text-xs font-semibold text-[#9CA3AF] w-5 text-right">
-                          {index + 1}.
-                        </span>
-                        <span className="min-w-0 flex-1 truncate font-medium text-[#111827]">{email}</span>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmEmailIndex(index)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#ef4444] transition-colors hover:text-[#dc2626] focus:outline-none focus:ring-2 focus:ring-[#fecdd3]"
-                          aria-label={`Remove ${email}`}
-                        >
-                          <span
-                            aria-hidden="true"
-                            className="h-4 w-4 bg-current"
-                            style={{
-                              WebkitMaskImage: `url(${deleteIcon})`,
-                              maskImage: `url(${deleteIcon})`,
-                              WebkitMaskRepeat: "no-repeat",
-                              maskRepeat: "no-repeat",
-                              WebkitMaskPosition: "center",
-                              maskPosition: "center",
-                              WebkitMaskSize: "contain",
-                              maskSize: "contain",
-                            }}
-                          />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                  {connectedUser.emails.length > 0 && (
+                    <div className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 text-sm text-[#1F2933]">
+                      {connectedUser.emails.map((email, index) => {
+                        const isLast = index === connectedUser.emails.length - 1;
+                        const rowDivider = {
+                          borderBottom: isLast ? "none" : "0.5px solid #E5E7EB",
+                        } as const;
+                        return (
+                          <div
+                            key={`${email}-${index}`}
+                            className="group grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-x-3 py-3"
+                            style={rowDivider}
+                          >
+                            <span className="text-right text-xs font-semibold text-[#9CA3AF]">
+                              {index + 1}.
+                            </span>
+                            <span className="min-w-0 truncate text-sm font-normal text-[#111827]">
+                              {email}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmEmailIndex(index)}
+                              className="inline-flex h-7 w-7 items-center justify-center text-[#ef4444] opacity-0 transition-opacity duration-150 ease-out hover:text-[#dc2626] focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-[#fecdd3] group-hover:opacity-100 group-focus-within:opacity-100"
+                              aria-label={`Remove ${email}`}
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="h-4 w-4 bg-current"
+                                style={{
+                                  WebkitMaskImage: `url(${deleteIcon})`,
+                                  maskImage: `url(${deleteIcon})`,
+                                  WebkitMaskRepeat: "no-repeat",
+                                  maskRepeat: "no-repeat",
+                                  WebkitMaskPosition: "center",
+                                  maskPosition: "center",
+                                  WebkitMaskSize: "contain",
+                                  maskSize: "contain",
+                                }}
+                              />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </section>
