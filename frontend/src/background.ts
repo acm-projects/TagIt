@@ -15,18 +15,82 @@ import {
 } from "./services/auth/microsoftOAuth";
 import { saveToken } from "./services/auth/tokenStorage";
 
+type SidePanelApiWithToggle = typeof chrome.sidePanel & {
+  close?: (options: { tabId: number }) => Promise<void>;
+  onOpened?: {
+    addListener: (callback: (info: { tabId?: number }) => void) => void;
+  };
+  onClosed?: {
+    addListener: (callback: (info: { tabId?: number }) => void) => void;
+  };
+};
+
+const sidePanelApi = chrome.sidePanel as SidePanelApiWithToggle;
+const openPanelTabIds = new Set<number>();
+
 const enableSidePanelOnClick = async () => {
   try {
-    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
   } catch (error) {
     console.error("Unable to enable side panel on action click.", error);
   }
+};
+
+const setPanelOpenState = (tabId: number | undefined, isOpen: boolean) => {
+  if (tabId == null) return;
+
+  if (isOpen) {
+    openPanelTabIds.add(tabId);
+    return;
+  }
+
+  openPanelTabIds.delete(tabId);
+};
+
+const openSidePanelForTab = async (tabId: number) => {
+  await chrome.sidePanel.open({ tabId });
+  setPanelOpenState(tabId, true);
+};
+
+const closeSidePanelForTab = async (tabId: number) => {
+  if (typeof sidePanelApi.close !== "function") {
+    await openSidePanelForTab(tabId);
+    return;
+  }
+
+  await sidePanelApi.close({ tabId });
+  setPanelOpenState(tabId, false);
 };
 
 void enableSidePanelOnClick();
 
 chrome.runtime.onInstalled.addListener(() => {
   void enableSidePanelOnClick();
+});
+
+chrome.action.onClicked.addListener((tab) => {
+  const tabId = tab.id;
+  if (tabId == null) return;
+
+  const togglePromise = openPanelTabIds.has(tabId)
+    ? closeSidePanelForTab(tabId)
+    : openSidePanelForTab(tabId);
+
+  togglePromise.catch((error) => {
+    console.error("Unable to toggle side panel.", error);
+  });
+});
+
+sidePanelApi.onOpened?.addListener((info) => {
+  setPanelOpenState(info.tabId, true);
+});
+
+sidePanelApi.onClosed?.addListener((info) => {
+  setPanelOpenState(info.tabId, false);
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  setPanelOpenState(tabId, false);
 });
 
 chrome.runtime.onMessage.addListener(
@@ -41,8 +105,7 @@ chrome.runtime.onMessage.addListener(
         sendResponse({ ok: false });
         return;
       }
-      chrome.sidePanel
-        .open({ tabId })
+      openSidePanelForTab(tabId)
         .then(() => sendResponse({ ok: true }))
         .catch((error) => {
           console.error("Unable to open side panel.", error);
