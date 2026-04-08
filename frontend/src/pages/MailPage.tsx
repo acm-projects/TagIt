@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
   NullableConnectedDaysFilter,
@@ -10,6 +10,8 @@ import {
   getCategoryColorById,
   useUserCategories,
 } from "../services/categories";
+import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
+import { loadConnectedEmails } from "../services/connectedUser";
 
 /**
  * A prioritized mail card item.
@@ -20,6 +22,7 @@ type MailItem = {
   summary: string;
   sender: string;
   body: string;
+  accountEmail: string;
   extra?: string;
   tagCategoryId?: string;
   priorityScore: number;
@@ -38,6 +41,8 @@ type DraftItem = {
 
 const MailPage: React.FC = () => {
   const { nullableDay: mailDay, setNullableDay: setMailDay } = useNullableDayFilter();
+  const [selectedAccount, setSelectedAccount] = useState<string>("all");
+  const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
 
   /**
    * Seed data for UI prototyping.
@@ -49,6 +54,7 @@ const MailPage: React.FC = () => {
       summary: "Transfer Credit",
       sender: "Joshua Montogermy",
       body: "Need a screenshot of your current enrollment.",
+      accountEmail: "email1@gmail.com",
       tagCategoryId: "priority-4",
       priorityScore: 10,
       day: "mon",
@@ -58,6 +64,7 @@ const MailPage: React.FC = () => {
       summary: "Club Budget Follow-Up",
       sender: "Student Activities Board",
       body: "Please review the revised budget request before Monday evening so the funding vote can stay on schedule. We added notes to the travel line items, updated the projected turnout numbers, and included a revised breakdown for equipment, catering, and room setup so the committee can approve everything in one pass.",
+      accountEmail: "email2@outlook.com",
       extra: "Meeting: March 29, 2026 at 6:30 PM in the Student Union conference room. Bring the updated spreadsheet and the reimbursement receipts if you have them.",
       tagCategoryId: "priority-1",
       priorityScore: 8,
@@ -69,6 +76,7 @@ const MailPage: React.FC = () => {
       summary: "Internship Offer",
       sender: "John Mathew @Verizon @Handshake",
       body: "Internship offer. Respond with your resume and portfolio.",
+      accountEmail: "email1@gmail.com",
       extra: "Deadline : March 15, 2026",
       tagCategoryId: "priority-3",
       priorityScore: 9,
@@ -80,6 +88,7 @@ const MailPage: React.FC = () => {
       summary: "Resume Request",
       sender: "John Mathew @Verizon @Handshake",
       body: "Internship offer. Respond with your resume and portfolio.",
+      accountEmail: "email2@outlook.com",
       extra: "Deadline : March 15, 2026",
       tagCategoryId: "priority-3",
       priorityScore: 6,
@@ -91,6 +100,7 @@ const MailPage: React.FC = () => {
       summary: "Deadline Reminder",
       sender: "Registrar Office",
       body: "Reminder to submit your semester enrollment confirmation before the stated deadline.",
+      accountEmail: "email3@utdallas.edu",
       extra: "Due: March 20, 2026",
       tagCategoryId: "priority-4",
       priorityScore: 7,
@@ -107,8 +117,14 @@ const MailPage: React.FC = () => {
   ]);
 
   const filteredMails = useMemo(
-    () => mails.filter((mail) => (mailDay ? mail.day === mailDay : true)),
-    [mails, mailDay],
+    () =>
+      mails.filter((mail) => {
+        const matchesDay = mailDay ? mail.day === mailDay : true;
+        const matchesAccount =
+          selectedAccount === "all" ? true : mail.accountEmail === selectedAccount;
+        return matchesDay && matchesAccount;
+      }),
+    [mails, mailDay, selectedAccount],
   );
 
   const sortedMails = useMemo(
@@ -128,6 +144,16 @@ const MailPage: React.FC = () => {
     // Placeholder: open draft composer prefilled with this mail's context.
   };
 
+  useEffect(() => {
+    setConnectedEmails(loadConnectedEmails());
+  }, []);
+
+  const accountOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
+    (connectedEmails.length ? connectedEmails : Array.from(new Set(mails.map((m) => m.accountEmail)))).map(
+      (email) => ({ value: email, label: email })
+    )
+  );
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
@@ -139,9 +165,20 @@ const MailPage: React.FC = () => {
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
-                  <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">mail</span>
-                  <span>Mails</span>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                    <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">mail</span>
+                    <span>Mails</span>
+                  </div>
+                  <div className="flex items-center gap-2 pr-1">
+                    <FilterMenuButton
+                      options={accountOptions}
+                      selectedValue={selectedAccount}
+                      onSelect={setSelectedAccount}
+                      ariaLabel="Filter mails by account"
+                      emptyMessage="No accounts yet"
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-3">

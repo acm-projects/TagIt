@@ -4,6 +4,8 @@ export type SharedTask = {
   done: boolean;
   date?: string;
   time?: string;
+  /** Optional account email the task is tied to (e.g., source inbox). */
+  accountEmail?: string;
 };
 
 export type TaskProgress = {
@@ -75,7 +77,9 @@ const isSharedTaskArray = (value: unknown): value is SharedTask[] => {
       (candidate.date === undefined ||
         (typeof candidate.date === "string" && isIsoDateString(candidate.date))) &&
       (candidate.time === undefined ||
-        (typeof candidate.time === "string" && isTimeString(candidate.time)))
+        (typeof candidate.time === "string" && isTimeString(candidate.time))) &&
+      (candidate.accountEmail === undefined ||
+        (typeof candidate.accountEmail === "string" && candidate.accountEmail.length > 0))
     );
   });
 };

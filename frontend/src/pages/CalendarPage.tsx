@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import { useWeekAnchorWithSharedDayFilter, useNullableDayFilter, NullableConnectedDaysFilter } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
@@ -8,6 +8,8 @@ import {
   getCategoryColorById,
   useUserCategories,
 } from "../services/categories";
+import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
+import { loadConnectedEmails } from "../services/connectedUser";
 
 type CalendarEvent = {
   title: string;
@@ -18,6 +20,7 @@ type CalendarEvent = {
   time: string;
   source: "google" | "outlook";
   tagCategoryId?: string;
+  accountEmail?: string;
 };
 
 const CALENDAR_EVENTS: CalendarEvent[] = [
@@ -57,12 +60,24 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
   },
 ];
 
+const assignAccountsToEvents = (events: CalendarEvent[], emails: string[]): CalendarEvent[] => {
+  if (emails.length === 0) return events;
+  return events.map((event, index) => ({
+    ...event,
+    accountEmail: event.accountEmail ?? emails[index % emails.length],
+  }));
+};
+
 const CalendarPage: React.FC = () => {
   const { nullableDay: calendarDay, setNullableDay: setCalendarDay } = useNullableDayFilter();
   const { handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
   const categories = useUserCategories();
 
-  const [events, setEvents] = useState<CalendarEvent[]>(CALENDAR_EVENTS);
+  const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
+  const [selectedAccount, setSelectedAccount] = useState<string>("all");
+  const [events, setEvents] = useState<CalendarEvent[]>(() =>
+    assignAccountsToEvents(CALENDAR_EVENTS, loadConnectedEmails())
+  );
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventDate, setNewEventDate] = useState("");
@@ -71,14 +86,18 @@ const CalendarPage: React.FC = () => {
 
   const dayCode = (dayLabel?: string) => dayLabel?.slice(0, 3).toLowerCase();
   const filteredEvents = useMemo(() => {
-    if (!calendarDay) return events;
-    const target = dayCode(calendarDay);
-    return events.filter(
-      (event) =>
+    const target = calendarDay ? dayCode(calendarDay) : null;
+    return events.filter((event) => {
+      const matchesDay =
+        !target ||
         dayCode(event.day1) === target ||
-        (event.day2 && dayCode(event.day2) === target),
-    );
-  }, [calendarDay, events]);
+        (event.day2 && dayCode(event.day2) === target);
+      const matchesAccount =
+        selectedAccount === "all" ||
+        (event.accountEmail ?? "Unknown account") === selectedAccount;
+      return matchesDay && matchesAccount;
+    });
+  }, [calendarDay, events, selectedAccount]);
 
   const parseDateInput = (value: string) => {
     const [year, month, day] = value.split("-").map(Number);
@@ -94,6 +113,10 @@ const CalendarPage: React.FC = () => {
     const parsed = parseDateInput(newEventDate);
     const dayLabel = parsed?.dayLabel ?? "Mon";
     const dateLabel = parsed?.dateLabel ?? newEventDate;
+    const accountEmail =
+      selectedAccount !== "all"
+        ? selectedAccount
+        : connectedEmails[0] ?? "primary@university.edu";
     const nextEvent: CalendarEvent = {
       title: newEventTitle.trim(),
       date1: dateLabel,
@@ -101,6 +124,7 @@ const CalendarPage: React.FC = () => {
       time: newEventTime.trim() || "09:00 - 10:00",
       source: newEventSource,
       tagCategoryId: "priority-2",
+      accountEmail,
     };
     setEvents((prev) => [nextEvent, ...prev]);
     setIsAddingEvent(false);
@@ -109,6 +133,18 @@ const CalendarPage: React.FC = () => {
     setNewEventTime("09:00 - 10:00");
     setNewEventSource("google");
   };
+
+  useEffect(() => {
+    const emails = loadConnectedEmails();
+    setConnectedEmails(emails);
+    setEvents((prev) => assignAccountsToEvents(prev, emails));
+  }, []);
+
+  const accountOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
+    (connectedEmails.length ? connectedEmails : Array.from(new Set(events.map((e) => e.accountEmail).filter(Boolean) as string[]))).map(
+      (email) => ({ value: email, label: email })
+    )
+  );
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
@@ -123,11 +159,22 @@ const CalendarPage: React.FC = () => {
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
-                  <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">
-                    event_note
-                  </span>
-                  <span>Calendar Events</span>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                    <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">
+                      event_note
+                    </span>
+                    <span>Calendar Events</span>
+                  </div>
+                  <div className="flex items-center gap-2 pr-1">
+                    <FilterMenuButton
+                      options={accountOptions}
+                      selectedValue={selectedAccount}
+                      onSelect={setSelectedAccount}
+                      ariaLabel="Filter calendar events by account"
+                      emptyMessage="No accounts yet"
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-3">
@@ -182,17 +229,17 @@ const CalendarPage: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="flex shrink-0 items-center gap-1.5 self-center">
+                          <div className="flex shrink-0 items-center gap-2 self-center">
                             <button
                               type="button"
-                              aria-label="Add"
+                              aria-label="Add to Google Calendar"
                               className="inline-flex h-9 w-9 items-center justify-center text-[#22c55e] transition-colors hover:text-[#16a34a]"
                             >
                               <span
                                 className="inline-block h-4 w-4 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
                                 style={{
-                                  maskImage: `url(${addIcon})`,
                                   WebkitMaskImage: `url(${addIcon})`,
+                                  maskImage: `url(${addIcon})`,
                                 }}
                                 aria-hidden
                               />
@@ -282,32 +329,33 @@ const CalendarPage: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  <div className="mt-4 flex">
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingEvent((v) => !v)}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#F9FAFB]"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="h-4 w-4 shrink-0 bg-[#374151]"
-                        style={{
-                          WebkitMaskImage: `url(${addIcon})`,
-                          maskImage: `url(${addIcon})`,
-                          WebkitMaskRepeat: "no-repeat",
-                          maskRepeat: "no-repeat",
-                          WebkitMaskPosition: "center",
-                          maskPosition: "center",
-                          WebkitMaskSize: "contain",
-                          maskSize: "contain",
-                        }}
-                      />
-                      <span>Add Event</span>
-                    </button>
-                  </div>
                 </div>
               </div>
             </section>
+
+            <div className="flex justify-end pr-1">
+              <button
+                type="button"
+                onClick={() => setIsAddingEvent((v) => !v)}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#f9ab7b] px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e89960]"
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 bg-white"
+                  style={{
+                    WebkitMaskImage: `url(${addIcon})`,
+                    maskImage: `url(${addIcon})`,
+                    WebkitMaskRepeat: "no-repeat",
+                    maskRepeat: "no-repeat",
+                    WebkitMaskPosition: "center",
+                    maskPosition: "center",
+                    WebkitMaskSize: "contain",
+                    maskSize: "contain",
+                  }}
+                />
+                <span>{isAddingEvent ? "Close" : "Add Event"}</span>
+              </button>
+            </div>
           </div>
         </main>
 

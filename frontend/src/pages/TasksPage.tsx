@@ -15,6 +15,8 @@ import {
 } from "../services/taskProgress";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
+import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
+import { loadConnectedEmails } from "../services/connectedUser";
 
 /**
  * Represents a single task on the Tasks page.
@@ -68,7 +70,12 @@ const TasksPage: React.FC = () => {
   const editingTimeInputRef = useRef<HTMLInputElement | null>(null);
   const { nullableDay: taskDay, setNullableDay: setTaskDay } = useNullableDayFilter();
   const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
-  const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
+  const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
+  const [selectedAccount, setSelectedAccount] = useState<string>("all");
+  const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks().map((task, index) => ({
+    ...task,
+    accountEmail: task.accountEmail ?? loadConnectedEmails()[index % Math.max(loadConnectedEmails().length, 1)] ?? "primary@university.edu",
+  })));
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskLabel, setNewTaskLabel] = useState("");
   const [newTaskDate, setNewTaskDate] = useState("");
@@ -89,13 +96,15 @@ const TasksPage: React.FC = () => {
   );
 
   const visibleTasks = useMemo(() => {
-    if (!selectedCalendarDay) return tasks;
     return tasks.filter((task) => {
       const d = parseIsoDate(task.date);
-      if (!d) return false;
-      return isSameLocalDay(d, selectedCalendarDay);
+      const matchesDay = selectedCalendarDay ? (d ? isSameLocalDay(d, selectedCalendarDay) : false) : true;
+      const matchesAccount =
+        selectedAccount === "all" ||
+        (task.accountEmail ?? "Unknown account") === selectedAccount;
+      return matchesDay && matchesAccount;
     });
-  }, [tasks, selectedCalendarDay]);
+  }, [tasks, selectedCalendarDay, selectedAccount]);
 
   const toggleTask = (taskId: number) => {
     setTasks((previousTasks) =>
@@ -135,6 +144,10 @@ const TasksPage: React.FC = () => {
 
     const nextId =
       tasks.length === 0 ? 1 : Math.max(...tasks.map((task) => task.id)) + 1;
+    const accountEmail =
+      selectedAccount !== "all"
+        ? selectedAccount
+        : connectedEmails[0] ?? "primary@university.edu";
 
     setTasks((previousTasks) => [
       ...previousTasks,
@@ -144,6 +157,7 @@ const TasksPage: React.FC = () => {
         done: false,
         date: newTaskDate || formatIsoDate(selectedCalendarDay ?? new Date()),
         time: newTaskTime || undefined,
+        accountEmail,
       },
     ]);
     setIsAddingTask(false);
@@ -181,6 +195,7 @@ const TasksPage: React.FC = () => {
               label: trimmedLabel,
               date: editingDate,
               time: isEditingTimeEnabled ? editingTime : undefined,
+              accountEmail: task.accountEmail ?? (selectedAccount !== "all" ? selectedAccount : connectedEmails[0]),
             }
           : task,
       ),
@@ -199,6 +214,23 @@ const TasksPage: React.FC = () => {
     setEditingTime("");
     setIsEditingTimeEnabled(true);
   };
+
+  useEffect(() => {
+    const emails = loadConnectedEmails();
+    setConnectedEmails(emails);
+    setTasks((prev) =>
+      prev.map((task, index) => ({
+        ...task,
+        accountEmail: task.accountEmail ?? emails[index % Math.max(emails.length, 1)] ?? "primary@university.edu",
+      })),
+    );
+  }, []);
+
+  const accountOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
+    (connectedEmails.length ? connectedEmails : Array.from(new Set(tasks.map((t) => t.accountEmail).filter(Boolean) as string[]))).map(
+      (email) => ({ value: email, label: email })
+    )
+  );
 
   const deleteTask = (taskId: number) => {
     setTasks((previousTasks) => previousTasks.filter((task) => task.id !== taskId));
@@ -253,16 +285,27 @@ const TasksPage: React.FC = () => {
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 -960 960 960"
-                    aria-hidden="true"
-                    className="h-[24px] w-[24px] shrink-0 fill-[#f9ab7b]"
-                  >
-                    <path d="M268-240 42-466l57-56 170 170 56 56-57 56Zm226 0L268-466l56-57 170 170 368-368 56 57-424 424Zm0-226-57-56 198-198 57 56-198 198Z" />
-                  </svg>
-                  <span>Tasks</span>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 -960 960 960"
+                      aria-hidden="true"
+                      className="h-[24px] w-[24px] shrink-0 fill-[#f9ab7b]"
+                    >
+                      <path d="M268-240 42-466l57-56 170 170 56 56-57 56Zm226 0L268-466l56-57 170 170 368-368 56 57-424 424Zm0-226-57-56 198-198 57 56-198 198Z" />
+                    </svg>
+                    <span>Tasks</span>
+                  </div>
+                  <div className="flex items-center gap-2 pr-1">
+                    <FilterMenuButton
+                      options={accountOptions}
+                      selectedValue={selectedAccount}
+                      onSelect={setSelectedAccount}
+                      ariaLabel="Filter tasks by account"
+                      emptyMessage="No accounts yet"
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-3">
