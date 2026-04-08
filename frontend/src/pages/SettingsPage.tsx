@@ -376,13 +376,13 @@ const SettingsPage: React.FC = () => {
                 )}
 
                 <div className="mt-3 space-y-3 text-sm">
-                  <div className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3">
-                    <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-[#9CA3AF]">
+                  <div className="flex min-w-0 items-center gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3">
+                    <span className="shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-[#9CA3AF]">
                       Username
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-[#111827]">
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#111827]">
                       {connectedUser.username}
-                    </p>
+                    </span>
                   </div>
 
                   <div className="space-y-2">
