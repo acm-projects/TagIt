@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
   NullableConnectedDaysFilter,
@@ -38,6 +38,13 @@ type DraftItem = {
   id: string;
   sender: string;
 };
+
+/** Delay after leaving a row before collapsing (lets pointer enter next row without flicker). */
+const MAIL_ROW_LEAVE_COLLAPSE_MS = 160;
+/** Pause after collapsing the previous row before expanding the newly hovered row. */
+const MAIL_EXPAND_AFTER_COLLAPSE_MS = 260;
+/** Max-height transition for body expand/collapse (ms). */
+const MAIL_BODY_TRANSITION_MS = 320;
 
 const MailPage: React.FC = () => {
   const { nullableDay: mailDay, setNullableDay: setMailDay } = useNullableDayFilter();
@@ -108,6 +115,50 @@ const MailPage: React.FC = () => {
     },
   ]);
   const categories = useUserCategories();
+
+  const [expandedMailId, setExpandedMailId] = useState<string | null>(null);
+  const leaveCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const expandAfterCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearMailHoverTimers = useCallback(() => {
+    if (leaveCollapseTimerRef.current !== null) {
+      clearTimeout(leaveCollapseTimerRef.current);
+      leaveCollapseTimerRef.current = null;
+    }
+    if (expandAfterCollapseTimerRef.current !== null) {
+      clearTimeout(expandAfterCollapseTimerRef.current);
+      expandAfterCollapseTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearMailHoverTimers(), [clearMailHoverTimers]);
+
+  const handleMailRowEnter = useCallback(
+    (mailId: string) => {
+      clearMailHoverTimers();
+      if (expandedMailId === mailId) {
+        return;
+      }
+      if (expandedMailId !== null && expandedMailId !== mailId) {
+        setExpandedMailId(null);
+        expandAfterCollapseTimerRef.current = setTimeout(() => {
+          expandAfterCollapseTimerRef.current = null;
+          setExpandedMailId(mailId);
+        }, MAIL_EXPAND_AFTER_COLLAPSE_MS);
+        return;
+      }
+      setExpandedMailId(mailId);
+    },
+    [clearMailHoverTimers, expandedMailId],
+  );
+
+  const handleMailRowLeave = useCallback(() => {
+    clearMailHoverTimers();
+    leaveCollapseTimerRef.current = setTimeout(() => {
+      leaveCollapseTimerRef.current = null;
+      setExpandedMailId(null);
+    }, MAIL_ROW_LEAVE_COLLAPSE_MS);
+  }, [clearMailHoverTimers]);
 
   const [draftReplies] = useState<DraftItem[]>([
     {
@@ -187,18 +238,22 @@ const MailPage: React.FC = () => {
                       {mailDay ? "No messages for this day." : "No messages this week."}
                     </p>
                   ) : (
-                    sortedMails.map((mail, index) => (
+                    sortedMails.map((mail, index) => {
+                      const isExpanded = expandedMailId === mail.id;
+                      return (
                       <div
                         key={mail.id}
-                        className="group grid grid-cols-[6px_minmax(0,1fr)_auto] items-center gap-x-4 py-4"
+                        className="group grid grid-cols-[6px_minmax(0,1fr)_auto] items-stretch gap-x-4 py-4"
                         style={{
                           borderBottom:
                             index === sortedMails.length - 1 ? "none" : "0.5px solid #E5E7EB",
                         }}
+                        onMouseEnter={() => handleMailRowEnter(mail.id)}
+                        onMouseLeave={handleMailRowLeave}
                       >
                         <div
                           aria-hidden="true"
-                          className="h-full min-h-[5rem] w-[6px] self-stretch rounded-full"
+                          className="w-[6px] shrink-0 self-stretch rounded-full min-h-[2.75rem]"
                           style={{
                             backgroundColor: getCategoryColorById(categories, mail.tagCategoryId),
                           }}
@@ -220,7 +275,18 @@ const MailPage: React.FC = () => {
                           </div>
                           <div className="mt-2 space-y-1 text-[11px] leading-snug text-[#6B7280] sm:max-w-[32rem]">
                             <p className="truncate text-[12px]">{mail.sender}</p>
-                            <div className="overflow-hidden max-h-10 transition-[max-height] duration-200 ease-out group-hover:max-h-52">
+                            <div
+                              className={
+                                isExpanded
+                                  ? "max-h-[min(28rem,72vh)] overflow-y-auto overflow-x-hidden"
+                                  : "max-h-10 overflow-hidden"
+                              }
+                              style={{
+                                transitionProperty: "max-height",
+                                transitionDuration: `${MAIL_BODY_TRANSITION_MS}ms`,
+                                transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)",
+                              }}
+                            >
                               <p className="text-[12px] text-[#4B5563] whitespace-pre-line">{mail.body}</p>
                               {mail.extra && (
                                 <p className="mt-1 text-[12px] text-[#6B7280] whitespace-pre-line">{mail.extra}</p>
@@ -250,7 +316,8 @@ const MailPage: React.FC = () => {
                           </button>
                         </div>
                       </div>
-                    ))
+                    );
+                    })
                   )}
                 </div>
               </div>
