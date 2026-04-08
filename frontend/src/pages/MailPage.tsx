@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
   NullableConnectedDaysFilter,
@@ -48,7 +48,7 @@ const MailPage: React.FC = () => {
    * Seed data for UI prototyping.
    * Replace these with API responses once backend integration is ready.
    */
-  const [mails, setMails] = useState<MailItem[]>([
+  const [mails] = useState<MailItem[]>([
     {
       id: "m1",
       summary: "Transfer Credit",
@@ -63,9 +63,9 @@ const MailPage: React.FC = () => {
       id: "m1b",
       summary: "Club Budget Follow-Up",
       sender: "Student Activities Board",
-      body: "Please review the revised budget request before Monday evening so the funding vote can stay on schedule. We added notes to the travel line items, updated the projected turnout numbers, and included a revised breakdown for equipment, catering, and room setup so the committee can approve everything in one pass.",
+      body: "Please review the revised budget request before Monday evening so the funding vote can stay on schedule.",
       accountEmail: "email2@outlook.com",
-      extra: "Meeting: March 29, 2026 at 6:30 PM in the Student Union conference room. Bring the updated spreadsheet and the reimbursement receipts if you have them.",
+      extra: "Meeting: March 29, 2026 at 6:30 PM ",
       tagCategoryId: "priority-1",
       priorityScore: 8,
       day: "mon",
@@ -116,11 +116,6 @@ const MailPage: React.FC = () => {
     },
   ]);
 
-  const [slidingMailIds, setSlidingMailIds] = useState<Set<string>>(new Set());
-  const [closingMailIds, setClosingMailIds] = useState<Set<string>>(new Set());
-  const [toast, setToast] = useState<{ mail: MailItem; index: number } | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const filteredMails = useMemo(
     () =>
       mails.filter((mail) => {
@@ -147,77 +142,6 @@ const MailPage: React.FC = () => {
 
   const handleDraftReply = (_mail: MailItem) => {
     // Placeholder: open draft composer prefilled with this mail's context.
-  };
-
-  const triggerMailSlide = (mailId: string) => {
-    setSlidingMailIds((prev) => {
-      const next = new Set(prev);
-      next.add(mailId);
-      return next;
-    });
-  };
-
-  const completeMail = (mail: MailItem) => {
-    triggerMailSlide(mail.id);
-
-    // Start closing slightly after slide begins so glow is visible
-    const closeTimer = setTimeout(() => {
-      setClosingMailIds((prev) => {
-        const next = new Set(prev);
-        next.add(mail.id);
-        return next;
-      });
-    }, 220);
-
-    const removeTimer = setTimeout(() => {
-      setMails((prev) => prev.filter((m) => m.id !== mail.id));
-      setSlidingMailIds((prev) => {
-        const next = new Set(prev);
-        next.delete(mail.id);
-        return next;
-      });
-      setClosingMailIds((prev) => {
-        const next = new Set(prev);
-        next.delete(mail.id);
-        return next;
-      });
-    }, 520);
-
-    // Show undo toast
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast({ mail, index: filteredMails.findIndex((m) => m.id === mail.id) });
-    toastTimerRef.current = setTimeout(() => {
-      setToast(null);
-    }, 4200);
-
-    // Optional: clear timers if component unmounts soon (not critical here)
-    return () => {
-      clearTimeout(closeTimer);
-      clearTimeout(removeTimer);
-    };
-  };
-
-  const undoLastRemoval = () => {
-    if (!toast) return;
-    const { mail, index } = toast;
-    setMails((prev) => {
-      const next = [...prev];
-      const insertAt = Math.max(0, Math.min(index, next.length));
-      next.splice(insertAt, 0, mail);
-      return next;
-    });
-    setSlidingMailIds((prev) => {
-      const next = new Set(prev);
-      next.delete(mail.id);
-      return next;
-    });
-    setClosingMailIds((prev) => {
-      const next = new Set(prev);
-      next.delete(mail.id);
-      return next;
-    });
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast(null);
   };
 
   useEffect(() => {
@@ -263,14 +187,10 @@ const MailPage: React.FC = () => {
                       {mailDay ? "No messages for this day." : "No messages this week."}
                     </p>
                   ) : (
-                    sortedMails.map((mail, index) => {
-                      const isSliding = slidingMailIds.has(mail.id);
-                      const isClosing = closingMailIds.has(mail.id);
-
-                      return (
+                    sortedMails.map((mail, index) => (
                       <div
                         key={mail.id}
-                        className={`group grid grid-cols-[6px_minmax(0,1fr)_auto] items-center gap-x-4 py-4 px-3 -mx-3 rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:shadow-[0_10px_26px_rgba(15,23,42,0.06)] email-row ${isSliding ? "email-row--slide-up" : ""} ${isClosing ? "email-row--closing" : ""}`}
+                        className="group grid grid-cols-[6px_minmax(0,1fr)_auto] items-center gap-x-4 py-4"
                         style={{
                           borderBottom:
                             index === sortedMails.length - 1 ? "none" : "0.5px solid #E5E7EB",
@@ -300,7 +220,7 @@ const MailPage: React.FC = () => {
                           </div>
                           <div className="mt-2 space-y-1 text-[11px] leading-snug text-[#6B7280] sm:max-w-[32rem]">
                             <p className="truncate text-[12px]">{mail.sender}</p>
-                            <div className="overflow-hidden max-h-10 opacity-80 transition-[max-height,opacity] duration-900 ease-[cubic-bezier(0.16,1,0.3,1)] delay-1500 group-hover:max-h-52 group-hover:opacity-100 group-hover:delay-0">
+                            <div className="overflow-hidden max-h-10 transition-[max-height] duration-200 ease-out group-hover:max-h-52">
                               <p className="text-[12px] text-[#4B5563] whitespace-pre-line">{mail.body}</p>
                               {mail.extra && (
                                 <p className="mt-1 text-[12px] text-[#6B7280] whitespace-pre-line">{mail.extra}</p>
@@ -314,7 +234,7 @@ const MailPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => handleDraftReply(mail)}
-                              className="inline-flex h-7 items-center justify-center rounded-full border border-[#E5E7EB] px-3 text-[11px] font-semibold text-[#374151] opacity-0 transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0"
+                              className="inline-flex h-7 items-center justify-center rounded-full border border-[#E5E7EB] px-3 text-[11px] font-semibold text-[#374151] opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
                               aria-label={`Draft reply to ${mail.summary}`}
                             >
                               Draft reply
@@ -322,16 +242,15 @@ const MailPage: React.FC = () => {
                           )}
                           <button
                             type="button"
-                            onClick={() => completeMail(mail)}
-                            className="inline-flex h-7 w-7 items-center justify-center text-[#22c55e] opacity-0 transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0"
-                            aria-label={`Mark ${mail.summary} complete`}
+                            onClick={() => handleOpenMail(mail)}
+                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                            aria-label={`Open ${mail.summary}`}
                           >
                             <span className="material-symbols-outlined text-[16px]">check</span>
                           </button>
                         </div>
                       </div>
-                    );
-                    })
+                    ))
                   )}
                 </div>
               </div>
@@ -363,6 +282,17 @@ const MailPage: React.FC = () => {
                         </span>
                         <p className="w-full truncate text-[12px] text-[#6B7280] leading-tight">Draft reply</p>
                       </button>
+
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDraft(draft)}
+                          className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                          aria-label={`Open draft for ${draft.sender}`}
+                        >
+                          <span className="material-symbols-outlined text-[16px]">check</span>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -370,21 +300,6 @@ const MailPage: React.FC = () => {
             </section>
           </div>
         </main>
-
-        {toast && (
-          <div className="pointer-events-auto fixed bottom-24 left-1/2 z-50 -translate-x-1/2 transform">
-            <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#111827] shadow-[0_12px_32px_rgba(0,0,0,0.18)] border border-[#E5E7EB]">
-              <span>Mail cleared</span>
-              <button
-                type="button"
-                onClick={undoLastRemoval}
-                className="rounded-full border border-[#34d399] px-3 py-1 text-xs font-semibold text-[#047857] transition-colors hover:bg-[#ecfdf3] focus:outline-none focus:ring-2 focus:ring-[#34d399]"
-              >
-                Undo
-              </button>
-            </div>
-          </div>
-        )}
 
         <AppNavbar />
       </div>

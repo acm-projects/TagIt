@@ -419,7 +419,7 @@ const TodayPage: React.FC = () => {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
-      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} />
 
@@ -597,13 +597,13 @@ const TodayPage: React.FC = () => {
         </main>
 
         {toast && (
-          <div className="pointer-events-auto fixed bottom-6 left-1/2 z-50 -translate-x-1/2 transform">
-            <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#111827] shadow-[0_12px_32px_rgba(0,0,0,0.18)] border border-[#E5E7EB]">
-              <span>Marked as read </span>
+          <div className="pointer-events-auto absolute bottom-[70px] left-1/2 z-50 -translate-x-1/2">
+            <div className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-semibold text-[#111827] shadow-[0_2px_8px_rgba(15,23,42,0.06)]">
+              <span>Marked as read</span>
               <button
                 type="button"
                 onClick={undoLastRemoval}
-                className="rounded-full border border-[#34d399] px-3 py-1 text-xs font-semibold text-[#047857] transition-colors hover:bg-[#ecfdf3] focus:outline-none focus:ring-2 focus:ring-[#34d399]"
+                className="rounded-full border border-[#ef4444] px-3 py-1 text-xs font-semibold text-[#b91c1c] transition-colors hover:bg-[#fef2f2] focus:outline-none focus:ring-2 focus:ring-[#fca5a5]"
               >
                 Undo
               </button>
