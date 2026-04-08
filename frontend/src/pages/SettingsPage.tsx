@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
 import SectionHeader from "../components/SectionHeader";
@@ -181,6 +182,15 @@ const SettingsPage: React.FC = () => {
   // Connect-email modal: user can add Gmail/Outlook etc.; backend will authenticate and read.
   const [showConnectModal, setShowConnectModal] = useState(false);
 
+  useEffect(() => {
+    if (!showConnectModal) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowConnectModal(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [showConnectModal]);
+
   /**
    * Remove a priority rule entirely.
    * Backend integration could mirror this change by updating the user's
@@ -300,80 +310,24 @@ const SettingsPage: React.FC = () => {
 
           {/* Connected user and linked emails */}
           <div className="mt-2.5 space-y-4 sm:mt-3">
-            <section className="w-full max-w-4xl">
+            <section className="relative z-30 w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <div className="flex items-center justify-between gap-3">
-                  <SectionHeader
-                    title="Users"
-                    icon={<span className="material-symbols-outlined text-[18px]">person</span>}
-                  />
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <SectionHeader
+                      title="Users"
+                      icon={<span className="material-symbols-outlined text-[18px]">person</span>}
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => setShowConnectModal(true)}
-                    className="inline-flex h-8 items-center justify-center rounded-full border border-[#F3E6D9] px-3 text-xs font-semibold text-[#f9ab7b] transition-colors hover:bg-[#FFF4EC]"
+                    className="inline-flex h-8 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border border-[#F3E6D9] px-3 text-xs font-semibold text-[#f9ab7b] transition-colors hover:bg-[#FFF4EC]"
                     aria-label="Connect another email account"
                   >
                     Add account
                   </button>
                 </div>
-
-                {/* Modal: authenticate a new email account for the AI backend */}
-                {showConnectModal && (
-                  <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="connect-email-title"
-                  >
-                    <div className="max-w-md rounded-2xl border border-[#EFE7DC] bg-white p-6 shadow-xl">
-                      <h2
-                        id="connect-email-title"
-                        className="text-lg font-semibold text-[#111827]"
-                      >
-                        Connect your email
-                      </h2>
-                      <p className="mt-2 text-sm text-[#6B7280]">
-                        Add an account so the app can prioritize mail, extract tasks,
-                        and surface deadlines.
-                      </p>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowConnectModal(false);
-                            setConnectedUser((u) => ({
-                              ...u,
-                              emails: [...u.emails, "your@gmail.com"],
-                            }));
-                          }}
-                          className="rounded-lg bg-[#f9ab7b] px-4 py-2 text-sm font-semibold text-white hover:bg-[#ef9967]"
-                        >
-                          Connect Gmail
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowConnectModal(false);
-                            setConnectedUser((u) => ({
-                              ...u,
-                              emails: [...u.emails, "your@outlook.com"],
-                            }));
-                          }}
-                          className="rounded-lg bg-[#DBEAFE] px-4 py-2 text-sm font-semibold text-[#1D4ED8] hover:bg-[#bfdbfe]"
-                        >
-                          Connect Outlook
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowConnectModal(false)}
-                        className="mt-4 text-sm text-[#6B7280] hover:text-[#111827]"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 <div className="mt-3 space-y-3 text-sm">
                   <div className="flex min-w-0 items-center gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3">
@@ -493,6 +447,69 @@ const SettingsPage: React.FC = () => {
             </section>
           </div>
         </main>
+
+        {showConnectModal &&
+          createPortal(
+            <div
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="connect-email-title"
+              onClick={() => setShowConnectModal(false)}
+            >
+              <div
+                className="max-w-md rounded-2xl border border-[#EFE7DC] bg-white p-6 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2
+                  id="connect-email-title"
+                  className="text-lg font-semibold text-[#111827]"
+                >
+                  Connect your email
+                </h2>
+                <p className="mt-2 text-sm text-[#6B7280]">
+                  Add an account so the app can prioritize mail, extract tasks,
+                  and surface deadlines.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowConnectModal(false);
+                      setConnectedUser((u) => ({
+                        ...u,
+                        emails: [...u.emails, "your@gmail.com"],
+                      }));
+                    }}
+                    className="rounded-lg bg-[#f9ab7b] px-4 py-2 text-sm font-semibold text-white hover:bg-[#ef9967]"
+                  >
+                    Connect Gmail
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowConnectModal(false);
+                      setConnectedUser((u) => ({
+                        ...u,
+                        emails: [...u.emails, "your@outlook.com"],
+                      }));
+                    }}
+                    className="rounded-lg bg-[#DBEAFE] px-4 py-2 text-sm font-semibold text-[#1D4ED8] hover:bg-[#bfdbfe]"
+                  >
+                    Connect Outlook
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowConnectModal(false)}
+                  className="mt-4 text-sm text-[#6B7280] hover:text-[#111827]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>,
+            document.body,
+          )}
 
         {confirmEmailIndex !== null && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
