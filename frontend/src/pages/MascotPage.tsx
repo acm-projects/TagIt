@@ -29,7 +29,7 @@ const MascotPage: React.FC = () => {
         <div className="relative scale-90">
           <EnvelopeMascotWaving />
         </div>
-        <p className="text-center text-xl font-medium italic text-black">Task Action Generation from Inbox Text</p>
+        <p className="text-center text-xl font-medium italic text-[#1a2642]">Task Action Generation from Inbox Text</p>
         <div className="mt-12 flex flex-wrap justify-center gap-4">
           <button
             type="button"
