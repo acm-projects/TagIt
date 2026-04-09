@@ -29,11 +29,13 @@ const MascotPage: React.FC = () => {
         <div className="relative scale-90">
           <EnvelopeMascotWaving />
         </div>
-        <p className="text-center text-xl font-medium italic text-[#1a2642]">Task Action Generation from Inbox Text</p>
-        <div className="mt-12 flex flex-wrap justify-center gap-4">
+        <p className="mt-[-6px] text-center text-xl font-medium italic text-[#275f8a]">
+          Task Action Generation from Inbox Text
+        </p>
+        <div className="mt-8 flex w-full justify-center">
           <button
             type="button"
-            className="rounded-2xl bg-[#F9A36E] px-16 py-3 font-serif text-xl text-white shadow-md transition hover:bg-[#E8945F] active:bg-[#D9854F]"
+            className="w-full max-w-md rounded-2xl bg-[#F9A36E] px-16 py-3 font-serif text-xl text-white shadow-md transition hover:bg-[#E8945F] active:bg-[#D9854F]"
             onClick={() => navigate("/login")}
           >
             Get Started
