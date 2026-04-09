@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import { useWeekAnchorWithSharedDayFilter, useNullableDayFilter, NullableConnectedDaysFilter } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
@@ -12,6 +12,7 @@ import FilterMenuButton, { type FilterOption } from "../components/FilterMenuBut
 import { loadConnectedEmails } from "../services/connectedUser";
 
 type CalendarEvent = {
+  id: string;
   title: string;
   date1: string;
   day1: string;
@@ -25,6 +26,7 @@ type CalendarEvent = {
 
 const CALENDAR_EVENTS: CalendarEvent[] = [
   {
+    id: "cal-seed-acm-social",
     title: "ACM Social Night #1",
     date1: "03/28/2026",
     day1: "Sat",
@@ -33,6 +35,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     tagCategoryId: "priority-1",
   },
   {
+    id: "cal-seed-wehack",
     title: "WeHack - Hackathon",
     date1: "03/27/2026",
     day1: "Fri",
@@ -43,6 +46,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     tagCategoryId: "priority-3",
   },
   {
+    id: "cal-seed-resume",
     title: "Resume Review Drop-In",
     date1: "03/24/2026",
     day1: "Tue",
@@ -51,6 +55,7 @@ const CALENDAR_EVENTS: CalendarEvent[] = [
     tagCategoryId: "priority-3",
   },
   {
+    id: "cal-seed-systems",
     title: "Systems Project Checkpoint",
     date1: "03/26/2026",
     day1: "Thu",
@@ -68,6 +73,23 @@ const assignAccountsToEvents = (events: CalendarEvent[], emails: string[]): Cale
   }));
 };
 
+/** Local calendar date for `<input type="date" />` (YYYY-MM-DD). */
+const formatIsoDateLocal = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const newCalendarEventId = (): string =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `cal-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+type CalendarToast =
+  | { type: "added" }
+  | { type: "removed"; event: CalendarEvent; insertIndex: number };
+
 const CalendarPage: React.FC = () => {
   const { nullableDay: calendarDay, setNullableDay: setCalendarDay } = useNullableDayFilter();
   const { handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
@@ -79,10 +101,16 @@ const CalendarPage: React.FC = () => {
     assignAccountsToEvents(CALENDAR_EVENTS, loadConnectedEmails())
   );
   const [isAddingEvent, setIsAddingEvent] = useState(false);
+  const [slidingEventIds, setSlidingEventIds] = useState<Set<string>>(() => new Set());
+  const [closingEventIds, setClosingEventIds] = useState<Set<string>>(() => new Set());
+  const [rowToneById, setRowToneById] = useState<Record<string, "green" | "red">>({});
+  const [calendarToast, setCalendarToast] = useState<CalendarToast | null>(null);
+  const calendarToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dismissingEventIdsRef = useRef<Set<string>>(new Set());
+
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventDate, setNewEventDate] = useState("");
   const [newEventTime, setNewEventTime] = useState("09:00 - 10:00");
-  const [newEventSource, setNewEventSource] = useState<CalendarEvent["source"]>("google");
 
   const dayCode = (dayLabel?: string) => dayLabel?.slice(0, 3).toLowerCase();
   const filteredEvents = useMemo(() => {
@@ -118,27 +146,146 @@ const CalendarPage: React.FC = () => {
         ? selectedAccount
         : connectedEmails[0] ?? "primary@university.edu";
     const nextEvent: CalendarEvent = {
+      id: newCalendarEventId(),
       title: newEventTitle.trim(),
       date1: dateLabel,
       day1: dayLabel,
       time: newEventTime.trim() || "09:00 - 10:00",
-      source: newEventSource,
+      source: "google",
       tagCategoryId: "priority-2",
       accountEmail,
     };
     setEvents((prev) => [nextEvent, ...prev]);
     setIsAddingEvent(false);
     setNewEventTitle("");
-    setNewEventDate("");
+    setNewEventDate(formatIsoDateLocal(new Date()));
     setNewEventTime("09:00 - 10:00");
-    setNewEventSource("google");
   };
+
+  const startAddingEvent = () => {
+    setIsAddingEvent(true);
+    setNewEventTitle("");
+    setNewEventDate(formatIsoDateLocal(new Date()));
+    setNewEventTime("09:00 - 10:00");
+  };
+
+  const cancelAddingEvent = () => {
+    setIsAddingEvent(false);
+    setNewEventTitle("");
+    setNewEventDate(formatIsoDateLocal(new Date()));
+    setNewEventTime("09:00 - 10:00");
+  };
+
+  const fieldClass =
+    "rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fde6d7]";
 
   useEffect(() => {
     const emails = loadConnectedEmails();
     setConnectedEmails(emails);
     setEvents((prev) => assignAccountsToEvents(prev, emails));
   }, []);
+
+  const clearCalendarToastTimer = () => {
+    if (calendarToastTimerRef.current !== null) {
+      clearTimeout(calendarToastTimerRef.current);
+      calendarToastTimerRef.current = null;
+    }
+  };
+
+  const showCalendarToast = (next: CalendarToast, durationMs = 4200) => {
+    clearCalendarToastTimer();
+    setCalendarToast(next);
+    calendarToastTimerRef.current = setTimeout(() => {
+      calendarToastTimerRef.current = null;
+      setCalendarToast(null);
+    }, durationMs);
+  };
+
+  const triggerEventSlide = (eventId: string) => {
+    setSlidingEventIds((prev) => {
+      const next = new Set(prev);
+      next.add(eventId);
+      return next;
+    });
+  };
+
+  const finishDismissEvent = (eventId: string) => {
+    setSlidingEventIds((prev) => {
+      const next = new Set(prev);
+      next.delete(eventId);
+      return next;
+    });
+    setClosingEventIds((prev) => {
+      const next = new Set(prev);
+      next.delete(eventId);
+      return next;
+    });
+    setRowToneById((prev) => {
+      const { [eventId]: _, ...rest } = prev;
+      return rest;
+    });
+    dismissingEventIdsRef.current.delete(eventId);
+  };
+
+  const handleAddToCalendar = (event: CalendarEvent) => {
+    const eventId = event.id;
+    if (dismissingEventIdsRef.current.has(eventId)) return;
+    dismissingEventIdsRef.current.add(eventId);
+    setRowToneById((prev) => ({ ...prev, [eventId]: "green" }));
+    triggerEventSlide(eventId);
+
+    window.setTimeout(() => {
+      setClosingEventIds((prev) => {
+        const next = new Set(prev);
+        next.add(eventId);
+        return next;
+      });
+    }, 220);
+
+    window.setTimeout(() => {
+      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+      finishDismissEvent(eventId);
+      showCalendarToast({ type: "added" });
+    }, 520);
+  };
+
+  const handleDeleteEvent = (event: CalendarEvent) => {
+    const eventId = event.id;
+    if (dismissingEventIdsRef.current.has(eventId)) return;
+    dismissingEventIdsRef.current.add(eventId);
+    const insertIndex = Math.max(0, events.findIndex((e) => e.id === eventId));
+    setRowToneById((prev) => ({ ...prev, [eventId]: "red" }));
+    triggerEventSlide(eventId);
+
+    window.setTimeout(() => {
+      setClosingEventIds((prev) => {
+        const next = new Set(prev);
+        next.add(eventId);
+        return next;
+      });
+    }, 220);
+
+    window.setTimeout(() => {
+      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+      finishDismissEvent(eventId);
+      showCalendarToast({ type: "removed", event, insertIndex });
+    }, 520);
+  };
+
+  const undoRemovedEvent = () => {
+    if (!calendarToast || calendarToast.type !== "removed") return;
+    const { event, insertIndex } = calendarToast;
+    setEvents((prev) => {
+      const next = [...prev];
+      const at = Math.min(Math.max(0, insertIndex), next.length);
+      next.splice(at, 0, event);
+      return next;
+    });
+    clearCalendarToastTimer();
+    setCalendarToast(null);
+  };
+
+  useEffect(() => () => clearCalendarToastTimer(), []);
 
   const accountOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
     (connectedEmails.length ? connectedEmails : Array.from(new Set(events.map((e) => e.accountEmail).filter(Boolean) as string[]))).map(
@@ -148,14 +295,16 @@ const CalendarPage: React.FC = () => {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
-      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
-            <div className="sticky top-0 z-20 bg-[#F9F8F6] pb-1">
-              <NullableConnectedDaysFilter className="!mt-0" value={calendarDay} onChange={setCalendarDay} />
-            </div>
+            <NullableConnectedDaysFilter
+              className="!mt-0 sticky top-0 z-20 bg-[#F9F8F6]"
+              value={calendarDay}
+              onChange={setCalendarDay}
+            />
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
@@ -184,19 +333,45 @@ const CalendarPage: React.FC = () => {
                     </p>
                   ) : (
                     filteredEvents.map((event, index) => {
-                      const sourceChipStyles = "text-[#6B7280]";
                       const categoryColor = getCategoryColorById(categories, event.tagCategoryId);
+                      const isSliding = slidingEventIds.has(event.id);
+                      const isClosing = closingEventIds.has(event.id);
+                      const tone = rowToneById[event.id];
+                      const slideClass =
+                        tone === "red"
+                          ? "calendar-event-row--slide-up-red"
+                          : "calendar-event-row--slide-up-green";
+                      const closingClass =
+                        tone === "red"
+                          ? "calendar-event-row--closing-red"
+                          : "calendar-event-row--closing-green";
+
+                      const visualStyle: React.CSSProperties = {
+                        borderBottom:
+                          index === filteredEvents.length - 1
+                            ? "none"
+                            : "0.5px solid #E5E7EB",
+                      };
+                      if (isSliding || isClosing) {
+                        if (tone === "red") {
+                          visualStyle.boxShadow = isClosing
+                            ? "0 8px 14px rgba(239, 68, 68, 0.14)"
+                            : "0 10px 18px rgba(239, 68, 68, 0.2)";
+                          visualStyle.borderBottom = "1px solid rgba(239, 68, 68, 0.45)";
+                        } else {
+                          visualStyle.boxShadow = isClosing
+                            ? "0 8px 14px rgba(34, 197, 94, 0.12)"
+                            : "0 10px 18px rgba(34, 197, 94, 0.16)";
+                          visualStyle.borderBottom = "1px solid rgba(34, 197, 94, 0.45)";
+                        }
+                        visualStyle.backgroundColor = "transparent";
+                      }
 
                       return (
                         <div
-                          key={event.title + index}
-                          className="grid grid-cols-[4px_minmax(0,1fr)_auto] items-center gap-x-4 py-4"
-                          style={{
-                            borderBottom:
-                              index === filteredEvents.length - 1
-                                ? "none"
-                                : "0.5px solid #E5E7EB",
-                          }}
+                          key={event.id}
+                          className={`calendar-event-row grid grid-cols-[4px_minmax(0,1fr)_auto] items-center gap-x-4 py-4 ${isSliding ? slideClass : ""} ${isClosing ? closingClass : ""}`}
+                          style={visualStyle}
                         >
                           <span
                             aria-hidden="true"
@@ -205,16 +380,9 @@ const CalendarPage: React.FC = () => {
                           />
 
                           <div className="min-w-0">
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                              <p className="truncate text-[13px] font-semibold text-[#111827] sm:text-sm">
-                                {event.title}
-                              </p>
-                              <span
-                                className={`self-center text-[12px] font-medium capitalize leading-[1.1] ${sourceChipStyles}`}
-                              >
-                                {event.source}
-                              </span>
-                            </div>
+                            <p className="truncate text-[13px] font-semibold text-[#111827] sm:text-sm">
+                              {event.title}
+                            </p>
 
                             <div className="mt-2 grid grid-cols-2 gap-x-5 text-[11px] leading-snug text-[#6B7280] sm:max-w-[22rem]">
                               <div>
@@ -232,7 +400,8 @@ const CalendarPage: React.FC = () => {
                           <div className="flex shrink-0 items-center gap-2 self-center">
                             <button
                               type="button"
-                              aria-label="Add to Google Calendar"
+                              aria-label="Add to calendar"
+                              onClick={() => handleAddToCalendar(event)}
                               className="inline-flex h-9 w-9 items-center justify-center text-[#22c55e] transition-colors hover:text-[#16a34a]"
                             >
                               <span
@@ -246,7 +415,8 @@ const CalendarPage: React.FC = () => {
                             </button>
                             <button
                               type="button"
-                              aria-label="Delete"
+                              aria-label="Remove event"
+                              onClick={() => handleDeleteEvent(event)}
                               className="inline-flex h-9 w-9 items-center justify-center text-[#ef4444] transition-colors hover:text-[#dc2626]"
                             >
                               <span
@@ -263,80 +433,23 @@ const CalendarPage: React.FC = () => {
                       );
                     })
                   )}
-                  {isAddingEvent && (
-                    <div className="mt-3 grid gap-3 rounded-xl border border-dashed border-[#E5E7EB] bg-[#FBFBFB] px-4 py-3 sm:grid-cols-2">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[12px] font-semibold text-[#374151]">Title</label>
-                        <input
-                          type="text"
-                          value={newEventTitle}
-                          onChange={(e) => setNewEventTitle(e.target.value)}
-                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
-                          placeholder="Event title"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[12px] font-semibold text-[#374151]">Date</label>
-                        <input
-                          type="date"
-                          value={newEventDate}
-                          onChange={(e) => setNewEventDate(e.target.value)}
-                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[12px] font-semibold text-[#374151]">Time</label>
-                        <input
-                          type="text"
-                          value={newEventTime}
-                          onChange={(e) => setNewEventTime(e.target.value)}
-                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
-                          placeholder="09:00 - 10:00"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[12px] font-semibold text-[#374151]">Source</label>
-                        <select
-                          value={newEventSource}
-                          onChange={(e) => setNewEventSource(e.target.value as CalendarEvent["source"])}
-                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fcd7b6]"
-                        >
-                          <option value="google">google</option>
-                          <option value="outlook">outlook</option>
-                        </select>
-                      </div>
-                      <div className="flex gap-2 sm:col-span-2">
-                        <button
-                          type="button"
-                          onClick={handleSaveEvent}
-                          className="inline-flex flex-1 items-center justify-center rounded-full bg-[#f9ab7b] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#f29a63]"
-                        >
-                          Save Event
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsAddingEvent(false);
-                            setNewEventTitle("");
-                            setNewEventDate("");
-                            setNewEventTime("09:00 - 10:00");
-                            setNewEventSource("google");
-                          }}
-                          className="inline-flex flex-1 items-center justify-center rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#F9FAFB]"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </section>
 
-            <div className="flex justify-end pr-1">
+            <div className="flex w-full max-w-4xl flex-wrap items-center justify-center gap-3 px-1">
               <button
                 type="button"
-                onClick={() => setIsAddingEvent((v) => !v)}
+                onClick={() =>
+                  window.open("https://calendar.google.com/calendar", "_blank", "noopener,noreferrer")
+                }
+                className="inline-flex items-center justify-center rounded-full border border-[#E5E7EB] bg-white px-6 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#F9FAFB]"
+              >
+                Open calendar
+              </button>
+              <button
+                type="button"
+                onClick={startAddingEvent}
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#f9ab7b] px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e89960]"
               >
                 <span
@@ -353,11 +466,92 @@ const CalendarPage: React.FC = () => {
                     maskSize: "contain",
                   }}
                 />
-                <span>{isAddingEvent ? "Close" : "Add Event"}</span>
+                <span>Add Event</span>
               </button>
             </div>
+
+            {isAddingEvent && (
+              <div className="w-full max-w-4xl rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] p-4 shadow-[0_6px_14px_rgba(17,24,39,0.05)]">
+                <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-[#6B7280]">
+                  New Event
+                </label>
+                <input
+                  type="text"
+                  value={newEventTitle}
+                  onChange={(e) => setNewEventTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveEvent();
+                    if (e.key === "Escape") cancelAddingEvent();
+                  }}
+                  className={`mt-2 w-full ${fieldClass}`}
+                  placeholder="Event title"
+                  aria-label="Event title"
+                  autoFocus
+                />
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[12px] font-semibold text-[#374151]">Date</span>
+                    <input
+                      type="date"
+                      value={newEventDate}
+                      onChange={(e) => setNewEventDate(e.target.value)}
+                      className={fieldClass}
+                      aria-label="Event date"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[12px] font-semibold text-[#374151]">Time</span>
+                    <input
+                      type="text"
+                      value={newEventTime}
+                      onChange={(e) => setNewEventTime(e.target.value)}
+                      className={fieldClass}
+                      placeholder="09:00 - 10:00"
+                      aria-label="Event time"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSaveEvent}
+                    className="inline-flex items-center justify-center rounded-full bg-[#f9ab7b] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#e89960]"
+                  >
+                    Save Event
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelAddingEvent}
+                    className="inline-flex items-center justify-center rounded-full bg-[#F3F4F6] px-5 py-2 text-sm font-semibold text-[#374151] transition-colors hover:bg-[#E5E7EB]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </main>
+
+        {calendarToast && (
+          <div className="pointer-events-auto absolute bottom-[70px] left-1/2 z-50 -translate-x-1/2">
+            <div className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-semibold text-[#111827] shadow-[0_2px_8px_rgba(15,23,42,0.06)]">
+              {calendarToast.type === "added" ? (
+                <span>Added to calendar</span>
+              ) : (
+                <>
+                  <span>Removed event</span>
+                  <button
+                    type="button"
+                    onClick={undoRemovedEvent}
+                    className="rounded-full border border-[#ef4444] px-3 py-1 text-xs font-semibold text-[#b91c1c] transition-colors hover:bg-[#fef2f2] focus:outline-none focus:ring-2 focus:ring-[#fca5a5]"
+                  >
+                    Undo
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <AppNavbar />
       </div>

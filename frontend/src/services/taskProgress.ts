@@ -46,6 +46,9 @@ const LEGACY_DEFAULT_TASK_LABEL_SETS = [
 const TASKS_STORAGE_KEY = "tagit.tasks.v1";
 const TASKS_UPDATED_EVENT = "tagit:tasks-updated";
 
+/** Synced in saveTasks so Today can detect completions after navigating from Tasks. */
+export const MASCOT_LAST_COMPLETED_TASKS_KEY = "tagit.mascot.lastSeenCompletedTasks";
+
 const cloneTasks = (tasks: SharedTask[]): SharedTask[] =>
   tasks.map((task) => ({ ...task }));
 
@@ -103,8 +106,32 @@ export const loadTasks = (): SharedTask[] => {
 };
 
 export const saveTasks = (tasks: SharedTask[]) => {
+  let previousCompleted = 0;
+  try {
+    const previousRaw = localStorage.getItem(TASKS_STORAGE_KEY);
+    if (previousRaw) {
+      const parsed: unknown = JSON.parse(previousRaw);
+      if (isSharedTaskArray(parsed)) {
+        previousCompleted = parsed.filter((t) => t.done).length;
+      }
+    }
+  } catch {
+    previousCompleted = 0;
+  }
+
+  const newCompleted = tasks.filter((t) => t.done).length;
+
   try {
     localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
+    try {
+      if (newCompleted > previousCompleted) {
+        sessionStorage.setItem(MASCOT_LAST_COMPLETED_TASKS_KEY, String(previousCompleted));
+      } else {
+        sessionStorage.setItem(MASCOT_LAST_COMPLETED_TASKS_KEY, String(newCompleted));
+      }
+    } catch {
+      // sessionStorage may be unavailable (private mode, blocked).
+    }
     window.dispatchEvent(new CustomEvent(TASKS_UPDATED_EVENT));
   } catch {
     // Ignore storage errors so UI keeps working in restricted contexts.

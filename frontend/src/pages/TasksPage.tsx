@@ -38,6 +38,38 @@ const parseIsoDate = (value?: string): Date | null => {
   return new Date(year, month - 1, day);
 };
 
+/** Minutes from midnight for HH:MM; missing/invalid sorts after real times. */
+const timeSortKey = (time?: string): number => {
+  if (!time || !/^\d{1,2}:\d{2}$/.test(time.trim())) {
+    return 24 * 60 + 1;
+  }
+  const [h, m] = time.trim().split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return 24 * 60 + 1;
+  return h * 60 + m;
+};
+
+const compareTasksByHierarchy = (a: TaskItem, b: TaskItem): number => {
+  if (a.done !== b.done) {
+    return a.done ? 1 : -1;
+  }
+
+  const dateA = parseIsoDate(a.date);
+  const dateB = parseIsoDate(b.date);
+  if (dateA && dateB) {
+    const diff = dateA.getTime() - dateB.getTime();
+    if (diff !== 0) return diff;
+  } else if (dateA && !dateB) {
+    return -1;
+  } else if (!dateA && dateB) {
+    return 1;
+  }
+
+  const timeDiff = timeSortKey(a.time) - timeSortKey(b.time);
+  if (timeDiff !== 0) return timeDiff;
+
+  return a.id - b.id;
+};
+
 const formatDisplayTime = (value?: string): string => {
   if (!value) return "9:00 AM";
 
@@ -96,7 +128,7 @@ const TasksPage: React.FC = () => {
   );
 
   const visibleTasks = useMemo(() => {
-    return tasks.filter((task) => {
+    const filtered = tasks.filter((task) => {
       const d = parseIsoDate(task.date);
       const matchesDay = selectedCalendarDay ? (d ? isSameLocalDay(d, selectedCalendarDay) : false) : true;
       const matchesAccount =
@@ -104,6 +136,7 @@ const TasksPage: React.FC = () => {
         (task.accountEmail ?? "Unknown account") === selectedAccount;
       return matchesDay && matchesAccount;
     });
+    return [...filtered].sort(compareTasksByHierarchy);
   }, [tasks, selectedCalendarDay, selectedAccount]);
 
   const toggleTask = (taskId: number) => {
@@ -418,29 +451,29 @@ const TasksPage: React.FC = () => {
                             </span>
                           </div>
 
-                          <span className="shrink-0 whitespace-nowrap text-[12px] font-medium tabular-nums text-[#6B7280]">
+                          <span className="shrink-0 whitespace-nowrap text-[12px] font-medium tabular-nums text-[#6B7280] ml-[-40px] mr-2">
                               {formatDisplayDate(
                                 parseIsoDate(task.date) ?? selectedCalendarDay ?? new Date(),
                               )}
                             {task.time ? ` · ${formatDisplayTime(task.time)}` : ""}
                           </span>
 
-                          <div className="flex shrink-0 items-center gap-0.5">
+                          <div className="flex shrink-0 items-center gap-2">
                             <button
                               type="button"
                               onClick={() => startEditingTask(task)}
-                              className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                              className="inline-flex h-4 w-4 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
                               aria-label={`Edit ${task.label}`}
                             >
-                              <span className="material-symbols-outlined text-[16px]">edit</span>
+                              <span className="material-symbols-outlined text-[12px] leading-none">edit</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => deleteTask(task.id)}
-                              className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                              className="inline-flex h-4 w-4 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
                               aria-label={`Delete ${task.label}`}
                             >
-                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                              <span className="material-symbols-outlined text-[12px] leading-none">delete</span>
                             </button>
                           </div>
                         </div>

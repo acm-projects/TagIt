@@ -5,9 +5,12 @@ import WeekHeader from "../components/WeekHeader";
 import {
   getTaskProgress,
   loadTasks,
+  MASCOT_LAST_COMPLETED_TASKS_KEY,
   subscribeToTaskUpdates,
+  type TaskProgress,
 } from "../services/taskProgress";
 import TagiWeeklyProgressMascot from "../components/TagiWeeklyProgressMascot";
+import tagiMascotCopy from "../data/tagiMascotMessages.json";
 import {
   getCategoryColorById,
   useUserCategories,
@@ -107,6 +110,93 @@ const EVENTS: TodayEvent[] = [
   { date: "Thu, Apr 03", time: "12:15 - 01:00", title: "Resume Review Drop-In", tagCategoryId: "priority-3" },
 ];
 
+const TAGI_EXCITED_MS = 10_000;
+const TAGI_NORMAL_ROTATE_MIN_MS = 12 * 60 * 1000;
+const TAGI_NORMAL_ROTATE_MAX_MS = 18 * 60 * 1000;
+
+const MONTH_ABBR: Record<string, number> = {
+  Jan: 0,
+  Feb: 1,
+  Mar: 2,
+  Apr: 3,
+  May: 4,
+  Jun: 5,
+  Jul: 6,
+  Aug: 7,
+  Sep: 8,
+  Oct: 9,
+  Nov: 10,
+  Dec: 11,
+};
+
+function parseTodayEventStart(event: TodayEvent): Date | null {
+  const parts = event.date.split(/,\s*/);
+  const rest = parts[parts.length - 1]?.trim();
+  if (!rest) return null;
+  const [mon, dayStr] = rest.split(/\s+/);
+  const day = parseInt(dayStr, 10);
+  const month = MONTH_ABBR[mon ?? ""];
+  if (month === undefined || Number.isNaN(day)) return null;
+  const year = new Date().getFullYear();
+  const startTime = event.time.split("-")[0]?.trim() || "09:00";
+  const [h, m] = startTime.split(":").map((x) => parseInt(x, 10));
+  if (Number.isNaN(h)) return null;
+  return new Date(year, month, day, h, Number.isNaN(m) ? 0 : m, 0, 0);
+}
+
+function interpolateMascotTemplate(
+  template: string,
+  vars: Record<string, string | number>
+): string {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => String(vars[key] ?? ""));
+}
+
+function pickRandomLine(lines: string[]): string {
+  if (lines.length === 0) return "";
+  return lines[Math.floor(Math.random() * lines.length)] ?? "";
+}
+
+function getApproachingEventBubbleMessage(
+  events: TodayEvent[],
+  copy: typeof tagiMascotCopy
+): string | null {
+  const now = Date.now();
+  const soonMs = 2 * 60 * 60 * 1000;
+  let best: { start: number; title: string } | null = null;
+  for (const e of events) {
+    const d = parseTodayEventStart(e);
+    if (!d) continue;
+    const t = d.getTime();
+    if (t < now || t > now + soonMs) continue;
+    if (!best || t < best.start) best = { start: t, title: e.title };
+  }
+  if (!best) return null;
+  const maxLen = copy.eventTitleMaxLength ?? 36;
+  const title =
+    best.title.length > maxLen ? `${best.title.slice(0, maxLen - 1)}…` : best.title;
+  return interpolateMascotTemplate(copy.eventSoonTemplate, { title });
+}
+
+function pickNormalMascotMessage(
+  p: TaskProgress,
+  events: TodayEvent[],
+  copy: typeof tagiMascotCopy
+): string {
+  const pool: string[] = [...copy.motivational];
+  const eventMsg = getApproachingEventBubbleMessage(events, copy);
+  if (eventMsg) pool.push(eventMsg);
+  if (p.totalTasks > 0) {
+    const remaining = p.totalTasks - p.completedTasks;
+    if (remaining === 1) pool.push(...copy.tasksRemainingOne);
+    else if (remaining > 1) {
+      pool.push(
+        interpolateMascotTemplate(copy.tasksRemainingManyTemplate, { count: remaining })
+      );
+    }
+  }
+  return pickRandomLine(pool);
+}
+
 const TodayPage: React.FC = () => {
   const navigate = useNavigate();
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
@@ -120,7 +210,87 @@ const TodayPage: React.FC = () => {
   const [toast, setToast] = useState<{ email: ImportantEmailPreview; index: number } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categories = useUserCategories();
-  const tagiWeeklyLine = "Hello there!";
+  const [tagiBubble, setTagiBubble] = useState(() => ({
+    message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
+    excited: false,
+  }));
+  const normalRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const excitedEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleNormalRotateRef = useRef<() => void>(() => {});
+
+  const clearNormalRotateTimer = () => {
+    if (normalRotateTimerRef.current) {
+      clearTimeout(normalRotateTimerRef.current);
+      normalRotateTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    const scheduleNormalRotate = () => {
+      clearNormalRotateTimer();
+      const delay =
+        TAGI_NORMAL_ROTATE_MIN_MS +
+        Math.random() * (TAGI_NORMAL_ROTATE_MAX_MS - TAGI_NORMAL_ROTATE_MIN_MS);
+      normalRotateTimerRef.current = setTimeout(() => {
+        normalRotateTimerRef.current = null;
+        setTagiBubble((b) => {
+          if (b.excited) return b;
+          return {
+            message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
+            excited: false,
+          };
+        });
+        scheduleNormalRotateRef.current();
+      }, delay);
+    };
+    scheduleNormalRotateRef.current = scheduleNormalRotate;
+    scheduleNormalRotate();
+    return () => {
+      clearNormalRotateTimer();
+      if (excitedEndTimerRef.current) {
+        clearTimeout(excitedEndTimerRef.current);
+        excitedEndTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let lastSeen = progress.completedTasks;
+    try {
+      const raw = sessionStorage.getItem(MASCOT_LAST_COMPLETED_TASKS_KEY);
+      if (raw != null) {
+        const n = parseInt(raw, 10);
+        if (!Number.isNaN(n)) lastSeen = n;
+      }
+    } catch {
+      /* sessionStorage unavailable */
+    }
+
+    if (progress.completedTasks <= lastSeen) return;
+
+    const praise = pickRandomLine(tagiMascotCopy.taskPraise);
+    try {
+      sessionStorage.setItem(MASCOT_LAST_COMPLETED_TASKS_KEY, String(progress.completedTasks));
+    } catch {
+      /* ignore */
+    }
+
+    clearNormalRotateTimer();
+    if (excitedEndTimerRef.current) {
+      clearTimeout(excitedEndTimerRef.current);
+      excitedEndTimerRef.current = null;
+    }
+
+    setTagiBubble({ message: praise, excited: true });
+    excitedEndTimerRef.current = setTimeout(() => {
+      excitedEndTimerRef.current = null;
+      setTagiBubble({
+        message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
+        excited: false,
+      });
+      scheduleNormalRotateRef.current();
+    }, TAGI_EXCITED_MS);
+  }, [progress.completedTasks]);
 
   useEffect(() => {
     const refreshProgress = () => {
@@ -249,7 +419,7 @@ const TodayPage: React.FC = () => {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
-      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} />
 
@@ -279,7 +449,8 @@ const TodayPage: React.FC = () => {
                 <div className="mt-[5px]">
                   <TagiWeeklyProgressMascot
                     progressPercentage={progress.progressPercentage}
-                    message={tagiWeeklyLine}
+                    message={tagiBubble.message}
+                    excited={tagiBubble.excited}
                     onClick={() => navigate("/chatbot")}
                   />
                 </div>
@@ -426,13 +597,13 @@ const TodayPage: React.FC = () => {
         </main>
 
         {toast && (
-          <div className="pointer-events-auto fixed bottom-6 left-1/2 z-50 -translate-x-1/2 transform">
-            <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#111827] shadow-[0_12px_32px_rgba(0,0,0,0.18)] border border-[#E5E7EB]">
-              <span>Marked as read </span>
+          <div className="pointer-events-auto absolute bottom-[70px] left-1/2 z-50 -translate-x-1/2">
+            <div className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-semibold text-[#111827] shadow-[0_2px_8px_rgba(15,23,42,0.06)]">
+              <span>Marked as read</span>
               <button
                 type="button"
                 onClick={undoLastRemoval}
-                className="rounded-full border border-[#34d399] px-3 py-1 text-xs font-semibold text-[#047857] transition-colors hover:bg-[#ecfdf3] focus:outline-none focus:ring-2 focus:ring-[#34d399]"
+                className="rounded-full border border-[#ef4444] px-3 py-1 text-xs font-semibold text-[#b91c1c] transition-colors hover:bg-[#fef2f2] focus:outline-none focus:ring-2 focus:ring-[#fca5a5]"
               >
                 Undo
               </button>

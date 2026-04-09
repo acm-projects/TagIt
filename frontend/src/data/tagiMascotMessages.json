@@ -1,0 +1,25 @@
+{
+  "taskPraise": [
+    "Well done!",
+    "Great job!",
+    "Nice work!",
+    "Awesome!",
+    "Way to go!"
+  ],
+  "motivational": [
+    "Chat with me!",
+    "Hey there!",
+    "Keep up the good work!",
+    "You're working hard!",
+    "Nice going!",
+    "You've got this!",
+    "You're doing great."
+  ],
+  "tasksRemainingOne": [
+    "1 task left!"
+  ],
+  "tasksRemainingManyTemplate": "{count} tasks left!",
+  "eventSoonTemplate": "{title} soon.",
+  "eventFallback": "You have an upcoming event.",
+  "eventTitleMaxLength": 36
+}
