@@ -73,11 +73,20 @@ Return ONLY the JSON. No explanation, no markdown.
 
 def is_spam_batch(emails):
     """
-    Check up to 25 emails for spam in one single Gemini call instead of one per email.
+    Check emails for spam in a single Gemini call.
+    If more than 50 emails, chunks internally to keep accuracy high.
     Returns a list of (isSpam: bool, reason: str) tuples in the same order.
     """
     if not emails:
         return []
+
+    CHUNK_SIZE = 50
+    if len(emails) > CHUNK_SIZE:
+        all_results = []
+        for start in range(0, len(emails), CHUNK_SIZE):
+            chunk = emails[start:start + CHUNK_SIZE]
+            all_results.extend(is_spam_batch(chunk))
+        return all_results
 
     emails_block = ""
     for i, email in enumerate(emails, 1):
@@ -160,11 +169,20 @@ def _priority_topics_context(priority_topics):
 
 def analyze_emails_batch(emails, school="", priority_topics=None):
     """
-    Takes a list of dicts with 'subject' and 'body' keys (up to 25),
+    Takes a list of dicts with 'subject' and 'body' keys,
     sends them all in one prompt, and returns a list of analysis dicts.
+    If more than 50 emails, chunks internally to keep accuracy high.
     """
     if priority_topics is None:
         priority_topics = []
+
+    CHUNK_SIZE = 50
+    if len(emails) > CHUNK_SIZE:
+        all_results = []
+        for start in range(0, len(emails), CHUNK_SIZE):
+            chunk = emails[start:start + CHUNK_SIZE]
+            all_results.extend(analyze_emails_batch(chunk, school, priority_topics))
+        return all_results
 
     emails_block = ""
     for i, email in enumerate(emails, 1):

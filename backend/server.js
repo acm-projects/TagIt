@@ -884,20 +884,16 @@ app.post('/sync-emails', requireAuth, async (req, res) => {
         return res.json({ message: 'No connected email accounts or no messages found.', count: 0, results: [] });
     }
 
-    // Forward to Flask in batches of 25 (Flask limit)
-    const results = [];
-    for (let i = 0; i < allEmails.length; i += 25) {
-        const batch = allEmails.slice(i, i + 25);
-        try {
-            const batchResult = await forwardBatchToFlask(batch, req.userToken);
-            results.push(...(batchResult.results || []));
-        } catch (err) {
-            console.error('[sync] Batch error:', err.message);
-            results.push(...batch.map(e => ({ id: e.id, error: err.message })));
-        }
+    // Forward ALL emails to Flask in a single request — Flask handles
+    // deduplication first, then sends only truly-new emails to AI in one prompt.
+    try {
+        const batchResult = await forwardBatchToFlask(allEmails, req.userToken);
+        const results = batchResult.results || [];
+        res.json({ message: `Synced ${results.length} emails.`, count: results.length, results });
+    } catch (err) {
+        console.error('[sync] Batch error:', err.message);
+        res.status(500).json({ error: err.message || String(err) });
     }
-
-    res.json({ message: `Synced ${results.length} emails.`, count: results.length, results });
 });
 
 app.listen(PORT, () => console.log(`Server listening on http://localhost:${PORT}`));

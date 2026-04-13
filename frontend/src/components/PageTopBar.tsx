@@ -16,24 +16,26 @@ const PageTopBar: React.FC<PageTopBarProps> = ({ back, right }) => {
   const navigate = useNavigate();
 
   return (
-    <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-6 py-6">
+    <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-6 py-6">
       <div className="min-w-0 flex-1">
         {back ? (
           <button
             type="button"
-            className="group flex items-center gap-1.5 rounded-lg py-1 text-sm font-medium text-[#1F2933] transition-colors hover:text-[#f9ab7b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9ab7b]/30"
+            className="group flex items-center gap-1.5 rounded-lg py-1 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9ab7b]/30"
             onClick={() => {
-              if ("to" in back) {
-                navigate(back.to);
-              } else {
+              if ("useBrowserBack" in back && back.useBrowserBack) {
                 navigate(-1);
+              } else if ("to" in back) {
+                navigate(back.to);
               }
             }}
           >
             <span className="material-symbols-outlined text-[22px] leading-none text-[#9CA3AF] transition-colors group-hover:text-[#f9ab7b]">
               arrow_back
             </span>
-            {back.label}
+            <span className="text-[#1F2933] transition-colors group-hover:text-[#f9ab7b]">
+              {back.label}
+            </span>
           </button>
         ) : (
           <span />

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { verifyToken, clearToken, getStoredToken } from "../api";
+import { verifyToken, clearToken, getStoredToken, syncEmails } from "../api";
 
 export interface AuthContextType {
   isAuthenticated: boolean;
@@ -60,6 +60,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     checkAuth();
   }, []);
+
+  // Trigger a background email sync whenever the user becomes authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      syncEmails().catch((err) =>
+        console.error("Background email sync failed:", err)
+      );
+    }
+  }, [isAuthenticated]);
 
   return (
     <AuthContext.Provider

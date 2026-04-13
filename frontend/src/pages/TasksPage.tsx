@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
-  ConnectedDaysFilter,
+  NullableConnectedDaysFilter,
   getDateForWeekdayInAnchorWeek,
   isSameLocalDay,
-  useDayFilter,
+  useNullableDayFilter,
   useWeekAnchorWithSharedDayFilter,
 } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
@@ -15,6 +15,8 @@ import {
 } from "../services/taskProgress";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
+import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
+import { loadConnectedEmails } from "../services/connectedUser";
 
 /**
  * Represents a single task on the Tasks page.
@@ -34,6 +36,38 @@ const parseIsoDate = (value?: string): Date | null => {
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day);
+};
+
+/** Minutes from midnight for HH:MM; missing/invalid sorts after real times. */
+const timeSortKey = (time?: string): number => {
+  if (!time || !/^\d{1,2}:\d{2}$/.test(time.trim())) {
+    return 24 * 60 + 1;
+  }
+  const [h, m] = time.trim().split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return 24 * 60 + 1;
+  return h * 60 + m;
+};
+
+const compareTasksByHierarchy = (a: TaskItem, b: TaskItem): number => {
+  if (a.done !== b.done) {
+    return a.done ? 1 : -1;
+  }
+
+  const dateA = parseIsoDate(a.date);
+  const dateB = parseIsoDate(b.date);
+  if (dateA && dateB) {
+    const diff = dateA.getTime() - dateB.getTime();
+    if (diff !== 0) return diff;
+  } else if (dateA && !dateB) {
+    return -1;
+  } else if (!dateA && dateB) {
+    return 1;
+  }
+
+  const timeDiff = timeSortKey(a.time) - timeSortKey(b.time);
+  if (timeDiff !== 0) return timeDiff;
+
+  return a.id - b.id;
 };
 
 const formatDisplayTime = (value?: string): string => {
@@ -66,9 +100,14 @@ const iconMaskStyle = (src: string): React.CSSProperties => ({
 
 const TasksPage: React.FC = () => {
   const editingTimeInputRef = useRef<HTMLInputElement | null>(null);
-  const { selectedDay } = useDayFilter();
+  const { nullableDay: taskDay, setNullableDay: setTaskDay } = useNullableDayFilter();
   const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
-  const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
+  const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
+  const [selectedAccount, setSelectedAccount] = useState<string>("all");
+  const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks().map((task, index) => ({
+    ...task,
+    accountEmail: task.accountEmail ?? loadConnectedEmails()[index % Math.max(loadConnectedEmails().length, 1)] ?? "primary@university.edu",
+  })));
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskLabel, setNewTaskLabel] = useState("");
   const [newTaskDate, setNewTaskDate] = useState("");
@@ -84,17 +123,21 @@ const TasksPage: React.FC = () => {
   }, [tasks]);
 
   const selectedCalendarDay = useMemo(
-    () => getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay),
-    [weekAnchor, selectedDay],
+    () => (taskDay ? getDateForWeekdayInAnchorWeek(weekAnchor, taskDay) : null),
+    [weekAnchor, taskDay],
   );
 
   const visibleTasks = useMemo(() => {
-    return tasks.filter((task) => {
+    const filtered = tasks.filter((task) => {
       const d = parseIsoDate(task.date);
-      if (!d) return false;
-      return isSameLocalDay(d, selectedCalendarDay);
+      const matchesDay = selectedCalendarDay ? (d ? isSameLocalDay(d, selectedCalendarDay) : false) : true;
+      const matchesAccount =
+        selectedAccount === "all" ||
+        (task.accountEmail ?? "Unknown account") === selectedAccount;
+      return matchesDay && matchesAccount;
     });
-  }, [tasks, selectedCalendarDay]);
+    return [...filtered].sort(compareTasksByHierarchy);
+  }, [tasks, selectedCalendarDay, selectedAccount]);
 
   const toggleTask = (taskId: number) => {
     setTasks((previousTasks) =>
@@ -105,6 +148,7 @@ const TasksPage: React.FC = () => {
   };
 
   const clearAllTasks = () => {
+    if (!selectedCalendarDay) return;
     setTasks((previousTasks) =>
       previousTasks.filter((task) => {
         const taskDate = parseIsoDate(task.date);
@@ -117,7 +161,8 @@ const TasksPage: React.FC = () => {
   const startAddingTask = () => {
     setIsAddingTask(true);
     setNewTaskLabel("");
-    setNewTaskDate(formatIsoDate(selectedCalendarDay));
+    const defaultDate = selectedCalendarDay ?? new Date();
+    setNewTaskDate(formatIsoDate(defaultDate));
     setNewTaskTime("");
     setEditingTaskId(null);
     setEditingLabel("");
@@ -132,6 +177,10 @@ const TasksPage: React.FC = () => {
 
     const nextId =
       tasks.length === 0 ? 1 : Math.max(...tasks.map((task) => task.id)) + 1;
+    const accountEmail =
+      selectedAccount !== "all"
+        ? selectedAccount
+        : connectedEmails[0] ?? "primary@university.edu";
 
     setTasks((previousTasks) => [
       ...previousTasks,
@@ -139,8 +188,9 @@ const TasksPage: React.FC = () => {
         id: nextId,
         label: trimmedLabel,
         done: false,
-        date: newTaskDate || formatIsoDate(selectedCalendarDay),
+        date: newTaskDate || formatIsoDate(selectedCalendarDay ?? new Date()),
         time: newTaskTime || undefined,
+        accountEmail,
       },
     ]);
     setIsAddingTask(false);
@@ -159,9 +209,7 @@ const TasksPage: React.FC = () => {
   const startEditingTask = (task: TaskItem) => {
     setEditingTaskId(task.id);
     setEditingLabel(task.label);
-    setEditingDate(
-      task.date ?? formatIsoDate(getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay)),
-    );
+    setEditingDate(task.date ?? formatIsoDate((selectedCalendarDay ?? new Date())));
     setEditingTime(task.time ?? "09:00");
     setIsEditingTimeEnabled(Boolean(task.time));
     setIsAddingTask(false);
@@ -180,6 +228,7 @@ const TasksPage: React.FC = () => {
               label: trimmedLabel,
               date: editingDate,
               time: isEditingTimeEnabled ? editingTime : undefined,
+              accountEmail: task.accountEmail ?? (selectedAccount !== "all" ? selectedAccount : connectedEmails[0]),
             }
           : task,
       ),
@@ -198,6 +247,23 @@ const TasksPage: React.FC = () => {
     setEditingTime("");
     setIsEditingTimeEnabled(true);
   };
+
+  useEffect(() => {
+    const emails = loadConnectedEmails();
+    setConnectedEmails(emails);
+    setTasks((prev) =>
+      prev.map((task, index) => ({
+        ...task,
+        accountEmail: task.accountEmail ?? emails[index % Math.max(emails.length, 1)] ?? "primary@university.edu",
+      })),
+    );
+  }, []);
+
+  const accountOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
+    (connectedEmails.length ? connectedEmails : Array.from(new Set(tasks.map((t) => t.accountEmail).filter(Boolean) as string[]))).map(
+      (email) => ({ value: email, label: email })
+    )
+  );
 
   const deleteTask = (taskId: number) => {
     setTasks((previousTasks) => previousTasks.filter((task) => task.id !== taskId));
@@ -248,20 +314,31 @@ const TasksPage: React.FC = () => {
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
-            <ConnectedDaysFilter className="!mt-0" />
+            <NullableConnectedDaysFilter className="!mt-0" value={taskDay} onChange={setTaskDay} />
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 -960 960 960"
-                    aria-hidden="true"
-                    className="h-[24px] w-[24px] shrink-0 fill-[#f9ab7b]"
-                  >
-                    <path d="M268-240 42-466l57-56 170 170 56 56-57 56Zm226 0L268-466l56-57 170 170 368-368 56 57-424 424Zm0-226-57-56 198-198 57 56-198 198Z" />
-                  </svg>
-                  <span>Tasks</span>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 -960 960 960"
+                      aria-hidden="true"
+                      className="h-[24px] w-[24px] shrink-0 fill-[#f9ab7b]"
+                    >
+                      <path d="M268-240 42-466l57-56 170 170 56 56-57 56Zm226 0L268-466l56-57 170 170 368-368 56 57-424 424Zm0-226-57-56 198-198 57 56-198 198Z" />
+                    </svg>
+                    <span>Tasks</span>
+                  </div>
+                  <div className="flex items-center gap-2 pr-1">
+                    <FilterMenuButton
+                      options={accountOptions}
+                      selectedValue={selectedAccount}
+                      onSelect={setSelectedAccount}
+                      ariaLabel="Filter tasks by account"
+                      emptyMessage="No accounts yet"
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-3">
@@ -374,29 +451,29 @@ const TasksPage: React.FC = () => {
                             </span>
                           </div>
 
-                          <span className="shrink-0 whitespace-nowrap text-[12px] font-medium tabular-nums text-[#6B7280]">
-                            {formatDisplayDate(
-                              parseIsoDate(task.date) ?? selectedCalendarDay,
-                            )}
+                          <span className="shrink-0 whitespace-nowrap text-[12px] font-medium tabular-nums text-[#6B7280] ml-[-40px] mr-2">
+                              {formatDisplayDate(
+                                parseIsoDate(task.date) ?? selectedCalendarDay ?? new Date(),
+                              )}
                             {task.time ? ` · ${formatDisplayTime(task.time)}` : ""}
                           </span>
 
-                          <div className="flex shrink-0 items-center gap-0.5">
+                          <div className="flex shrink-0 items-center gap-2">
                             <button
                               type="button"
                               onClick={() => startEditingTask(task)}
-                              className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                              className="inline-flex h-4 w-4 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
                               aria-label={`Edit ${task.label}`}
                             >
-                              <span className="material-symbols-outlined text-[16px]">edit</span>
+                              <span className="material-symbols-outlined text-[12px] leading-none">edit</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => deleteTask(task.id)}
-                              className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                              className="inline-flex h-4 w-4 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
                               aria-label={`Delete ${task.label}`}
                             >
-                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                              <span className="material-symbols-outlined text-[12px] leading-none">delete</span>
                             </button>
                           </div>
                         </div>

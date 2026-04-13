@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import PageTopBar from "../components/PageTopBar";
 import { login, storeToken } from "../services/api";
 import { useAuth } from "../services/auth/AuthContext";
-import authenticationBg from "../assets/AuthenticationBg.png";
+import newBg from "../assets/NewBg.png";
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -40,15 +40,16 @@ const LoginPage: React.FC = () => {
 
   return (
     <div
-      className="relative min-h-screen bg-[#F9F8F6] p-4"
+      className="relative min-h-screen bg-[#fefcfb] p-4"
       style={{
-        backgroundImage: `url(${authenticationBg})`,
+        backgroundImage: `url(${newBg})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
       }}
     >
-      <PageTopBar back={{ label: "Back", to: "/" }} />
-      <div className="flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center px-10 pt-16">
+      <div className="pointer-events-none absolute inset-0 bg-white/72" aria-hidden />
+      <PageTopBar back={{ label: "Back", useBrowserBack: true }} />
+      <div className="relative z-10 flex min-h-[calc(100vh-2rem)] w-full flex-col items-center justify-center px-10 pt-16">
         <h1 className="mb-10 font-instrument text-5xl font-normal text-[#1F2933]">
           Login
         </h1>

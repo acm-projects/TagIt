@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
 import SectionHeader from "../components/SectionHeader";
@@ -15,16 +16,16 @@ import {
   setUserCategoryColor,
   useUserCategories,
 } from "../services/categories";
+import deleteIcon from "../assets/page_buttons/delete.png";
+import {
+  saveConnectedUser,
+  type ConnectedUser,
+} from "../services/connectedUser";
 /**
  * Represents the currently connected user account and emails.
  * Connected accounts are authenticated via the backend; the AI backend
  * will read and process these inboxes.
  */
-type ConnectedUser = {
-  username: string;
-  emails: string[];
-};
-
 /**
  * A single priority rule describing what the user cares about.
  *
@@ -65,6 +66,11 @@ const SortablePriorityRow: React.FC<SortablePriorityRowProps> = ({
   onDragEnd,
   categories,
 }) => {
+  const colorValue = getCategoryColorById(
+    categories,
+    getCategoryIdForPriority(rule.id),
+  );
+
   return (
     <div
       draggable
@@ -80,7 +86,7 @@ const SortablePriorityRow: React.FC<SortablePriorityRowProps> = ({
       <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
-          className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-full border border-[#F3E6D9] bg-white text-[#f9ab7b] active:cursor-grabbing"
+          className="inline-flex h-7 w-7 cursor-grab items-center justify-center text-[#f9ab7b] active:cursor-grabbing"
           aria-label={`Drag to reorder ${rule.label}`}
         >
           <span className="material-symbols-outlined text-[16px]">drag_indicator</span>
@@ -108,17 +114,20 @@ const SortablePriorityRow: React.FC<SortablePriorityRowProps> = ({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 text-xs">
-        <label
-          className="flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-[#F3E6D9] bg-white"
-          aria-label={`Change color for ${rule.label}`}
-        >
+        <label className="relative inline-flex h-8 w-8 cursor-pointer items-center justify-center">
+          <span className="absolute inset-0 rounded-full bg-white shadow-[0_6px_14px_rgba(17,24,39,0.08)] ring-1 ring-[#efe7dc]" />
+          <span
+            className="relative h-5 w-5 rounded-full"
+            style={{ backgroundColor: colorValue }}
+          />
           <input
             type="color"
-            value={getCategoryColorById(categories, getCategoryIdForPriority(rule.id))}
+            value={colorValue}
             onChange={(event) =>
               setUserCategoryColor(getCategoryIdForPriority(rule.id), event.target.value)
             }
-            className="h-10 w-10 cursor-pointer border-0 bg-transparent p-0"
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            aria-label={`Change color for ${rule.label}`}
           />
         </label>
         <button
@@ -217,6 +226,7 @@ const SettingsPage: React.FC = () => {
   );
   const [editingPriorityValue, setEditingPriorityValue] = useState<string>("");
   const [dragId, setDragId] = useState<number | null>(null);
+  const [confirmEmailIndex, setConfirmEmailIndex] = useState<number | null>(null);
 
   // Persist priorities to localStorage + backend whenever they change.
   useEffect(() => {
@@ -227,8 +237,22 @@ const SettingsPage: React.FC = () => {
     }
   }, [priorities, prioritiesLoaded]);
 
+  // Persist connected user whenever their accounts change.
+  useEffect(() => {
+    saveConnectedUser(connectedUser);
+  }, [connectedUser]);
+
   // Connect-email modal: user can add Gmail/Outlook etc.; backend will authenticate and read.
   const [showConnectModal, setShowConnectModal] = useState(false);
+
+  useEffect(() => {
+    if (!showConnectModal) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowConnectModal(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [showConnectModal]);
 
   /**
    * Remove a priority rule entirely.
@@ -332,6 +356,13 @@ const SettingsPage: React.FC = () => {
     setDragId(null);
   };
 
+  const removeEmailAtIndex = (index: number) => {
+    setConnectedUser((prev) => {
+      const nextEmails = prev.emails.filter((_, i) => i !== index);
+      return { ...prev, emails: nextEmails };
+    });
+  };
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
@@ -347,104 +378,81 @@ const SettingsPage: React.FC = () => {
 
           {/* Connected user and linked emails */}
           <div className="mt-2.5 space-y-4 sm:mt-3">
-            <section className="w-full max-w-4xl">
+            <section className="relative z-30 w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <div className="flex items-center justify-between gap-3">
-                  <SectionHeader
-                    title="Users"
-                    icon={<span className="material-symbols-outlined text-[18px]">person</span>}
-                  />
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <SectionHeader
+                      title="Users"
+                      icon={<span className="material-symbols-outlined text-[18px]">person</span>}
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => setShowConnectModal(true)}
-                    className="inline-flex h-8 items-center justify-center rounded-full border border-[#F3E6D9] px-3 text-xs font-semibold text-[#f9ab7b] transition-colors hover:bg-[#FFF4EC]"
+                    className="inline-flex h-8 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border border-[#F3E6D9] px-3 text-xs font-semibold text-[#f9ab7b] transition-colors hover:bg-[#FFF4EC]"
                     aria-label="Connect another email account"
                   >
                     Add account
                   </button>
                 </div>
 
-                {/* Modal: authenticate a new email account */}
-                {showConnectModal && (
-                  <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="connect-email-title"
-                  >
-                    <div className="max-w-md rounded-2xl border border-[#EFE7DC] bg-white p-6 shadow-xl">
-                      <h2
-                        id="connect-email-title"
-                        className="text-lg font-semibold text-[#111827]"
-                      >
-                        Connect your email
-                      </h2>
-                      <p className="mt-2 text-sm text-[#6B7280]">
-                        Add an account so the app can prioritize mail, extract tasks,
-                        and surface deadlines.
-                      </p>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowConnectModal(false);
-                            chrome.runtime.sendMessage(
-                              { type: "startGoogleOAuth" },
-                              () => void loadConnectedEmails()
-                            );
-                          }}
-                          className="rounded-lg bg-[#f9ab7b] px-4 py-2 text-sm font-semibold text-white hover:bg-[#ef9967]"
-                        >
-                          Connect Gmail
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowConnectModal(false);
-                            chrome.runtime.sendMessage(
-                              { type: "startMicrosoftOAuth" },
-                              () => void loadConnectedEmails()
-                            );
-                          }}
-                          className="rounded-lg bg-[#DBEAFE] px-4 py-2 text-sm font-semibold text-[#1D4ED8] hover:bg-[#bfdbfe]"
-                        >
-                          Connect Outlook
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowConnectModal(false)}
-                        className="mt-4 text-sm text-[#6B7280] hover:text-[#111827]"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 <div className="mt-3 space-y-3 text-sm">
-                  <div className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3">
-                    <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-[#9CA3AF]">
+                  <div className="flex min-w-0 items-center gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3">
+                    <span className="shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-[#9CA3AF]">
                       Username
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-[#111827]">
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#111827]">
                       {connectedUser.username}
-                    </p>
+                    </span>
                   </div>
 
-                  <div className="space-y-2">
-                    {connectedUser.emails.map((email, index) => (
-                      <div
-                        key={email}
-                        className="flex items-center gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3 text-sm text-[#1F2933] shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
-                      >
-                        <span className="text-xs font-semibold text-[#9CA3AF]">
-                          {index + 1}.
-                        </span>
-                        <span className="font-medium text-[#111827]">{email}</span>
-                      </div>
-                    ))}
-                  </div>
+                  {connectedUser.emails.length > 0 && (
+                    <div className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 text-sm text-[#1F2933]">
+                      {connectedUser.emails.map((email, index) => {
+                        const isLast = index === connectedUser.emails.length - 1;
+                        const rowDivider = {
+                          borderBottom: isLast ? "none" : "0.5px solid #E5E7EB",
+                        } as const;
+                        return (
+                          <div
+                            key={`${email}-${index}`}
+                            className="group grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-x-3 py-3"
+                            style={rowDivider}
+                          >
+                            <span className="text-right text-xs font-semibold text-[#9CA3AF]">
+                              {index + 1}.
+                            </span>
+                            <span className="min-w-0 truncate text-sm font-normal text-[#111827]">
+                              {email}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmEmailIndex(index)}
+                              className="inline-flex h-7 w-7 items-center justify-center text-[#ef4444] opacity-0 transition-opacity duration-150 ease-out hover:text-[#dc2626] focus:opacity-100 focus:outline-none group-hover:opacity-100 group-focus-within:opacity-100"
+                              aria-label={`Remove ${email}`}
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="h-4 w-4 bg-current"
+                                style={{
+                                  WebkitMaskImage: `url(${deleteIcon})`,
+                                  maskImage: `url(${deleteIcon})`,
+                                  WebkitMaskRepeat: "no-repeat",
+                                  maskRepeat: "no-repeat",
+                                  WebkitMaskPosition: "center",
+                                  maskPosition: "center",
+                                  WebkitMaskSize: "contain",
+                                  maskSize: "contain",
+                                }}
+                              />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </section>
@@ -508,6 +516,99 @@ const SettingsPage: React.FC = () => {
             </section>
           </div>
         </main>
+
+        {showConnectModal &&
+          createPortal(
+            <div
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="connect-email-title"
+              onClick={() => setShowConnectModal(false)}
+            >
+              <div
+                className="max-w-md rounded-2xl border border-[#EFE7DC] bg-white p-6 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2
+                  id="connect-email-title"
+                  className="text-lg font-semibold text-[#111827]"
+                >
+                  Connect your email
+                </h2>
+                <p className="mt-2 text-sm text-[#6B7280]">
+                  Add an account so the app can prioritize mail, extract tasks,
+                  and surface deadlines.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowConnectModal(false);
+                      chrome.runtime.sendMessage(
+                        { type: "startGoogleOAuth" },
+                        () => void loadConnectedEmails()
+                      );
+                    }}
+                    className="rounded-lg bg-[#f9ab7b] px-4 py-2 text-sm font-semibold text-white hover:bg-[#ef9967]"
+                  >
+                    Connect Gmail
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowConnectModal(false);
+                      chrome.runtime.sendMessage(
+                        { type: "startMicrosoftOAuth" },
+                        () => void loadConnectedEmails()
+                      );
+                    }}
+                    className="rounded-lg bg-[#DBEAFE] px-4 py-2 text-sm font-semibold text-[#1D4ED8] hover:bg-[#bfdbfe]"
+                  >
+                    Connect Outlook
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowConnectModal(false)}
+                  className="mt-4 text-sm text-[#6B7280] hover:text-[#111827]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>,
+            document.body,
+          )}
+
+        {confirmEmailIndex !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-sm rounded-2xl border border-[#EFE7DC] bg-white p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-[#111827]">Delete email?</h3>
+              <p className="mt-2 text-sm text-[#4B5563]">
+                Are you sure you want to delete this email from your connected accounts?
+              </p>
+              <div className="mt-5 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirmEmailIndex !== null) removeEmailAtIndex(confirmEmailIndex);
+                    setConfirmEmailIndex(null);
+                  }}
+                  className="inline-flex items-center justify-center rounded-full bg-[#22c55e] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#16a34a]"
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmEmailIndex(null)}
+                  className="inline-flex items-center justify-center rounded-full bg-[#ef4444] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#dc2626]"
+                >
+                  No
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <AppNavbar />
       </div>

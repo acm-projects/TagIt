@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
 import {
   ConnectedDaysFilter,
@@ -11,11 +12,13 @@ import WeekHeader from "../components/WeekHeader";
 import {
   getTaskProgress,
   loadTasks,
+  MASCOT_LAST_COMPLETED_TASKS_KEY,
   subscribeToTaskUpdates,
+  type TaskProgress,
 } from "../services/taskProgress";
-import filterIcon from "../assets/page_buttons/filter.png";
+import TagiWeeklyProgressMascot from "../components/TagiWeeklyProgressMascot";
+import tagiMascotCopy from "../data/tagiMascotMessages.json";
 import {
-  getCategoryById,
   getCategoryColorById,
   useUserCategories,
 } from "../services/categories";
@@ -24,6 +27,8 @@ import {
   syncEmails,
   type ProcessedEmail,
 } from "../services/api";
+import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
+import { loadConnectedEmails } from "../services/connectedUser";
 
 /**
  * Important email preview shown on Today.
@@ -35,6 +40,8 @@ type ImportantEmailPreview = {
   source: "gmail" | "outlook";
   tone: "urgent" | "soon" | "done";
   summary: string;
+  /** Email account the message belongs to (user can have multiple accounts). */
+  accountEmail: string;
   priority?: "urgent";
   tagCategoryId?: string;
   date: string;
@@ -46,9 +53,9 @@ type ImportantEmailPreview = {
  */
 type TodayEvent = {
   time: string;
+  date: string;
   title: string;
   tagCategoryId?: string;
-  date: string;
 };
 
 const extractSenderName = (raw: string): string => {
@@ -67,6 +74,7 @@ const mapEmailToPreview = (e: ProcessedEmail): ImportantEmailPreview => {
     source: e.source === "outlook" ? "outlook" : "gmail",
     tone,
     summary: e.summary || e.subject,
+    accountEmail: e.source || "",
     priority: e.priorityLevel === 1 ? "urgent" : undefined,
     tagCategoryId: `priority-${e.priorityLevel}`,
     date: dateStr,
@@ -98,7 +106,103 @@ const parseIsoDate = (value?: string): Date | null => {
   return new Date(year, month - 1, day);
 };
 
+/** Static events used by the mascot timer for approaching-event messages. */
+const EVENTS: TodayEvent[] = [
+  { date: "Tue, Apr 01", time: "03:00 - 03:30", title: "Exam Prep", tagCategoryId: "priority-2" },
+  { date: "Tue, Apr 01", time: "04:00 - 05:30", title: "Government Class", tagCategoryId: "priority-2" },
+  { date: "Wed, Apr 02", time: "08:30 - 10:00", title: "ACM Meeting @ SLC", tagCategoryId: "priority-1" },
+  { date: "Thu, Apr 03", time: "12:15 - 01:00", title: "Resume Review Drop-In", tagCategoryId: "priority-3" },
+];
+
+const TAGI_EXCITED_MS = 10_000;
+const TAGI_NORMAL_ROTATE_MIN_MS = 12 * 60 * 1000;
+const TAGI_NORMAL_ROTATE_MAX_MS = 18 * 60 * 1000;
+
+const MONTH_ABBR: Record<string, number> = {
+  Jan: 0,
+  Feb: 1,
+  Mar: 2,
+  Apr: 3,
+  May: 4,
+  Jun: 5,
+  Jul: 6,
+  Aug: 7,
+  Sep: 8,
+  Oct: 9,
+  Nov: 10,
+  Dec: 11,
+};
+
+function parseTodayEventStart(event: TodayEvent): Date | null {
+  const parts = event.date.split(/,\s*/);
+  const rest = parts[parts.length - 1]?.trim();
+  if (!rest) return null;
+  const [mon, dayStr] = rest.split(/\s+/);
+  const day = parseInt(dayStr, 10);
+  const month = MONTH_ABBR[mon ?? ""];
+  if (month === undefined || Number.isNaN(day)) return null;
+  const year = new Date().getFullYear();
+  const startTime = event.time.split("-")[0]?.trim() || "09:00";
+  const [h, m] = startTime.split(":").map((x) => parseInt(x, 10));
+  if (Number.isNaN(h)) return null;
+  return new Date(year, month, day, h, Number.isNaN(m) ? 0 : m, 0, 0);
+}
+
+function interpolateMascotTemplate(
+  template: string,
+  vars: Record<string, string | number>
+): string {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => String(vars[key] ?? ""));
+}
+
+function pickRandomLine(lines: string[]): string {
+  if (lines.length === 0) return "";
+  return lines[Math.floor(Math.random() * lines.length)] ?? "";
+}
+
+function getApproachingEventBubbleMessage(
+  events: TodayEvent[],
+  copy: typeof tagiMascotCopy
+): string | null {
+  const now = Date.now();
+  const soonMs = 2 * 60 * 60 * 1000;
+  let best: { start: number; title: string } | null = null;
+  for (const e of events) {
+    const d = parseTodayEventStart(e);
+    if (!d) continue;
+    const t = d.getTime();
+    if (t < now || t > now + soonMs) continue;
+    if (!best || t < best.start) best = { start: t, title: e.title };
+  }
+  if (!best) return null;
+  const maxLen = copy.eventTitleMaxLength ?? 36;
+  const title =
+    best.title.length > maxLen ? `${best.title.slice(0, maxLen - 1)}…` : best.title;
+  return interpolateMascotTemplate(copy.eventSoonTemplate, { title });
+}
+
+function pickNormalMascotMessage(
+  p: TaskProgress,
+  events: TodayEvent[],
+  copy: typeof tagiMascotCopy
+): string {
+  const pool: string[] = [...copy.motivational];
+  const eventMsg = getApproachingEventBubbleMessage(events, copy);
+  if (eventMsg) pool.push(eventMsg);
+  if (p.totalTasks > 0) {
+    const remaining = p.totalTasks - p.completedTasks;
+    if (remaining === 1) pool.push(...copy.tasksRemainingOne);
+    else if (remaining > 1) {
+      pool.push(
+        interpolateMascotTemplate(copy.tasksRemainingManyTemplate, { count: remaining })
+      );
+    }
+  }
+  return pickRandomLine(pool);
+}
+
 const TodayPage: React.FC = () => {
+  const navigate = useNavigate();
   const { selectedDay } = useDayFilter();
   const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
 
@@ -108,17 +212,97 @@ const TodayPage: React.FC = () => {
   );
 
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
+  const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
   const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>([]);
   const [events, setEvents] = useState<TodayEvent[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [slidingEmailIds, setSlidingEmailIds] = useState<Set<string>>(new Set());
   const [closingEmailIds, setClosingEmailIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ email: ImportantEmailPreview; index: number } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const filterMenuRef = useRef<HTMLDivElement | null>(null);
   const categories = useUserCategories();
+  const [tagiBubble, setTagiBubble] = useState(() => ({
+    message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
+    excited: false,
+  }));
+  const normalRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const excitedEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleNormalRotateRef = useRef<() => void>(() => {});
+
+  const clearNormalRotateTimer = () => {
+    if (normalRotateTimerRef.current) {
+      clearTimeout(normalRotateTimerRef.current);
+      normalRotateTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    const scheduleNormalRotate = () => {
+      clearNormalRotateTimer();
+      const delay =
+        TAGI_NORMAL_ROTATE_MIN_MS +
+        Math.random() * (TAGI_NORMAL_ROTATE_MAX_MS - TAGI_NORMAL_ROTATE_MIN_MS);
+      normalRotateTimerRef.current = setTimeout(() => {
+        normalRotateTimerRef.current = null;
+        setTagiBubble((b) => {
+          if (b.excited) return b;
+          return {
+            message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
+            excited: false,
+          };
+        });
+        scheduleNormalRotateRef.current();
+      }, delay);
+    };
+    scheduleNormalRotateRef.current = scheduleNormalRotate;
+    scheduleNormalRotate();
+    return () => {
+      clearNormalRotateTimer();
+      if (excitedEndTimerRef.current) {
+        clearTimeout(excitedEndTimerRef.current);
+        excitedEndTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let lastSeen = progress.completedTasks;
+    try {
+      const raw = sessionStorage.getItem(MASCOT_LAST_COMPLETED_TASKS_KEY);
+      if (raw != null) {
+        const n = parseInt(raw, 10);
+        if (!Number.isNaN(n)) lastSeen = n;
+      }
+    } catch {
+      /* sessionStorage unavailable */
+    }
+
+    if (progress.completedTasks <= lastSeen) return;
+
+    const praise = pickRandomLine(tagiMascotCopy.taskPraise);
+    try {
+      sessionStorage.setItem(MASCOT_LAST_COMPLETED_TASKS_KEY, String(progress.completedTasks));
+    } catch {
+      /* ignore */
+    }
+
+    clearNormalRotateTimer();
+    if (excitedEndTimerRef.current) {
+      clearTimeout(excitedEndTimerRef.current);
+      excitedEndTimerRef.current = null;
+    }
+
+    setTagiBubble({ message: praise, excited: true });
+    excitedEndTimerRef.current = setTimeout(() => {
+      excitedEndTimerRef.current = null;
+      setTagiBubble({
+        message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
+        excited: false,
+      });
+      scheduleNormalRotateRef.current();
+    }, TAGI_EXCITED_MS);
+  }, [progress.completedTasks]);
 
   const loadEmails = useCallback(async () => {
     const resp = await getUserEmails();
@@ -147,17 +331,9 @@ const TodayPage: React.FC = () => {
   }, [loadEmails]);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
-        setIsFilterOpen(false);
-      }
-    };
-
-    if (isFilterOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isFilterOpen]);
+    const emails = loadConnectedEmails();
+    setConnectedEmails(emails);
+  }, []);
 
   const getSourceIcon = (source: ImportantEmailPreview["source"]) => {
     if (source === "gmail") {
@@ -263,22 +439,28 @@ const TodayPage: React.FC = () => {
     [events, selectedCalendarDate],
   );
 
-  const availableCategories = Array.from(
-    new Set(dateFilteredEmails.map((mail) => mail.tagCategoryId).filter(Boolean))
-  ) as string[];
+  const availableAccounts =
+    connectedEmails.length > 0
+      ? connectedEmails
+      : Array.from(new Set(dateFilteredEmails.map((mail) => mail.accountEmail || "Unknown account")));
+
   const filteredEmails =
     selectedFilter === "all"
       ? dateFilteredEmails
-      : dateFilteredEmails.filter((mail) => mail.tagCategoryId === selectedFilter);
+      : dateFilteredEmails.filter(
+          (mail) => (mail.accountEmail || "Unknown account") === selectedFilter
+        );
 
-  const formatCategoryLabel = (id?: string) => {
-    if (!id) return "Uncategorized";
-    return getCategoryById(categories, id)?.name ?? id;
-  };
+  const filterOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
+    availableAccounts.map((account) => ({
+      value: account,
+      label: account,
+    }))
+  );
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
-      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
@@ -287,28 +469,32 @@ const TodayPage: React.FC = () => {
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_6px_14px_rgba(15,23,42,0.05)]">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
-                    <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">
-                      workspace_premium
-                    </span>
-                    <span>Weekly Progress</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-[#6B7280]">
-                    <span className="text-right">Tasks Completed</span>
-                    <span className="text-sm text-right">
-                      <span className="font-semibold text-[#f9ab7b]">
-                        {progress.completedTasks}
+                <div className="flex items-start gap-2">
+                  <span className="material-symbols-outlined shrink-0 text-[18px] text-[#f9ab7b]">
+                    workspace_premium
+                  </span>
+                  <div className="min-w-0 flex-1 pr-16 sm:pr-20">
+                    <div className="text-[15px] font-semibold leading-tight text-[#1F2933]">
+                      Weekly Progress
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs leading-tight text-[#6B7280]">
+                      <span>Tasks Completed</span>
+                      <span className="text-sm">
+                        <span className="font-semibold text-[#f9ab7b]">
+                          {progress.completedTasks}
+                        </span>
+                        <span className="text-[#9CA3AF]">/{progress.totalTasks}</span>
                       </span>
-                      <span className="text-[#9CA3AF]">/{progress.totalTasks}</span>
-                    </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-3 h-2 w-full rounded-full bg-[#fde6d7]">
-                  <div
-                    className="h-2 rounded-full bg-[#f9ab7b] transition-[width] duration-200 ease-out"
-                    style={{ width: `${progress.progressPercentage}%` }}
+                <div className="mt-[5px]">
+                  <TagiWeeklyProgressMascot
+                    progressPercentage={progress.progressPercentage}
+                    message={tagiBubble.message}
+                    excited={tagiBubble.excited}
+                    onClick={() => navigate("/chatbot")}
                   />
                 </div>
               </div>
@@ -327,70 +513,21 @@ const TodayPage: React.FC = () => {
                     )}
                   </div>
                   <div className="flex items-center gap-2 pr-1">
-                    <div className="relative" ref={filterMenuRef}>
-                      <button
-                        type="button"
-                        onClick={() => setIsFilterOpen((o) => !o)}
-                        className="inline-flex items-center justify-center rounded-full border border-transparent bg-transparent px-0.5 py-0.5 transition hover:opacity-80 focus:outline-none focus:ring-0"
-                        aria-haspopup="listbox"
-                        aria-expanded={isFilterOpen}
-                        aria-label="Filter important emails"
-                      >
-                        <img
-                          src={filterIcon}
-                          alt=""
-                          className="h-6 w-6"
-                          style={{
-                            filter:
-                              "invert(81%) sepia(52%) saturate(1330%) hue-rotate(324deg) brightness(99%) contrast(98%)",
-                          }}
-                        />
-                      </button>
-                      {isFilterOpen && (
-                        <div className="absolute right-0 z-20 mt-2 w-36 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_14px_32px_rgba(0,0,0,0.12)]">
-                          <button
-                            type="button"
-                            className={`flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs transition hover:bg-[#f8fafc] ${selectedFilter === "all" ? "bg-[#f0fdf4] font-semibold text-[#065f46]" : "text-[#111827]"}`}
-                            onClick={() => {
-                              setSelectedFilter("all");
-                              setIsFilterOpen(false);
-                            }}
-                          >
-                            <span>All</span>
-                            {selectedFilter === "all" && (
-                              <span className="material-symbols-outlined text-[14px] text-[#10b981] opacity-80">done</span>
-                            )}
-                          </button>
-                          {availableCategories.map((category) => (
-                            <button
-                              key={category}
-                              type="button"
-                              className={`flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs transition hover:bg-[#f8fafc] ${selectedFilter === category ? "bg-[#f0fdf4] font-semibold text-[#065f46]" : "text-[#111827]"}`}
-                              onClick={() => {
-                                setSelectedFilter(category);
-                                setIsFilterOpen(false);
-                              }}
-                            >
-                              <span className="capitalize">{formatCategoryLabel(category)}</span>
-                              {selectedFilter === category && (
-                                <span className="material-symbols-outlined text-[14px] text-[#10b981] opacity-80">done</span>
-                              )}
-                            </button>
-                          ))}
-                          {availableCategories.length === 0 && (
-                            <div className="px-2.5 py-1.5 text-xs text-[#6B7280]">No categories yet</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    <FilterMenuButton
+                      options={filterOptions}
+                      selectedValue={selectedFilter}
+                      onSelect={setSelectedFilter}
+                      ariaLabel="Filter important emails"
+                      emptyMessage="No accounts yet"
+                    />
                   </div>
                 </div>
 
-                <div className="mt-3 pl-2.5 sm:pl-3.5">
+                <div className="mt-3 pl-2.5 sm:pl-3.5 space-y-0.5">
                   {filteredEmails.length === 0 ? (
                     <div className="flex items-center justify-center gap-2 py-3 text-sm font-semibold text-[#6B7280]">
                       <span className="material-symbols-outlined text-base text-[#34d399]">task_alt</span>
-                      <span>That’s everything!</span>
+                      <span>That's everything!</span>
                     </div>
                   ) : (
                     filteredEmails.map((mail, index) => {
@@ -410,12 +547,12 @@ const TodayPage: React.FC = () => {
                       return (
                         <div
                           key={mail.id}
-                          className={`tagged-item group flex items-start gap-3 py-2 email-row ${isSliding ? "email-row--slide-up" : ""} ${isClosing ? "email-row--closing" : ""}`}
+                          className={`tagged-item group flex items-start gap-2.5 py-1.5 text-[13px] email-row ${isSliding ? "email-row--slide-up" : ""} ${isClosing ? "email-row--closing" : ""}`}
                           style={visualStyle}
                         >
                           <div
                             aria-hidden="true"
-                            className="color-line h-12 w-[6px] self-center rounded-full"
+                            className="color-line h-10 w-[6px] self-center rounded-full"
                             style={{
                               backgroundColor: getCategoryColorById(categories, mail.tagCategoryId),
                             }}
@@ -426,12 +563,12 @@ const TodayPage: React.FC = () => {
                             onClick={() => handleOpenEmail(mail)}
                             className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <span className="text-sm font-semibold text-[#111827]">
                                 {mail.sender}
                               </span>
                             </div>
-                            <p className="w-full truncate text-[12px] text-[#6B7280]">
+                            <p className="w-full truncate text-[12px] text-[#6B7280] leading-tight">
                               {mail.summary}
                             </p>
                             {mail.source !== "gmail" && (
@@ -469,7 +606,7 @@ const TodayPage: React.FC = () => {
                   <span>Upcoming Events</span>
                 </div>
 
-                <div className="mt-3 space-y-1 pl-2.5 sm:pl-3.5">
+                <div className="mt-3 space-y-0.5 pl-2.5 sm:pl-3.5">
                   {filteredEvents.length === 0 ? (
                     <p className="py-2 text-[12px] text-[#6B7280]">No events on this day.</p>
                   ) : (
@@ -477,12 +614,12 @@ const TodayPage: React.FC = () => {
                     return (
                       <div
                         key={event.title}
-                        className="tagged-item group flex items-start gap-3 py-1 text-sm text-[#1F2933]"
+                        className="tagged-item group flex items-start gap-2.5 py-0.5 text-sm text-[#1F2933]"
                         style={{ borderBottom: index === filteredEvents.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
                       >
                         <div
                           aria-hidden="true"
-                          className="color-line h-10 w-[6px] self-center rounded-full"
+                          className="color-line h-9 w-[6px] self-center rounded-full"
                           style={{ backgroundColor: getCategoryColorById(categories, event.tagCategoryId) }}
                         />
 
@@ -491,9 +628,11 @@ const TodayPage: React.FC = () => {
                             <span className="text-sm font-semibold text-[#111827] truncate">
                               {event.title}
                             </span>
-                            <span className="text-xs font-medium text-[#6B7280] whitespace-nowrap">
-                              {event.time}
-                            </span>
+                            <div className="flex items-center gap-2 whitespace-nowrap text-[12px] font-medium text-[#6B7280]">
+                              <span>{event.date}</span>
+                              <span className="text-[#D1D5DB]">•</span>
+                              <span>{event.time}</span>
+                            </div>
                           </div>
                         </div>
 
@@ -508,13 +647,13 @@ const TodayPage: React.FC = () => {
         </main>
 
         {toast && (
-          <div className="pointer-events-auto fixed bottom-6 left-1/2 z-50 -translate-x-1/2 transform">
-            <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#111827] shadow-[0_12px_32px_rgba(0,0,0,0.18)] border border-[#E5E7EB]">
-              <span>Marked as read </span>
+          <div className="pointer-events-auto absolute bottom-[70px] left-1/2 z-50 -translate-x-1/2">
+            <div className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-semibold text-[#111827] shadow-[0_2px_8px_rgba(15,23,42,0.06)]">
+              <span>Marked as read</span>
               <button
                 type="button"
                 onClick={undoLastRemoval}
-                className="rounded-full border border-[#34d399] px-3 py-1 text-xs font-semibold text-[#047857] transition-colors hover:bg-[#ecfdf3] focus:outline-none focus:ring-2 focus:ring-[#34d399]"
+                className="rounded-full border border-[#ef4444] px-3 py-1 text-xs font-semibold text-[#b91c1c] transition-colors hover:bg-[#fef2f2] focus:outline-none focus:ring-2 focus:ring-[#fca5a5]"
               >
                 Undo
               </button>

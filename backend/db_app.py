@@ -172,8 +172,8 @@ def add_emails_batch():
     if not isinstance(incoming_emails, list) or len(incoming_emails) == 0:
         return jsonify({"error": "Request body must be a non-empty array of emails."}), 400
 
-    if len(incoming_emails) > 25:
-        return jsonify({"error": "Batch limit is 25 emails."}), 400
+    if len(incoming_emails) > 100:
+        return jsonify({"error": "Batch limit is 100 emails."}), 400
 
     # Split into cached vs new
     new_emails  = []   # emails that need AI processing

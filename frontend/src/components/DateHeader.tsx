@@ -109,12 +109,12 @@ const parseIsoDate = (raw: string | null): Date | null => {
   return new Date(year, month - 1, day);
 };
 
+/** Week shown in the header: Sunday → Saturday, aligned with DaysFilter chip order (sun … sat). */
 const getWeekRange = (anchor: Date) => {
   const start = new Date(anchor);
   start.setHours(0, 0, 0, 0);
-  const day = start.getDay();
-  const diffToMonday = (day + 6) % 7; // Monday-start week
-  start.setDate(start.getDate() - diffToMonday);
+  const day = start.getDay(); // 0 = Sunday … 6 = Saturday
+  start.setDate(start.getDate() - day);
 
   const end = new Date(start);
   end.setDate(start.getDate() + 6);

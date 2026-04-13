@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
-  ConnectedDaysFilter,
+  NullableConnectedDaysFilter,
   getDateForWeekdayInAnchorWeek,
   isSameLocalDay,
-  useDayFilter,
+  useNullableDayFilter,
   useWeekAnchorWithSharedDayFilter,
 } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
@@ -17,6 +17,8 @@ import {
   syncEmails,
   type ProcessedEmail,
 } from "../services/api";
+import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
+import { loadConnectedEmails } from "../services/connectedUser";
 
 /**
  * A prioritized mail card item.
@@ -26,11 +28,13 @@ type MailItem = {
   summary: string;
   sender: string;
   body: string;
+  accountEmail: string;
   extra?: string;
   tagCategoryId?: string;
   priorityScore: number;
   date: string;
   source?: string;
+  needsReply?: boolean;
 };
 
 type DraftItem = {
@@ -59,6 +63,7 @@ const mapEmailToMailItem = (e: ProcessedEmail): MailItem => {
     summary: e.subject,
     sender: extractSenderName(e.sender),
     body: e.summary,
+    accountEmail: e.source || "",
     extra: deadlineStr,
     tagCategoryId: `priority-${e.priorityLevel}`,
     priorityScore: (5 - e.priorityLevel) * 3,
@@ -67,14 +72,18 @@ const mapEmailToMailItem = (e: ProcessedEmail): MailItem => {
   };
 };
 
-const MailPage: React.FC = () => {
-  const { selectedDay } = useDayFilter();
-  const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
+/** Delay after leaving a row before collapsing (lets pointer enter next row without flicker). */
+const MAIL_ROW_LEAVE_COLLAPSE_MS = 160;
+/** Pause after collapsing the previous row before expanding the newly hovered row. */
+const MAIL_EXPAND_AFTER_COLLAPSE_MS = 260;
+/** Max-height transition for body expand/collapse (ms). */
+const MAIL_BODY_TRANSITION_MS = 320;
 
-  const selectedCalendarDate = useMemo(
-    () => getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay),
-    [weekAnchor, selectedDay],
-  );
+const MailPage: React.FC = () => {
+  const { nullableDay: mailDay, setNullableDay: setMailDay } = useNullableDayFilter();
+  const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
+  const [selectedAccount, setSelectedAccount] = useState<string>("all");
+  const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
 
   const [mails, setMails] = useState<MailItem[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -97,6 +106,50 @@ const MailPage: React.FC = () => {
       .finally(() => setIsSyncing(false));
   }, [loadEmails]);
 
+  const [expandedMailId, setExpandedMailId] = useState<string | null>(null);
+  const leaveCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const expandAfterCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearMailHoverTimers = useCallback(() => {
+    if (leaveCollapseTimerRef.current !== null) {
+      clearTimeout(leaveCollapseTimerRef.current);
+      leaveCollapseTimerRef.current = null;
+    }
+    if (expandAfterCollapseTimerRef.current !== null) {
+      clearTimeout(expandAfterCollapseTimerRef.current);
+      expandAfterCollapseTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearMailHoverTimers(), [clearMailHoverTimers]);
+
+  const handleMailRowEnter = useCallback(
+    (mailId: string) => {
+      clearMailHoverTimers();
+      if (expandedMailId === mailId) {
+        return;
+      }
+      if (expandedMailId !== null && expandedMailId !== mailId) {
+        setExpandedMailId(null);
+        expandAfterCollapseTimerRef.current = setTimeout(() => {
+          expandAfterCollapseTimerRef.current = null;
+          setExpandedMailId(mailId);
+        }, MAIL_EXPAND_AFTER_COLLAPSE_MS);
+        return;
+      }
+      setExpandedMailId(mailId);
+    },
+    [clearMailHoverTimers, expandedMailId],
+  );
+
+  const handleMailRowLeave = useCallback(() => {
+    clearMailHoverTimers();
+    leaveCollapseTimerRef.current = setTimeout(() => {
+      leaveCollapseTimerRef.current = null;
+      setExpandedMailId(null);
+    }, MAIL_ROW_LEAVE_COLLAPSE_MS);
+  }, [clearMailHoverTimers]);
+
   const [draftReplies] = useState<DraftItem[]>([
     {
       id: "d1",
@@ -107,10 +160,16 @@ const MailPage: React.FC = () => {
   const filteredMails = useMemo(
     () =>
       mails.filter((mail) => {
-        const d = parseIsoDate(mail.date);
-        return d ? isSameLocalDay(d, selectedCalendarDate) : true;
+        if (mailDay) {
+          const selectedDate = getDateForWeekdayInAnchorWeek(weekAnchor, mailDay);
+          const d = parseIsoDate(mail.date);
+          if (d && !isSameLocalDay(d, selectedDate)) return false;
+        }
+        const matchesAccount =
+          selectedAccount === "all" ? true : mail.accountEmail === selectedAccount;
+        return matchesAccount;
       }),
-    [mails, selectedCalendarDate],
+    [mails, mailDay, weekAnchor, selectedAccount],
   );
 
   const sortedMails = useMemo(
@@ -126,6 +185,20 @@ const MailPage: React.FC = () => {
     // Placeholder until draft editor is wired.
   };
 
+  const handleDraftReply = (_mail: MailItem) => {
+    // Placeholder: open draft composer prefilled with this mail's context.
+  };
+
+  useEffect(() => {
+    setConnectedEmails(loadConnectedEmails());
+  }, []);
+
+  const accountOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
+    (connectedEmails.length ? connectedEmails : Array.from(new Set(mails.map((m) => m.accountEmail)))).map(
+      (email) => ({ value: email, label: email })
+    )
+  );
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
@@ -133,34 +206,51 @@ const MailPage: React.FC = () => {
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
-            <ConnectedDaysFilter className="!mt-0" />
+            <NullableConnectedDaysFilter className="!mt-0" value={mailDay} onChange={setMailDay} />
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
-                  <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">mail</span>
-                  <span>Mails</span>
-                  {isSyncing && (
-                    <span className="ml-1 text-[11px] font-normal text-[#9CA3AF]">syncing…</span>
-                  )}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                    <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">mail</span>
+                    <span>Mails</span>
+                    {isSyncing && (
+                      <span className="ml-1 text-[11px] font-normal text-[#9CA3AF]">syncing…</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 pr-1">
+                    <FilterMenuButton
+                      options={accountOptions}
+                      selectedValue={selectedAccount}
+                      onSelect={setSelectedAccount}
+                      ariaLabel="Filter mails by account"
+                      emptyMessage="No accounts yet"
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-3">
                   {sortedMails.length === 0 ? (
-                    <p className="py-2 text-[12px] text-[#6B7280]">No messages for this day.</p>
+                    <p className="py-2 text-[12px] text-[#6B7280]">
+                      {mailDay ? "No messages for this day." : "No messages this week."}
+                    </p>
                   ) : (
-                    sortedMails.map((mail, index) => (
+                    sortedMails.map((mail, index) => {
+                      const isExpanded = expandedMailId === mail.id;
+                      return (
                       <div
                         key={mail.id}
-                        className="group grid grid-cols-[6px_minmax(0,1fr)_auto] items-center gap-x-4 py-4"
+                        className="group grid grid-cols-[6px_minmax(0,1fr)_auto] items-stretch gap-x-4 py-4"
                         style={{
                           borderBottom:
                             index === sortedMails.length - 1 ? "none" : "0.5px solid #E5E7EB",
                         }}
+                        onMouseEnter={() => handleMailRowEnter(mail.id)}
+                        onMouseLeave={handleMailRowLeave}
                       >
                         <div
                           aria-hidden="true"
-                          className="h-full min-h-[5rem] w-[6px] self-stretch rounded-full"
+                          className="w-[6px] shrink-0 self-stretch rounded-full min-h-[2.75rem]"
                           style={{
                             backgroundColor: getCategoryColorById(categories, mail.tagCategoryId),
                           }}
@@ -182,12 +272,37 @@ const MailPage: React.FC = () => {
                           </div>
                           <div className="mt-2 space-y-1 text-[11px] leading-snug text-[#6B7280] sm:max-w-[32rem]">
                             <p className="truncate text-[12px]">{mail.sender}</p>
-                            <p className="line-clamp-2 text-[12px]">{mail.body}</p>
-                            {mail.extra && <p className="truncate text-[12px]">{mail.extra}</p>}
+                            <div
+                              className={
+                                isExpanded
+                                  ? "max-h-[min(28rem,72vh)] overflow-y-auto overflow-x-hidden"
+                                  : "max-h-10 overflow-hidden"
+                              }
+                              style={{
+                                transitionProperty: "max-height",
+                                transitionDuration: `${MAIL_BODY_TRANSITION_MS}ms`,
+                                transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)",
+                              }}
+                            >
+                              <p className="text-[12px] text-[#4B5563] whitespace-pre-line">{mail.body}</p>
+                              {mail.extra && (
+                                <p className="mt-1 text-[12px] text-[#6B7280] whitespace-pre-line">{mail.extra}</p>
+                              )}
+                            </div>
                           </div>
                         </button>
 
                         <div className="flex shrink-0 items-center gap-2 self-center">
+                          {mail.needsReply && (
+                            <button
+                              type="button"
+                              onClick={() => handleDraftReply(mail)}
+                              className="inline-flex h-7 items-center justify-center rounded-full border border-[#E5E7EB] px-3 text-[11px] font-semibold text-[#374151] opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                              aria-label={`Draft reply to ${mail.summary}`}
+                            >
+                              Draft reply
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleOpenMail(mail)}
@@ -198,7 +313,8 @@ const MailPage: React.FC = () => {
                           </button>
                         </div>
                       </div>
-                    ))
+                    );
+                    })
                   )}
                 </div>
               </div>
@@ -211,32 +327,35 @@ const MailPage: React.FC = () => {
                   <span>Drafted Replies</span>
                 </div>
 
-                <div className="mt-3 space-y-3">
-                  {draftReplies.map((draft) => (
+                <div className="mt-3 space-y-0.5 pl-2.5 sm:pl-3.5">
+                  {draftReplies.map((draft, index) => (
                     <div
                       key={draft.id}
-                      className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-2 shadow-[0_6px_14px_rgba(17,24,39,0.05)]"
+                      className="tagged-item group flex items-start gap-3 py-1.5 text-sm text-[#1F2933]"
+                      style={{
+                        borderBottom: index === draftReplies.length - 1 ? "none" : "0.5px solid #E5E7EB",
+                      }}
                     >
-                      <div className="group flex items-start gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDraft(draft)}
+                        className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
+                      >
+                        <span className="text-sm font-semibold text-[#111827] truncate">
+                          {draft.sender}
+                        </span>
+                        <p className="w-full truncate text-[12px] text-[#6B7280] leading-tight">Draft reply</p>
+                      </button>
+
+                      <div className="flex shrink-0 items-center gap-2">
                         <button
                           type="button"
                           onClick={() => handleOpenDraft(draft)}
-                          className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
+                          className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
+                          aria-label={`Open draft for ${draft.sender}`}
                         >
-                          <span className="text-sm font-semibold text-[#111827]">{draft.sender}</span>
-                          <p className="w-full truncate text-[12px] text-[#6B7280]">Draft reply</p>
+                          <span className="material-symbols-outlined text-[16px]">check</span>
                         </button>
-
-                        <div className="flex shrink-0 items-center gap-2 pt-0.5">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDraft(draft)}
-                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
-                            aria-label={`Open draft for ${draft.sender}`}
-                          >
-                            <span className="material-symbols-outlined text-[16px]">check</span>
-                          </button>
-                        </div>
                       </div>
                     </div>
                   ))}

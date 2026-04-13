@@ -2,6 +2,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -158,6 +159,34 @@ export const useDayFilter = (): DayFilterContextValue => {
 };
 
 /**
+ * Adds "deselect" support on top of the shared day filter. Keeps the global
+ * day in sync when a specific day is chosen, but allows `null` to represent
+ * "all days" without overwriting the stored preference.
+ */
+export const useNullableDayFilter = () => {
+  const { selectedDay, setSelectedDay } = useDayFilter();
+  const [nullableDay, setNullableDay] = useState<WeekdayShort | null>(selectedDay);
+
+  useEffect(() => {
+    if (nullableDay === null) return;
+    if (nullableDay !== selectedDay) {
+      setNullableDay(selectedDay);
+    }
+  }, [nullableDay, selectedDay]);
+
+  const handleChange = (day: WeekdayShort | null) => {
+    if (day === null) {
+      setNullableDay(null);
+      return;
+    }
+    setNullableDay(day);
+    setSelectedDay(day);
+  };
+
+  return { nullableDay, setNullableDay: handleChange };
+};
+
+/**
  * Syncs week anchor with WeekHeader / URL. Updates shared day chip only on real header moves,
  * not on route mount — keeps Mail / Calendar / Tasks aligned with the global filter.
  */
@@ -198,10 +227,11 @@ export const useWeekAnchorWithSharedDayFilter = () => {
 // ——— UI ———
 
 export interface DaysFilterProps {
-  value: WeekdayShort;
-  onChange: (day: WeekdayShort) => void;
+  value: WeekdayShort | null;
+  onChange: (day: WeekdayShort | null) => void;
   days?: WeekdayShort[];
   className?: string;
+  allowToggleOff?: boolean;
 }
 
 const DaysFilter: React.FC<DaysFilterProps> = ({
@@ -209,6 +239,7 @@ const DaysFilter: React.FC<DaysFilterProps> = ({
   onChange,
   days = WEEKDAY_ORDER,
   className = "",
+  allowToggleOff = false,
 }) => {
   return (
     <div
@@ -223,7 +254,13 @@ const DaysFilter: React.FC<DaysFilterProps> = ({
             <button
               key={day}
               type="button"
-              onClick={() => onChange(day)}
+              onClick={() => {
+                if (allowToggleOff && isActive) {
+                  onChange(null);
+                  return;
+                }
+                onChange(day);
+              }}
               className={`days-filter__chip ${isActive ? "days-filter__chip--active" : "days-filter__chip--inactive"}`}
               aria-pressed={isActive}
             >
@@ -238,12 +275,51 @@ const DaysFilter: React.FC<DaysFilterProps> = ({
 
 export default DaysFilter;
 
+/**
+ * Convenience wrapper that plugs into the shared day filter and adds deselect
+ * (all-days) behavior out of the box.
+ */
+export const NullableConnectedDaysFilter: React.FC<{
+  className?: string;
+  days?: WeekdayShort[];
+  value?: WeekdayShort | null;
+  onChange?: (day: WeekdayShort | null) => void;
+}> = ({ className, days, value, onChange }) => {
+  const { nullableDay, setNullableDay } = useNullableDayFilter();
+  const effectiveValue = typeof value === "undefined" ? nullableDay : value;
+  const effectiveOnChange = onChange ?? setNullableDay;
+  return (
+    <DaysFilter
+      value={effectiveValue}
+      onChange={effectiveOnChange}
+      className={className}
+      days={days}
+      allowToggleOff
+    />
+  );
+};
+
 export const ConnectedDaysFilter: React.FC<{
   className?: string;
   days?: WeekdayShort[];
-}> = ({ className, days }) => {
+  allowToggleOff?: boolean;
+  value?: WeekdayShort | null;
+  onChange?: (day: WeekdayShort | null) => void;
+}> = ({ className, days, allowToggleOff, value, onChange }) => {
   const { selectedDay, setSelectedDay } = useDayFilter();
+  const handleChange = (day: WeekdayShort | null) => {
+    if (!day) return;
+    setSelectedDay(day);
+  };
+  const effectiveValue = typeof value === "undefined" ? selectedDay : value;
+  const effectiveOnChange = onChange ?? handleChange;
   return (
-    <DaysFilter value={selectedDay} onChange={setSelectedDay} className={className} days={days} />
+    <DaysFilter
+      value={effectiveValue}
+      onChange={effectiveOnChange}
+      className={className}
+      days={days}
+      allowToggleOff={allowToggleOff}
+    />
   );
 };
