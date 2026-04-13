@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
   NullableConnectedDaysFilter,
@@ -13,6 +13,11 @@ import {
   saveTasks,
   type SharedTask,
 } from "../services/taskProgress";
+import {
+  getUserTasks,
+  dismissTask,
+  type EmailTaskItem,
+} from "../services/api";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
 import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
@@ -118,6 +123,34 @@ const TasksPage: React.FC = () => {
   const [editingTime, setEditingTime] = useState("");
   const [isEditingTimeEnabled, setIsEditingTimeEnabled] = useState(true);
 
+  // Email-extracted tasks & deadlines from backend
+  const [emailItems, setEmailItems] = useState<EmailTaskItem[]>([]);
+  const [isLoadingEmailItems, setIsLoadingEmailItems] = useState(false);
+
+  const loadEmailItems = useCallback(async () => {
+    setIsLoadingEmailItems(true);
+    try {
+      const resp = await getUserTasks();
+      if (resp.success && resp.data?.items) {
+        setEmailItems(resp.data.items);
+      }
+    } catch {
+      // Silently fail — manual tasks are still shown
+    } finally {
+      setIsLoadingEmailItems(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadEmailItems();
+  }, [loadEmailItems]);
+
+  const handleDismissEmailItem = useCallback(async (key: string) => {
+    // Optimistically remove from UI
+    setEmailItems((prev) => prev.filter((item) => item.key !== key));
+    await dismissTask(key);
+  }, []);
+
   useEffect(() => {
     saveTasks(tasks);
   }, [tasks]);
@@ -130,14 +163,23 @@ const TasksPage: React.FC = () => {
   const visibleTasks = useMemo(() => {
     const filtered = tasks.filter((task) => {
       const d = parseIsoDate(task.date);
-      const matchesDay = selectedCalendarDay ? (d ? isSameLocalDay(d, selectedCalendarDay) : false) : true;
+      let matchesWeek: boolean;
+      if (d) {
+        // Always show the full current week (Mon–Sun) regardless of day selection
+        const weekMon = getDateForWeekdayInAnchorWeek(weekAnchor, "mon");
+        const weekSun = getDateForWeekdayInAnchorWeek(weekAnchor, "sun");
+        weekSun.setHours(23, 59, 59, 999);
+        matchesWeek = d >= weekMon && d <= weekSun;
+      } else {
+        matchesWeek = true;
+      }
       const matchesAccount =
         selectedAccount === "all" ||
         (task.accountEmail ?? "Unknown account") === selectedAccount;
-      return matchesDay && matchesAccount;
+      return matchesWeek && matchesAccount;
     });
     return [...filtered].sort(compareTasksByHierarchy);
-  }, [tasks, selectedCalendarDay, selectedAccount]);
+  }, [tasks, selectedAccount, weekAnchor]);
 
   const toggleTask = (taskId: number) => {
     setTasks((previousTasks) =>
@@ -484,6 +526,84 @@ const TasksPage: React.FC = () => {
 
               </div>
 
+            </section>
+
+            {/* Email-extracted Tasks & Deadlines */}
+            <section className="w-full max-w-4xl">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                    <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">mail</span>
+                    <span>From Emails</span>
+                    {isLoadingEmailItems && (
+                      <span className="ml-1 text-[11px] font-normal text-[#9CA3AF]">loading…</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  {emailItems.length === 0 && !isLoadingEmailItems ? (
+                    <p className="py-2 text-[12px] text-[#6B7280]">
+                      No pending tasks or deadlines from your emails.
+                    </p>
+                  ) : (
+                    emailItems.map((item, index) => {
+                      const isLast = index === emailItems.length - 1;
+                      const isDeadline = item.type === "deadline";
+                      return (
+                        <div
+                          key={item.key}
+                          className="group grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-x-3 py-3"
+                          style={{
+                            borderBottom: isLast ? "none" : "0.5px solid #E5E7EB",
+                          }}
+                        >
+                          {/* Left icon: deadline = clock, task = checkbox-style dot */}
+                          <div className="flex items-center justify-center">
+                            <span
+                              className={`material-symbols-outlined text-[18px] ${
+                                isDeadline ? "text-[#ef4444]" : "text-[#f9ab7b]"
+                              }`}
+                            >
+                              {isDeadline ? "schedule" : "task_alt"}
+                            </span>
+                          </div>
+
+                          <div className="min-w-0 text-left">
+                            <span className="block text-sm font-normal text-[#111827]">
+                              {item.text}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[11px] text-[#9CA3AF]">
+                              {item.emailSubject}
+                            </span>
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                isDeadline
+                                  ? "border border-[#fecdd3] bg-[#fee2e2] text-[#ef4444]"
+                                  : "border border-[#fde6d7] bg-[#fff7ed] text-[#f9ab7b]"
+                              }`}
+                            >
+                              {isDeadline ? "Deadline" : "Task"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDismissEmailItem(item.key)}
+                              className="inline-flex h-6 items-center justify-center rounded-full border border-[#E5E7EB] px-2 text-[10px] font-semibold text-[#6B7280] opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[#F3F4F6]"
+                              aria-label={`Dismiss "${item.text}"`}
+                              title="Done / Dismiss"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">check</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </section>
 
             <div className="flex items-center justify-center gap-3">

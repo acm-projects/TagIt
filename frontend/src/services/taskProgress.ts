@@ -14,12 +14,7 @@ export type TaskProgress = {
   progressPercentage: number;
 };
 
-export const DEFAULT_TASKS: SharedTask[] = [
-  { id: 1, label: "GOV 2306 review", done: false },
-  { id: 2, label: "PHYS review", done: false },
-  { id: 3, label: "Math Ch.2 practice", done: false },
-  { id: 4, label: "Bash scripting exercises", done: false },
-];
+export const DEFAULT_TASKS: SharedTask[] = [];
 
 const LEGACY_DEFAULT_TASK_LABEL_SETS = [
   [
@@ -90,18 +85,18 @@ const isSharedTaskArray = (value: unknown): value is SharedTask[] => {
 export const loadTasks = (): SharedTask[] => {
   try {
     const raw = localStorage.getItem(TASKS_STORAGE_KEY);
-    if (!raw) return cloneTasks(DEFAULT_TASKS);
+    if (!raw) return [];
 
     const parsed: unknown = JSON.parse(raw);
-    if (!isSharedTaskArray(parsed)) return cloneTasks(DEFAULT_TASKS);
+    if (!isSharedTaskArray(parsed)) return [];
 
     if (matchesLegacySeedTasks(parsed)) {
-      return cloneTasks(DEFAULT_TASKS);
+      return [];
     }
 
     return cloneTasks(parsed);
   } catch {
-    return cloneTasks(DEFAULT_TASKS);
+    return [];
   }
 };
 

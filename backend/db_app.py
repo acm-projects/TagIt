@@ -26,6 +26,7 @@ try:
     except Exception:
         pass
     db.emails.create_index([("id", 1), ("username", 1)], unique=True, sparse=True)
+    db.dismissed_tasks.create_index([("username", 1), ("key", 1)], unique=True, sparse=True)
     client.admin.command('ping')
     print("Connected to MongoDB and pinged")
 except Exception as e:
@@ -307,6 +308,163 @@ def add_emails_batch():
         "cached_count": cached_count,
         "results":      ordered_results,
     }), 200
+
+
+@app.route("/api/tasks/user", methods=["GET"])
+def get_user_tasks():
+    """
+    Extract tasks and deadlines from all processed emails for the current user.
+    Excludes any that have been permanently dismissed.
+    Each item gets a stable key derived from the email id + index so the frontend
+    can dismiss individual items.
+    """
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    # Load dismissed keys for this user
+    dismissed_docs = db.dismissed_tasks.find({"username": username}, {"key": 1})
+    dismissed_keys = {d["key"] for d in dismissed_docs}
+
+    docs = list(db.emails.find(
+        {"username": username, "isSpam": {"$ne": True}},
+    ).sort("_id", -1).limit(200))
+
+    items = []
+    for doc in docs:
+        email_id = doc.get("id", str(doc.get("_id", "")))
+        subject = doc.get("subject", "No Subject")
+        analysis = doc.get("aiAnalysis", {})
+        source = doc.get("source", "")
+        received = doc.get("receivedAt", "")
+
+        for i, task_text in enumerate(analysis.get("tasks", [])):
+            key = f"task:{email_id}:{i}"
+            if key in dismissed_keys:
+                continue
+            items.append({
+                "key": key,
+                "type": "task",
+                "text": task_text,
+                "emailSubject": subject,
+                "emailId": email_id,
+                "source": source,
+                "receivedAt": received,
+            })
+
+        for i, deadline_text in enumerate(analysis.get("deadlines", [])):
+            key = f"deadline:{email_id}:{i}"
+            if key in dismissed_keys:
+                continue
+            items.append({
+                "key": key,
+                "type": "deadline",
+                "text": deadline_text,
+                "emailSubject": subject,
+                "emailId": email_id,
+                "source": source,
+                "receivedAt": received,
+            })
+
+    return jsonify({"items": items}), 200
+
+
+@app.route("/api/tasks/dismiss", methods=["POST"])
+def dismiss_task():
+    """
+    Permanently dismiss a task or deadline so it never comes back.
+    Body: { "key": "task:<emailId>:<index>" }
+    """
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    data = request.json
+    key = (data or {}).get("key", "").strip()
+    if not key:
+        return jsonify({"error": "Missing key."}), 400
+
+    try:
+        db.dismissed_tasks.insert_one({"username": username, "key": key})
+    except Exception:
+        pass  # Already dismissed — idempotent
+
+    return jsonify({"message": "Dismissed."}), 200
+
+
+@app.route("/api/tasks/dismiss-batch", methods=["POST"])
+def dismiss_tasks_batch():
+    """
+    Permanently dismiss multiple tasks/deadlines at once.
+    Body: { "keys": ["task:<emailId>:<index>", ...] }
+    """
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    data = request.json
+    keys = (data or {}).get("keys", [])
+    if not isinstance(keys, list) or not keys:
+        return jsonify({"error": "Missing keys array."}), 400
+
+    for key in keys:
+        key = str(key).strip()
+        if not key:
+            continue
+        try:
+            db.dismissed_tasks.insert_one({"username": username, "key": key})
+        except Exception:
+            pass
+
+    return jsonify({"message": f"Dismissed {len(keys)} items."}), 200
+
+
+@app.route("/api/events/user", methods=["GET"])
+def get_user_events():
+    """
+    Extract calendar events from all processed emails for the current user.
+    Excludes any that have been permanently dismissed.
+    Each item gets a stable key so the frontend can dismiss individual items.
+    """
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    dismissed_docs = db.dismissed_tasks.find({"username": username}, {"key": 1})
+    dismissed_keys = {d["key"] for d in dismissed_docs}
+
+    docs = list(db.emails.find(
+        {"username": username, "isSpam": {"$ne": True}},
+    ).sort("_id", -1).limit(200))
+
+    items = []
+    for doc in docs:
+        email_id = doc.get("id", str(doc.get("_id", "")))
+        subject = doc.get("subject", "No Subject")
+        analysis = doc.get("aiAnalysis", {})
+        source = doc.get("source", "")
+        received = doc.get("receivedAt", "")
+        location = analysis.get("location", "")
+        time_val = analysis.get("time", "")
+        priority = analysis.get("priorityLevel", 4)
+
+        for i, event_text in enumerate(analysis.get("events", [])):
+            key = f"event:{email_id}:{i}"
+            if key in dismissed_keys:
+                continue
+            items.append({
+                "key": key,
+                "text": event_text,
+                "emailSubject": subject,
+                "emailId": email_id,
+                "source": source,
+                "receivedAt": received,
+                "location": location,
+                "time": time_val,
+                "priorityLevel": priority,
+            })
+
+    return jsonify({"items": items}), 200
 
 
 @app.route("/api/chat", methods=["POST"])

@@ -245,3 +245,51 @@ export async function getUserEmails(): Promise<
 > {
   return apiRequest("/api/emails/user", { method: "GET" });
 }
+
+export interface EmailTaskItem {
+  key: string;
+  type: "task" | "deadline";
+  text: string;
+  emailSubject: string;
+  emailId: string;
+  source: string;
+  receivedAt: string;
+}
+
+export async function getUserTasks(): Promise<
+  ApiResponse<{ items: EmailTaskItem[] }>
+> {
+  return apiRequest("/api/tasks/user", { method: "GET" });
+}
+
+export async function dismissTask(key: string): Promise<ApiResponse> {
+  return apiRequest("/api/tasks/dismiss", {
+    method: "POST",
+    body: JSON.stringify({ key }),
+  });
+}
+
+export async function dismissTasksBatch(keys: string[]): Promise<ApiResponse> {
+  return apiRequest("/api/tasks/dismiss-batch", {
+    method: "POST",
+    body: JSON.stringify({ keys }),
+  });
+}
+
+export interface EmailEventItem {
+  key: string;
+  text: string;
+  emailSubject: string;
+  emailId: string;
+  source: string;
+  receivedAt: string;
+  location: string;
+  time: string;
+  priorityLevel: number;
+}
+
+export async function getUserEvents(): Promise<
+  ApiResponse<{ items: EmailEventItem[] }>
+> {
+  return apiRequest("/api/events/user", { method: "GET" });
+}

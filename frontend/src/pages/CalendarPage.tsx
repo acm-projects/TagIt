@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
-import { useWeekAnchorWithSharedDayFilter, useNullableDayFilter, NullableConnectedDaysFilter } from "../components/DaysFilter";
+import { useWeekAnchorWithSharedDayFilter, useNullableDayFilter, NullableConnectedDaysFilter, getDateForWeekdayInAnchorWeek } from "../components/DaysFilter";
 import WeekHeader from "../components/WeekHeader";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
@@ -10,6 +10,7 @@ import {
 } from "../services/categories";
 import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
 import { loadConnectedEmails } from "../services/connectedUser";
+import { getUserEvents, dismissTask, type EmailEventItem } from "../services/api";
 
 type CalendarEvent = {
   id: string;
@@ -22,55 +23,59 @@ type CalendarEvent = {
   source: "google" | "outlook";
   tagCategoryId?: string;
   accountEmail?: string;
+  emailKey?: string; // stable key for backend-sourced events (dismissal)
 };
 
-const CALENDAR_EVENTS: CalendarEvent[] = [
-  {
-    id: "cal-seed-acm-social",
-    title: "ACM Social Night #1",
-    date1: "03/28/2026",
-    day1: "Sat",
-    time: "07:00 - 10:00",
-    source: "google",
-    tagCategoryId: "priority-1",
-  },
-  {
-    id: "cal-seed-wehack",
-    title: "WeHack - Hackathon",
-    date1: "03/27/2026",
-    day1: "Fri",
-    date2: "03/28/2026",
-    day2: "Sat",
-    time: "09:00 - 24:00\n00:00 - 05:30",
-    source: "outlook",
-    tagCategoryId: "priority-3",
-  },
-  {
-    id: "cal-seed-resume",
-    title: "Resume Review Drop-In",
-    date1: "03/24/2026",
-    day1: "Tue",
-    time: "01:30 - 02:30",
-    source: "google",
-    tagCategoryId: "priority-3",
-  },
-  {
-    id: "cal-seed-systems",
-    title: "Systems Project Checkpoint",
-    date1: "03/26/2026",
-    day1: "Thu",
-    time: "11:00 - 12:15",
-    source: "outlook",
-    tagCategoryId: "priority-2",
-  },
-];
+/** Parse an ISO 8601 datetime string and return { dateLabel: "MM/DD/YYYY", dayLabel: "Mon" } */
+const parseIsoToDisplayDate = (iso: string): { dateLabel: string; dayLabel: string } | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const year = d.getFullYear();
+  const dayLabel = d.toLocaleDateString("en-US", { weekday: "short" });
+  return { dateLabel: `${month}/${day}/${year}`, dayLabel };
+};
 
-const assignAccountsToEvents = (events: CalendarEvent[], emails: string[]): CalendarEvent[] => {
-  if (emails.length === 0) return events;
-  return events.map((event, index) => ({
-    ...event,
-    accountEmail: event.accountEmail ?? emails[index % emails.length],
-  }));
+/** Parse MM/DD/YYYY to a Date object. */
+const parseMmDdYyyy = (raw: string): Date | null => {
+  const [monthRaw, dayRaw, yearRaw] = raw.split("/");
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const year = Number(yearRaw);
+  if (!month || !day || !year) return null;
+  return new Date(year, month - 1, day);
+};
+
+/** Convert an EmailEventItem from the backend into a CalendarEvent for the UI. */
+const emailEventToCalendarEvent = (item: EmailEventItem): CalendarEvent => {
+  const parsed = parseIsoToDisplayDate(item.time);
+  const dateLabel = parsed?.dateLabel ?? "";
+  const dayLabel = parsed?.dayLabel ?? "";
+
+  // Try to extract a readable time range from the ISO string
+  let timeDisplay = "";
+  if (item.time) {
+    const d = new Date(item.time);
+    if (!isNaN(d.getTime())) {
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      timeDisplay = `${hh}:${mm}`;
+    }
+  }
+
+  return {
+    id: item.key,
+    title: item.text || item.emailSubject,
+    date1: dateLabel,
+    day1: dayLabel,
+    time: timeDisplay || "TBD",
+    source: (item.source === "outlook" ? "outlook" : "google") as "google" | "outlook",
+    tagCategoryId: `priority-${item.priorityLevel}`,
+    accountEmail: item.source || "",
+    emailKey: item.key,
+  };
 };
 
 /** Local calendar date for `<input type="date" />` (YYYY-MM-DD). */
@@ -92,14 +97,13 @@ type CalendarToast =
 
 const CalendarPage: React.FC = () => {
   const { nullableDay: calendarDay, setNullableDay: setCalendarDay } = useNullableDayFilter();
-  const { handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
+  const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
   const categories = useUserCategories();
 
   const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
   const [selectedAccount, setSelectedAccount] = useState<string>("all");
-  const [events, setEvents] = useState<CalendarEvent[]>(() =>
-    assignAccountsToEvents(CALENDAR_EVENTS, loadConnectedEmails())
-  );
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [slidingEventIds, setSlidingEventIds] = useState<Set<string>>(() => new Set());
   const [closingEventIds, setClosingEventIds] = useState<Set<string>>(() => new Set());
@@ -116,16 +120,27 @@ const CalendarPage: React.FC = () => {
   const filteredEvents = useMemo(() => {
     const target = calendarDay ? dayCode(calendarDay) : null;
     return events.filter((event) => {
-      const matchesDay =
-        !target ||
-        dayCode(event.day1) === target ||
-        (event.day2 && dayCode(event.day2) === target);
+      // Always enforce current-week boundary (Mon–Sun)
+      const d = parseMmDdYyyy(event.date1);
+      if (d) {
+        const weekMon = getDateForWeekdayInAnchorWeek(weekAnchor, "mon");
+        const weekSun = getDateForWeekdayInAnchorWeek(weekAnchor, "sun");
+        weekSun.setHours(23, 59, 59, 999);
+        if (d < weekMon || d > weekSun) return false;
+      }
+      // If a specific day is selected, also filter by day-of-week
+      if (target) {
+        const matchesDay =
+          dayCode(event.day1) === target ||
+          (event.day2 && dayCode(event.day2) === target);
+        if (!matchesDay) return false;
+      }
       const matchesAccount =
         selectedAccount === "all" ||
         (event.accountEmail ?? "Unknown account") === selectedAccount;
-      return matchesDay && matchesAccount;
+      return matchesAccount;
     });
-  }, [calendarDay, events, selectedAccount]);
+  }, [calendarDay, events, selectedAccount, weekAnchor]);
 
   const parseDateInput = (value: string) => {
     const [year, month, day] = value.split("-").map(Number);
@@ -182,8 +197,31 @@ const CalendarPage: React.FC = () => {
   useEffect(() => {
     const emails = loadConnectedEmails();
     setConnectedEmails(emails);
-    setEvents((prev) => assignAccountsToEvents(prev, emails));
   }, []);
+
+  // Load email-extracted events from backend
+  const loadEmailEvents = useCallback(async () => {
+    setIsLoadingEvents(true);
+    try {
+      const resp = await getUserEvents();
+      if (resp.success && resp.data?.items) {
+        setEvents((prev) => {
+          // Keep manually-added events, replace backend ones
+          const manual = prev.filter((e) => !e.emailKey);
+          const fromBackend = resp.data!.items.map(emailEventToCalendarEvent);
+          return [...fromBackend, ...manual];
+        });
+      }
+    } catch {
+      // Silently fail — manual events still shown
+    } finally {
+      setIsLoadingEvents(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadEmailEvents();
+  }, [loadEmailEvents]);
 
   const clearCalendarToastTimer = () => {
     if (calendarToastTimerRef.current !== null) {
@@ -246,6 +284,8 @@ const CalendarPage: React.FC = () => {
       setEvents((prev) => prev.filter((e) => e.id !== eventId));
       finishDismissEvent(eventId);
       showCalendarToast({ type: "added" });
+      // Permanently dismiss backend-sourced events
+      if (event.emailKey) void dismissTask(event.emailKey);
     }, 520);
   };
 
@@ -269,6 +309,8 @@ const CalendarPage: React.FC = () => {
       setEvents((prev) => prev.filter((e) => e.id !== eventId));
       finishDismissEvent(eventId);
       showCalendarToast({ type: "removed", event, insertIndex });
+      // Permanently dismiss backend-sourced events
+      if (event.emailKey) void dismissTask(event.emailKey);
     }, 520);
   };
 
@@ -314,6 +356,9 @@ const CalendarPage: React.FC = () => {
                       event_note
                     </span>
                     <span>Calendar Events</span>
+                    {isLoadingEvents && (
+                      <span className="ml-1 text-[11px] font-normal text-[#9CA3AF]">loading…</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 pr-1">
                     <FilterMenuButton
