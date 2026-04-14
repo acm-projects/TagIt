@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Material Symbols Outlined (Google Fonts) */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: 400;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* Primary app pages: hide scrollbar on main scroll area */
+.app-main-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.app-main-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.tagged-item {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.color-line {
+  width: 4px;
+  min-height: 24px;
+  margin: 6px 8px 6px 0;
+  border-radius: 2px;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.today-page .page-header .material-symbols-outlined {
+  font-size: 36px;
+}
+
+.today-page .page-header .text-\[22px\] {
+  font-size: 26px;
+}
+
+.today-page .page-header .text-\[14px\] {
+  font-size: 15px;
+}
+
+.email-row {
+  position: relative;
+  max-height: 160px;
+  transition:
+    transform 260ms ease,
+    opacity 260ms ease,
+    max-height 300ms ease,
+    margin 300ms ease,
+    padding 300ms ease,
+    box-shadow 260ms ease,
+    background-color 260ms ease;
+}
+
+.email-row::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 6px;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: rgba(34, 197, 94, 0.38);
+  filter: blur(14px);
+  opacity: 0;
+  transform: scaleX(0.85);
+  transition:
+    opacity 240ms ease,
+    transform 240ms ease;
+  pointer-events: none;
+}
+
+.email-row--slide-up {
+  transform: translateY(-6px);
+  opacity: 0.92;
+  box-shadow:
+    0 10px 18px rgba(34, 197, 94, 0.16),
+    0 14px 32px rgba(34, 197, 94, 0.18);
+}
+
+.email-row--slide-up::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.email-row--closing {
+  transform: translateY(-10px);
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  box-shadow:
+    0 8px 14px rgba(34, 197, 94, 0.12);
+}
+
+/* Calendar event rows — same motion as important-email check; green (add) or red (delete) */
+.calendar-event-row {
+  max-height: 220px;
+  overflow: hidden;
+  transition:
+    transform 260ms ease,
+    opacity 260ms ease,
+    max-height 300ms ease,
+    margin 300ms ease,
+    padding 300ms ease,
+    box-shadow 260ms ease,
+    background-color 260ms ease;
+}
+
+.calendar-event-row--slide-up-green {
+  transform: translateY(-6px);
+  opacity: 0.92;
+  box-shadow: 0 10px 18px rgba(34, 197, 94, 0.16);
+}
+
+.calendar-event-row--closing-green {
+  transform: translateY(-10px);
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  box-shadow: 0 8px 14px rgba(34, 197, 94, 0.12);
+}
+
+.calendar-event-row--slide-up-red {
+  transform: translateY(-6px);
+  opacity: 0.92;
+  box-shadow: 0 10px 18px rgba(239, 68, 68, 0.2);
+}
+
+.calendar-event-row--closing-red {
+  transform: translateY(-10px);
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  box-shadow: 0 8px 14px rgba(239, 68, 68, 0.14);
+}
