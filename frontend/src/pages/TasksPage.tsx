@@ -16,12 +16,36 @@ import {
 import {
   getUserTasks,
   dismissTask,
+  addEventToGoogleCalendar,
   type EmailTaskItem,
 } from "../services/api";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
-import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
 import { loadConnectedEmails } from "../services/connectedUser";
+
+/** Keys of email items already pushed to GCal — persisted in chrome.storage */
+const GCAL_PUSHED_STORAGE_KEY = "tagit_gcal_pushed_keys";
+
+async function getGCalPushedKeys(): Promise<Set<string>> {
+  try {
+    const result = await chrome.storage.local.get(GCAL_PUSHED_STORAGE_KEY);
+    const arr = result[GCAL_PUSHED_STORAGE_KEY];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+async function markGCalPushed(keys: string[]): Promise<void> {
+  if (!keys.length) return;
+  try {
+    const existing = await getGCalPushedKeys();
+    const merged = [...existing, ...keys];
+    await chrome.storage.local.set({ [GCAL_PUSHED_STORAGE_KEY]: merged });
+  } catch {
+    // Silently fail — dedup is best-effort
+  }
+}
 
 /**
  * Represents a single task on the Tasks page.
@@ -108,7 +132,6 @@ const TasksPage: React.FC = () => {
   const { nullableDay: taskDay, setNullableDay: setTaskDay } = useNullableDayFilter();
   const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
   const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
-  const [selectedAccount, setSelectedAccount] = useState<string>("all");
   const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks().map((task, index) => ({
     ...task,
     accountEmail: task.accountEmail ?? loadConnectedEmails()[index % Math.max(loadConnectedEmails().length, 1)] ?? "primary@university.edu",
@@ -132,7 +155,37 @@ const TasksPage: React.FC = () => {
     try {
       const resp = await getUserTasks();
       if (resp.success && resp.data?.items) {
-        setEmailItems(resp.data.items);
+        const items = resp.data.items;
+        setEmailItems(items);
+
+        // Auto-push new items to Google Calendar (deduped via chrome.storage)
+        const pushed = await getGCalPushedKeys();
+        const newItems = items.filter((item) => !pushed.has(item.key));
+        if (newItems.length > 0) {
+          // Probe with the first item — if auth fails, skip everything
+          const firstItem = newItems[0];
+          const probeResult = await addEventToGoogleCalendar({
+            title: `[${firstItem.type === "deadline" ? "Deadline" : "Task"}] ${firstItem.text}`,
+            date: firstItem.time ? firstItem.time.split("T")[0] : undefined,
+            location: firstItem.location || undefined,
+          });
+          const authFailed =
+            probeResult.error === "INSUFFICIENT_SCOPES" ||
+            probeResult.error === "NO_GOOGLE_TOKEN";
+          if (!authFailed) {
+            const newKeys: string[] = [];
+            if (probeResult.success) newKeys.push(firstItem.key);
+            for (const item of newItems.slice(1)) {
+              const result = await addEventToGoogleCalendar({
+                title: `[${item.type === "deadline" ? "Deadline" : "Task"}] ${item.text}`,
+                date: item.time ? item.time.split("T")[0] : undefined,
+                location: item.location || undefined,
+              });
+              if (result.success) newKeys.push(item.key);
+            }
+            await markGCalPushed(newKeys);
+          }
+        }
       }
     } catch {
       // Silently fail — manual tasks are still shown
@@ -163,23 +216,17 @@ const TasksPage: React.FC = () => {
   const visibleTasks = useMemo(() => {
     const filtered = tasks.filter((task) => {
       const d = parseIsoDate(task.date);
-      let matchesWeek: boolean;
       if (d) {
         // Always show the full current week (Mon–Sun) regardless of day selection
         const weekMon = getDateForWeekdayInAnchorWeek(weekAnchor, "mon");
         const weekSun = getDateForWeekdayInAnchorWeek(weekAnchor, "sun");
         weekSun.setHours(23, 59, 59, 999);
-        matchesWeek = d >= weekMon && d <= weekSun;
-      } else {
-        matchesWeek = true;
+        return d >= weekMon && d <= weekSun;
       }
-      const matchesAccount =
-        selectedAccount === "all" ||
-        (task.accountEmail ?? "Unknown account") === selectedAccount;
-      return matchesWeek && matchesAccount;
+      return true;
     });
     return [...filtered].sort(compareTasksByHierarchy);
-  }, [tasks, selectedAccount, weekAnchor]);
+  }, [tasks, weekAnchor]);
 
   const toggleTask = (taskId: number) => {
     setTasks((previousTasks) =>
@@ -219,10 +266,7 @@ const TasksPage: React.FC = () => {
 
     const nextId =
       tasks.length === 0 ? 1 : Math.max(...tasks.map((task) => task.id)) + 1;
-    const accountEmail =
-      selectedAccount !== "all"
-        ? selectedAccount
-        : connectedEmails[0] ?? "primary@university.edu";
+    const accountEmail = connectedEmails[0] ?? "";
 
     setTasks((previousTasks) => [
       ...previousTasks,
@@ -270,7 +314,7 @@ const TasksPage: React.FC = () => {
               label: trimmedLabel,
               date: editingDate,
               time: isEditingTimeEnabled ? editingTime : undefined,
-              accountEmail: task.accountEmail ?? (selectedAccount !== "all" ? selectedAccount : connectedEmails[0]),
+              accountEmail: task.accountEmail ?? connectedEmails[0],
             }
           : task,
       ),
@@ -300,12 +344,6 @@ const TasksPage: React.FC = () => {
       })),
     );
   }, []);
-
-  const accountOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
-    (connectedEmails.length ? connectedEmails : Array.from(new Set(tasks.map((t) => t.accountEmail).filter(Boolean) as string[]))).map(
-      (email) => ({ value: email, label: email })
-    )
-  );
 
   const deleteTask = (taskId: number) => {
     setTasks((previousTasks) => previousTasks.filter((task) => task.id !== taskId));
@@ -371,15 +409,6 @@ const TasksPage: React.FC = () => {
                       <path d="M268-240 42-466l57-56 170 170 56 56-57 56Zm226 0L268-466l56-57 170 170 368-368 56 57-424 424Zm0-226-57-56 198-198 57 56-198 198Z" />
                     </svg>
                     <span>Tasks</span>
-                  </div>
-                  <div className="flex items-center gap-2 pr-1">
-                    <FilterMenuButton
-                      options={accountOptions}
-                      selectedValue={selectedAccount}
-                      onSelect={setSelectedAccount}
-                      ariaLabel="Filter tasks by account"
-                      emptyMessage="No accounts yet"
-                    />
                   </div>
                 </div>
 

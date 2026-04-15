@@ -408,9 +408,14 @@ const SettingsPage: React.FC = () => {
                     </span>
                   </div>
 
-                  {connectedUser.emails.length > 0 && (
-                    <div className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 text-sm text-[#1F2933]">
-                      {connectedUser.emails.map((email, index) => {
+                  <div className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 text-sm text-[#1F2933]">
+                    <p className="px-0 pb-1 pt-3 text-[11px] font-medium uppercase tracking-[0.12em] text-[#9CA3AF]">
+                      Connected Emails
+                    </p>
+                    {connectedUser.emails.length === 0 ? (
+                      <p className="pb-3 text-[12px] text-[#9CA3AF]">No emails connected yet.</p>
+                    ) : (
+                      connectedUser.emails.map((email, index) => {
                         const isLast = index === connectedUser.emails.length - 1;
                         const rowDivider = {
                           borderBottom: isLast ? "none" : "0.5px solid #E5E7EB",
@@ -450,9 +455,9 @@ const SettingsPage: React.FC = () => {
                             </button>
                           </div>
                         );
-                      })}
-                    </div>
-                  )}
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
             </section>

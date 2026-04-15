@@ -1,14 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
-import {
-  ConnectedDaysFilter,
-  getDateForWeekdayInAnchorWeek,
-  isSameLocalDay,
-  useDayFilter,
-  useWeekAnchorWithSharedDayFilter,
-} from "../components/DaysFilter";
-import WeekHeader from "../components/WeekHeader";
+import { isSameLocalDay } from "../components/DaysFilter";
 import {
   getTaskProgress,
   loadTasks,
@@ -201,15 +194,15 @@ function pickNormalMascotMessage(
   return pickRandomLine(pool);
 }
 
+const TODAY = new Date();
+
+const formatTodayLabel = (date: Date): string => {
+  return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+};
+
 const TodayPage: React.FC = () => {
   const navigate = useNavigate();
-  const { selectedDay } = useDayFilter();
-  const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
-
-  const selectedCalendarDate = useMemo(
-    () => getDateForWeekdayInAnchorWeek(weekAnchor, selectedDay),
-    [weekAnchor, selectedDay],
-  );
+  const selectedCalendarDate = TODAY;
 
   const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
   const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
@@ -462,10 +455,15 @@ const TodayPage: React.FC = () => {
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
-          <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
+          <header className="page-header w-full shrink-0 px-0 pb-3 pt-4 text-[#1F2933]">
+            <div className="relative flex min-h-16 items-center justify-center">
+              <h1 className="min-w-0 w-full max-w-full truncate px-2 text-center text-2xl font-semibold leading-tight tracking-[0.12em] text-[#111827] sm:text-3xl">
+                {formatTodayLabel(TODAY)}
+              </h1>
+            </div>
+          </header>
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
-            <ConnectedDaysFilter className="!mt-0" />
 
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_6px_14px_rgba(15,23,42,0.05)]">

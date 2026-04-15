@@ -13,6 +13,7 @@ const SCOPES = [
   "email",
   "profile",
   "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
 ];
 
 export function getRedirectUrl(): string {

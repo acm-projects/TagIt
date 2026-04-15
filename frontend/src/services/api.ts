@@ -254,6 +254,17 @@ export interface EmailTaskItem {
   emailId: string;
   source: string;
   receivedAt: string;
+  time?: string;
+  location?: string;
+}
+
+export interface GoogleCalendarEvent {
+  id: string;
+  summary: string;
+  start: { date?: string; dateTime?: string; timeZone?: string };
+  end: { date?: string; dateTime?: string; timeZone?: string };
+  location?: string;
+  description?: string;
 }
 
 export async function getUserTasks(): Promise<
@@ -292,4 +303,21 @@ export async function getUserEvents(): Promise<
   ApiResponse<{ items: EmailEventItem[] }>
 > {
   return apiRequest("/api/events/user", { method: "GET" });
+}
+
+export async function getGoogleCalendarEvents(): Promise<
+  ApiResponse<{ items: GoogleCalendarEvent[] }>
+> {
+  return nodeApiRequest("/calendar/events", { method: "GET" });
+}
+
+export async function addEventToGoogleCalendar(params: {
+  title: string;
+  date?: string;
+  location?: string;
+}): Promise<ApiResponse<{ eventId: string; htmlLink: string }>> {
+  return nodeApiRequest("/calendar/add-event", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
 }

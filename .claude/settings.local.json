@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(powershell -Command \"& 'C:/Users/peyto/Downloads/tagit/frontend/node_modules/.bin/tsc' --noEmit 2>&1\")"
+    ]
+  }
+}

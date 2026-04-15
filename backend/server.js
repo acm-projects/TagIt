@@ -772,6 +772,41 @@ app.post('/calendar/add-event', requireAuth, async (req, res) => {
         if (err.message === 'NO_GOOGLE_TOKEN') {
             return res.status(401).json({ error: 'NO_GOOGLE_TOKEN' });
         }
+        if (err.response?.status === 403) {
+            return res.status(403).json({ error: 'INSUFFICIENT_SCOPES' });
+        }
+        console.error(err);
+        res.status(500).json({ error: err.message || String(err) });
+    }
+});
+
+// GET /calendar/events — fetch upcoming events from the user's primary Google Calendar
+app.get('/calendar/events', requireAuth, async (req, res) => {
+    try {
+        const authClient = await getGoogleClientForUser(req.userToken);
+        const calendar = google.calendar({ version: 'v3', auth: authClient });
+
+        // Start from 60 days ago so existing/past events are included
+        const timeMin = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+        const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
+        const response = await calendar.events.list({
+            calendarId: 'primary',
+            timeMin,
+            timeMax,
+            maxResults: 50,
+            singleEvents: true,
+            orderBy: 'startTime',
+        });
+
+        res.json({ items: response.data.items || [] });
+    } catch (err) {
+        if (err.message === 'NO_GOOGLE_TOKEN') {
+            return res.status(401).json({ error: 'NO_GOOGLE_TOKEN' });
+        }
+        if (err.response?.status === 403) {
+            return res.status(403).json({ error: 'INSUFFICIENT_SCOPES' });
+        }
         console.error(err);
         res.status(500).json({ error: err.message || String(err) });
     }

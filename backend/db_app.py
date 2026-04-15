@@ -338,6 +338,9 @@ def get_user_tasks():
         source = doc.get("source", "")
         received = doc.get("receivedAt", "")
 
+        time_val = analysis.get("time", "")
+        location_val = analysis.get("location", "")
+
         for i, task_text in enumerate(analysis.get("tasks", [])):
             key = f"task:{email_id}:{i}"
             if key in dismissed_keys:
@@ -350,6 +353,8 @@ def get_user_tasks():
                 "emailId": email_id,
                 "source": source,
                 "receivedAt": received,
+                "time": time_val,
+                "location": location_val,
             })
 
         for i, deadline_text in enumerate(analysis.get("deadlines", [])):
@@ -364,6 +369,8 @@ def get_user_tasks():
                 "emailId": email_id,
                 "source": source,
                 "receivedAt": received,
+                "time": time_val,
+                "location": location_val,
             })
 
     return jsonify({"items": items}), 200

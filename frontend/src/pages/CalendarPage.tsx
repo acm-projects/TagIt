@@ -8,9 +8,8 @@ import {
   getCategoryColorById,
   useUserCategories,
 } from "../services/categories";
-import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
 import { loadConnectedEmails } from "../services/connectedUser";
-import { getUserEvents, dismissTask, type EmailEventItem } from "../services/api";
+import { getUserEvents, dismissTask, addEventToGoogleCalendar, getGoogleCalendarEvents, type EmailEventItem, type GoogleCalendarEvent } from "../services/api";
 
 type CalendarEvent = {
   id: string;
@@ -24,12 +23,21 @@ type CalendarEvent = {
   tagCategoryId?: string;
   accountEmail?: string;
   emailKey?: string; // stable key for backend-sourced events (dismissal)
+  fromGCal?: boolean; // true for events fetched directly from Google Calendar
 };
 
 /** Parse an ISO 8601 datetime string and return { dateLabel: "MM/DD/YYYY", dayLabel: "Mon" } */
 const parseIsoToDisplayDate = (iso: string): { dateLabel: string; dayLabel: string } | null => {
   if (!iso) return null;
-  const d = new Date(iso);
+  // Date-only strings ("YYYY-MM-DD") must be parsed as local time — new Date()
+  // treats them as UTC midnight which shifts the day back in negative-offset zones.
+  let d: Date;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso.trim())) {
+    const [y, m, day] = iso.trim().split("-").map(Number);
+    d = new Date(y, m - 1, day);
+  } else {
+    d = new Date(iso);
+  }
   if (isNaN(d.getTime())) return null;
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -78,6 +86,72 @@ const emailEventToCalendarEvent = (item: EmailEventItem): CalendarEvent => {
   };
 };
 
+/** Convert MM/DD/YYYY display date to YYYY-MM-DD for the API. */
+const mmDdYyyyToIso = (mmddyyyy: string): string => {
+  const [m, d, y] = mmddyyyy.split("/");
+  if (!m || !d || !y) return "";
+  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+};
+
+/** Convert a raw Google Calendar API event into the local CalendarEvent shape. */
+const googleCalEventToCalendarEvent = (item: GoogleCalendarEvent): CalendarEvent => {
+  const isAllDay = !item.start.dateTime;
+
+  // All-day events have a plain date string "YYYY-MM-DD" — parse as local time
+  // to avoid the UTC-midnight-shifting-to-previous-day bug.
+  const parseLocalDate = (s: string): Date | null => {
+    if (!s) return null;
+    const [y, m, d] = s.split("-").map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d); // local midnight, no timezone shift
+  };
+
+  const parseDateTimeStr = (s: string): Date | null => {
+    if (!s) return null;
+    const d = new Date(s); // dateTime strings include tz offset — safe to parse
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const startD = isAllDay
+    ? parseLocalDate(item.start.date ?? "")
+    : parseDateTimeStr(item.start.dateTime ?? "");
+  const endD = isAllDay
+    ? parseLocalDate(item.end.date ?? "")
+    : parseDateTimeStr(item.end.dateTime ?? "");
+
+  const fmtDate = (d: Date) => {
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const y = d.getFullYear();
+    return `${m}/${day}/${y}`;
+  };
+
+  const fmtDay = (d: Date) => d.toLocaleDateString("en-US", { weekday: "short" });
+
+  const fmtTime = (d: Date) => {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+  };
+
+  const timeDisplay = isAllDay
+    ? "All day"
+    : startD && endD
+    ? `${fmtTime(startD)} - ${fmtTime(endD)}`
+    : "All day";
+
+  return {
+    id: `gcal-${item.id}`,
+    title: item.summary || "(No title)",
+    date1: startD ? fmtDate(startD) : "",
+    day1: startD ? fmtDay(startD) : "",
+    time: timeDisplay,
+    source: "google" as const,
+    tagCategoryId: "priority-3",
+    fromGCal: true,
+  };
+};
+
 /** Local calendar date for `<input type="date" />` (YYYY-MM-DD). */
 const formatIsoDateLocal = (date: Date): string => {
   const y = date.getFullYear();
@@ -101,7 +175,6 @@ const CalendarPage: React.FC = () => {
   const categories = useUserCategories();
 
   const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
-  const [selectedAccount, setSelectedAccount] = useState<string>("all");
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isAddingEvent, setIsAddingEvent] = useState(false);
@@ -135,12 +208,9 @@ const CalendarPage: React.FC = () => {
           (event.day2 && dayCode(event.day2) === target);
         if (!matchesDay) return false;
       }
-      const matchesAccount =
-        selectedAccount === "all" ||
-        (event.accountEmail ?? "Unknown account") === selectedAccount;
-      return matchesAccount;
+      return true;
     });
-  }, [calendarDay, events, selectedAccount, weekAnchor]);
+  }, [calendarDay, events, weekAnchor]);
 
   const parseDateInput = (value: string) => {
     const [year, month, day] = value.split("-").map(Number);
@@ -156,10 +226,7 @@ const CalendarPage: React.FC = () => {
     const parsed = parseDateInput(newEventDate);
     const dayLabel = parsed?.dayLabel ?? "Mon";
     const dateLabel = parsed?.dateLabel ?? newEventDate;
-    const accountEmail =
-      selectedAccount !== "all"
-        ? selectedAccount
-        : connectedEmails[0] ?? "primary@university.edu";
+    const accountEmail = connectedEmails[0] ?? "";
     const nextEvent: CalendarEvent = {
       id: newCalendarEventId(),
       title: newEventTitle.trim(),
@@ -171,6 +238,8 @@ const CalendarPage: React.FC = () => {
       accountEmail,
     };
     setEvents((prev) => [nextEvent, ...prev]);
+    // Add to user's Google Calendar
+    void addEventToGoogleCalendar({ title: newEventTitle.trim(), date: newEventDate });
     setIsAddingEvent(false);
     setNewEventTitle("");
     setNewEventDate(formatIsoDateLocal(new Date()));
@@ -206,10 +275,10 @@ const CalendarPage: React.FC = () => {
       const resp = await getUserEvents();
       if (resp.success && resp.data?.items) {
         setEvents((prev) => {
-          // Keep manually-added events, replace backend ones
-          const manual = prev.filter((e) => !e.emailKey);
+          // Keep manually-added and GCal events; replace email-backend ones
+          const keep = prev.filter((e) => !e.emailKey);
           const fromBackend = resp.data!.items.map(emailEventToCalendarEvent);
-          return [...fromBackend, ...manual];
+          return [...fromBackend, ...keep];
         });
       }
     } catch {
@@ -219,9 +288,23 @@ const CalendarPage: React.FC = () => {
     }
   }, []);
 
+  // Load events from the user's actual Google Calendar
+  const loadGCalEvents = useCallback(async () => {
+    const resp = await getGoogleCalendarEvents();
+    if (resp.success && resp.data?.items) {
+      setEvents((prev) => {
+        const keep = prev.filter((e) => !e.fromGCal);
+        const fromGCal = resp.data!.items.map(googleCalEventToCalendarEvent);
+        return [...keep, ...fromGCal];
+      });
+    }
+    // If INSUFFICIENT_SCOPES / NO_GOOGLE_TOKEN, just show nothing
+  }, []);
+
   useEffect(() => {
     void loadEmailEvents();
-  }, [loadEmailEvents]);
+    void loadGCalEvents();
+  }, [loadEmailEvents, loadGCalEvents]);
 
   const clearCalendarToastTimer = () => {
     if (calendarToastTimerRef.current !== null) {
@@ -286,6 +369,9 @@ const CalendarPage: React.FC = () => {
       showCalendarToast({ type: "added" });
       // Permanently dismiss backend-sourced events
       if (event.emailKey) void dismissTask(event.emailKey);
+      // Add to user's Google Calendar
+      const isoDate = mmDdYyyyToIso(event.date1);
+      void addEventToGoogleCalendar({ title: event.title, date: isoDate || undefined });
     }, 520);
   };
 
@@ -329,12 +415,6 @@ const CalendarPage: React.FC = () => {
 
   useEffect(() => () => clearCalendarToastTimer(), []);
 
-  const accountOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
-    (connectedEmails.length ? connectedEmails : Array.from(new Set(events.map((e) => e.accountEmail).filter(Boolean) as string[]))).map(
-      (email) => ({ value: email, label: email })
-    )
-  );
-
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
       <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
@@ -359,15 +439,6 @@ const CalendarPage: React.FC = () => {
                     {isLoadingEvents && (
                       <span className="ml-1 text-[11px] font-normal text-[#9CA3AF]">loading…</span>
                     )}
-                  </div>
-                  <div className="flex items-center gap-2 pr-1">
-                    <FilterMenuButton
-                      options={accountOptions}
-                      selectedValue={selectedAccount}
-                      onSelect={setSelectedAccount}
-                      ariaLabel="Filter calendar events by account"
-                      emptyMessage="No accounts yet"
-                    />
                   </div>
                 </div>
 
@@ -443,21 +514,23 @@ const CalendarPage: React.FC = () => {
                           </div>
 
                           <div className="flex shrink-0 items-center gap-2 self-center">
-                            <button
-                              type="button"
-                              aria-label="Add to calendar"
-                              onClick={() => handleAddToCalendar(event)}
-                              className="inline-flex h-9 w-9 items-center justify-center text-[#22c55e] transition-colors hover:text-[#16a34a]"
-                            >
-                              <span
-                                className="inline-block h-4 w-4 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
-                                style={{
-                                  WebkitMaskImage: `url(${addIcon})`,
-                                  maskImage: `url(${addIcon})`,
-                                }}
-                                aria-hidden
-                              />
-                            </button>
+                            {!event.fromGCal && (
+                              <button
+                                type="button"
+                                aria-label="Add to calendar"
+                                onClick={() => handleAddToCalendar(event)}
+                                className="inline-flex h-9 w-9 items-center justify-center text-[#22c55e] transition-colors hover:text-[#16a34a]"
+                              >
+                                <span
+                                  className="inline-block h-4 w-4 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
+                                  style={{
+                                    WebkitMaskImage: `url(${addIcon})`,
+                                    maskImage: `url(${addIcon})`,
+                                  }}
+                                  aria-hidden
+                                />
+                              </button>
+                            )}
                             <button
                               type="button"
                               aria-label="Remove event"
