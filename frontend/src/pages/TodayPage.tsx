@@ -24,12 +24,16 @@ import {
 } from "../services/api";
 import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
 import { loadConnectedEmails } from "../services/connectedUser";
+import { getCurrentUsername } from "../services/currentUser";
 import {
   getCachedEmails,
   setCachedEmails,
   getCachedEmailItems,
   setCachedEmailItems,
 } from "../services/dataCache";
+import { loadCompletedEmailTasks } from "../services/completedEmailTasks";
+
+const getFirstSyncSeenKey = () => `tagit.first-sync-seen.v1.${getCurrentUsername()}`;
 
 /**
  * Important email preview shown on Today.
@@ -214,10 +218,15 @@ const TodayPage: React.FC = () => {
 
   const computeProgress = useCallback((): TaskProgress => {
     const userTasks = loadTasks();
-    const emailItems = getCachedEmailItems() ?? [];
     const userBase = getTaskProgress(userTasks);
-    const total = userBase.totalTasks + emailItems.length;
-    const completed = userBase.completedTasks;
+    const completedEmailTasks = loadCompletedEmailTasks();
+    const completedKeys = new Set(completedEmailTasks.map((t) => t.key));
+    const activeEmailTaskCount = (getCachedEmailItems() ?? [])
+      .filter((i) => i.type === "task" && !completedKeys.has(i.key))
+      .length;
+    const completedEmailCount = completedEmailTasks.length;
+    const total = userBase.totalTasks + activeEmailTaskCount + completedEmailCount;
+    const completed = userBase.completedTasks + completedEmailCount;
     return {
       totalTasks: total,
       completedTasks: completed,
@@ -243,15 +252,27 @@ const TodayPage: React.FC = () => {
     const cached = getCachedEmailItems();
     if (!cached) return [];
     return cached.filter((item) => {
-      if (item.type !== "deadline" || !item.time) return false;
-      const datePart = item.time.split("T")[0];
-      if (!datePart) return false;
-      const [y, m, d] = datePart.split("-").map(Number);
-      if (!y || !m || !d) return false;
-      return isSameLocalDay(new Date(y, m - 1, d), TODAY);
+      if (item.type !== "deadline") return false;
+      // New format: item.time is "YYYY-MM-DDT00:00:00" — filter to today only
+      // Legacy items with no parseable date still show (fall through)
+      if (item.time) {
+        const datePart = item.time.split("T")[0];
+        const parts = datePart.split("-").map(Number);
+        if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+          return isSameLocalDay(new Date(parts[0], parts[1] - 1, parts[2]), TODAY);
+        }
+      }
+      return true; // legacy item with no date — always show
     });
   });
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isFirstTimeUser] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem(getFirstSyncSeenKey());
+    } catch {
+      return false;
+    }
+  });
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [slidingEmailIds, setSlidingEmailIds] = useState<Set<string>>(new Set());
   const [closingEmailIds, setClosingEmailIds] = useState<Set<string>>(new Set());
@@ -355,18 +376,17 @@ const TodayPage: React.FC = () => {
     if (resp.success && resp.data?.items) {
       const items = resp.data.items;
       setCachedEmailItems(items);
-      const deadlines = items.filter((item) => {
+      setTodayDeadlines(items.filter((item) => {
         if (item.type !== "deadline") return false;
-        if (!item.time) return false;
-        // Parse the date portion of the ISO time string as local date
-        const datePart = item.time.split("T")[0];
-        if (!datePart) return false;
-        const [y, m, d] = datePart.split("-").map(Number);
-        if (!y || !m || !d) return false;
-        return isSameLocalDay(new Date(y, m - 1, d), TODAY);
-      });
-      setTodayDeadlines(deadlines);
-      // Re-compute progress now that email items count is known
+        if (item.time) {
+          const datePart = item.time.split("T")[0];
+          const parts = datePart.split("-").map(Number);
+          if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+            return isSameLocalDay(new Date(parts[0], parts[1] - 1, parts[2]), TODAY);
+          }
+        }
+        return true; // legacy item with no date — always show
+      }));
       setProgress(computeProgress());
     }
   }, [computeProgress]);
@@ -384,7 +404,15 @@ const TodayPage: React.FC = () => {
     setIsSyncing(true);
     syncEmails()
       .then(() => Promise.all([loadEmails(), loadDeadlines()]))
-      .finally(() => setIsSyncing(false));
+      .finally(() => {
+        setIsSyncing(false);
+        // Mark that the user has seen the first-sync banner so it never shows again
+        try {
+          localStorage.setItem(getFirstSyncSeenKey(), "1");
+        } catch {
+          // ignore
+        }
+      });
   }, [loadEmails, loadDeadlines]);
 
   useEffect(() => {
@@ -716,6 +744,22 @@ const TodayPage: React.FC = () => {
               </div>
             </section>
           </div>
+
+          {/* First-time user loading banner — shown once per account until first sync finishes */}
+          {isFirstTimeUser && isSyncing && (
+            <div className="mt-4 flex flex-col items-center gap-3 rounded-2xl border border-[#fde6d7] bg-[#fff7f2] px-5 py-5 text-center shadow-[0_4px_12px_rgba(249,171,123,0.12)]">
+              <div
+                className="h-10 w-10 rounded-full border-4 border-[#f9ab7b] border-t-transparent animate-spin"
+                aria-label="Loading"
+              />
+              <div>
+                <p className="text-[15px] font-semibold text-[#c97d6e]">Welcome to TagIt!</p>
+                <p className="mt-0.5 text-[12px] text-[#9CA3AF]">
+                  Your emails are being processed — this only takes a moment.
+                </p>
+              </div>
+            </div>
+          )}
         </main>
 
         {toast && (

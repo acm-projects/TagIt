@@ -263,6 +263,7 @@ export interface EmailTaskItem {
   receivedAt: string;
   time?: string;
   location?: string;
+  priorityLevel?: number;
 }
 
 export interface GoogleCalendarEvent {

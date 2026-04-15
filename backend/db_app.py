@@ -8,6 +8,10 @@ from flask_cors import CORS
 from AI_Summary import analyze_email_with_gemini, analyze_emails_batch, is_spam, is_spam_batch, client as gemini_client
 from auth_routes import auth_bp, get_username_from_request
 
+# Bump this whenever the spam detection logic improves significantly.
+# Any cached non-spam email with a lower spamVersion will be re-spam-checked on next sync.
+CURRENT_SPAM_VERSION = 2
+
 load_dotenv()
 app = Flask(__name__)
 MONGO_URI = os.getenv("MONGO_URI")
@@ -148,8 +152,9 @@ def add_email():
                 "cached": True,
             }), 200
 
-    # Step 1: spam gate
-    spam_flagged, spam_reason = is_spam(subject, body)
+    # Step 1: spam gate (fetch preferences first so promotional override works)
+    school, priority_topics = _get_user_preferences(username)
+    spam_flagged, spam_reason = is_spam(subject, body, priority_topics)
     if spam_flagged:
         print(f"Spam detected: {subject}")
         incoming_data["isSpam"] = True
@@ -164,6 +169,8 @@ def add_email():
             "events": [],
             "location": "",
             "time": "",
+            "needsReply": False,
+            "draftReply": "",
         }
         db.emails.insert_one(incoming_data)
         return jsonify({
@@ -174,13 +181,14 @@ def add_email():
             "cached": False,
         }), 201
 
-    # Step 2: full analysis for legitimate emails
-    school, priority_topics = _get_user_preferences(username)
+    # Step 2: full analysis for legitimate emails (school/priority_topics already fetched above)
     print(f"Processing email: {subject}")
-    ai_results = analyze_email_with_gemini(subject, body, sender, school, priority_topics)
+    received_at = incoming_data.get("receivedAt", "")
+    ai_results = analyze_email_with_gemini(subject, body, sender, school, priority_topics, received_at)
     incoming_data["aiAnalysis"] = ai_results
     incoming_data["isSpam"] = False
     incoming_data["spamReason"] = ""
+    incoming_data["spamVersion"] = CURRENT_SPAM_VERSION
 
     result = db.emails.insert_one(incoming_data)
 
@@ -215,9 +223,11 @@ def add_emails_batch():
         return jsonify({"error": "Batch limit is 100 emails."}), 400
 
     # Split into cached vs new
-    new_emails  = []   # emails that need AI processing
+    new_emails  = []   # emails that need full AI processing
     new_indices = []   # their original positions
     results_map = {}   # index -> result dict
+    # Cached non-spam emails whose spam check predates CURRENT_SPAM_VERSION
+    respam_emails  = []   # (incoming email_data, existing doc, original index)
 
     all_ids = [e.get("id") for e in incoming_emails if e.get("id")]
     existing_docs = {
@@ -230,14 +240,24 @@ def add_emails_batch():
         email_id = email_data.get("id")
         if email_id and email_id in existing_docs:
             doc = existing_docs[email_id]
-            # If the cached doc is missing newer AI fields or has an Error badge, force re-analysis
+            # If the cached doc is missing newer AI fields, has an Error badge,
+            # or still uses the old plain-string deadline format, force re-analysis
             ai = doc.get("aiAnalysis", {})
             has_error = "Error" in ai.get("uiBadges", [])
-            if "needsReply" not in ai or has_error:
-                reason = "Error badge" if has_error else "missing needsReply"
+            deadlines = ai.get("deadlines", [])
+            has_old_deadline_format = any(isinstance(d, str) for d in deadlines) if deadlines else False
+            if "needsReply" not in ai or has_error or has_old_deadline_format:
+                reason = ("Error badge" if has_error
+                          else "old deadline format" if has_old_deadline_format
+                          else "missing needsReply")
                 print(f"[batch] Stale cache ({reason}), re-analyzing: {email_id}")
                 new_emails.append(email_data)
                 new_indices.append(i)
+            elif (not doc.get("isSpam", False)
+                  and doc.get("spamVersion", 0) < CURRENT_SPAM_VERSION):
+                # Non-spam email from before this spam version — re-check with new rules
+                respam_emails.append((email_data, doc, i))
+                print(f"[batch] Stale spam version, will re-check: {email_id}")
             else:
                 formatted = _format_email_result(doc)
                 formatted["cached"] = True
@@ -247,10 +267,52 @@ def add_emails_batch():
             new_emails.append(email_data)
             new_indices.append(i)
 
+    # Re-run spam check on emails that predate the current spam filter version
+    if respam_emails:
+        school, priority_topics = _get_user_preferences(username)
+        respam_payloads = [{"subject": ed.get("subject",""), "body": ed.get("body","")} for ed, _, _ in respam_emails]
+        respam_flags = is_spam_batch(respam_payloads, priority_topics)
+        for (email_data, doc, orig_idx), (flagged, reason) in zip(respam_emails, respam_flags):
+            eid = email_data.get("id")
+            if flagged:
+                print(f"[batch] Re-spam caught: {email_data.get('subject')}")
+                spam_analysis = {
+                    "summary": f"Filtered: {reason}",
+                    "assignedCategory": "Spam",
+                    "priorityLevel": 4,
+                    "uiBadges": ["Spam"],
+                    "tasks": [], "deadlines": [], "events": [], "location": "", "time": "",
+                    "needsReply": False, "draftReply": "",
+                }
+                db.emails.update_one(
+                    {"id": eid, "username": username},
+                    {"$set": {"isSpam": True, "spamReason": reason, "aiAnalysis": spam_analysis, "spamVersion": CURRENT_SPAM_VERSION}},
+                )
+                results_map[orig_idx] = {
+                    "id": eid, "subject": email_data.get("subject",""),
+                    "summary": spam_analysis["summary"], "assignedCategory": "Spam",
+                    "priorityLevel": 4, "uiBadges": ["Spam"],
+                    "tasks": [], "deadlines": [], "events": [], "location": "", "time": "",
+                    "needsReply": False, "draftReply": "", "isSpam": True,
+                    "spamReason": reason, "mongo_id": "", "cached": True,
+                }
+            else:
+                # Still clean — just bump the version stamp
+                db.emails.update_one(
+                    {"id": eid, "username": username},
+                    {"$set": {"spamVersion": CURRENT_SPAM_VERSION}},
+                )
+                formatted = _format_email_result(doc)
+                formatted["cached"] = True
+                results_map[orig_idx] = formatted
+
     # Only call Gemini for emails we have never seen before
     if new_emails:
+        # Fetch user preferences before spam check so promotional override works
+        school, priority_topics = _get_user_preferences(username)
+
         # One batch spam check instead of one call per email
-        spam_flags = is_spam_batch(new_emails)
+        spam_flags = is_spam_batch(new_emails, priority_topics)
 
         legit_emails  = [e for e, (f, _) in zip(new_emails, spam_flags) if not f]
         legit_indices = [idx for idx, (f, _) in zip(new_indices, spam_flags) if not f]
@@ -264,11 +326,14 @@ def add_emails_batch():
         for email_data, orig_idx, reason in spam_emails:
             print(f"[batch] Spam detected: {email_data.get('subject')}")
             spam_analysis = {
-                "summary": f"Spam/phishing detected: {reason}",
+                "summary": f"Filtered: {reason}",
                 "assignedCategory": "Spam",
                 "priorityLevel": 4,
                 "uiBadges": ["Spam"],
                 "tasks": [], "deadlines": [], "events": [], "location": "", "time": "",
+                # needsReply MUST be present — its absence triggers re-analysis on every sync
+                "needsReply": False,
+                "draftReply": "",
             }
             email_data["aiAnalysis"] = spam_analysis
             email_data["isSpam"] = True
@@ -285,13 +350,16 @@ def add_emails_batch():
                 "priorityLevel": 4,
                 "uiBadges": ["Spam"],
                 "tasks": [], "deadlines": [], "events": [], "location": "", "time": "",
+                "needsReply": False, "draftReply": "",
                 "isSpam": True, "spamReason": reason,
                 "mongo_id": "", "cached": False,
             }
 
         print(f"[batch] Processing {len(legit_emails)} new email(s) via Gemini...")
         if legit_emails:
-            school, priority_topics = _get_user_preferences(username)
+            # Pass received_at per email so the AI can resolve relative deadline dates
+            for e in legit_emails:
+                e.setdefault("received_at", e.get("receivedAt", ""))
             ai_results = analyze_emails_batch(legit_emails, school, priority_topics)
 
         fallback = {
@@ -311,6 +379,7 @@ def add_emails_batch():
             email_data["aiAnalysis"] = analysis
             email_data["isSpam"] = False
             email_data["spamReason"] = ""
+            email_data["spamVersion"] = CURRENT_SPAM_VERSION
 
             try:
                 # Use upsert so re-analyzed emails update the existing record instead of failing
@@ -405,12 +474,22 @@ def get_user_tasks():
                 "receivedAt": received,
                 "time": time_val,
                 "location": location_val,
+                "priorityLevel": analysis.get("priorityLevel", 4),
             })
 
-        for i, deadline_text in enumerate(analysis.get("deadlines", [])):
+        for i, deadline_entry in enumerate(analysis.get("deadlines", [])):
             key = f"deadline:{email_id}:{i}"
             if key in dismissed_keys:
                 continue
+            # Handle both new format {"text": ..., "date": "YYYY-MM-DD"} and legacy plain strings
+            if isinstance(deadline_entry, dict):
+                deadline_text = deadline_entry.get("text", "")
+                deadline_date = deadline_entry.get("date", "")
+                # Store as ISO datetime string (date only, no time component)
+                deadline_time = f"{deadline_date}T00:00:00" if deadline_date else time_val
+            else:
+                deadline_text = str(deadline_entry)
+                deadline_time = time_val  # legacy: fall back to email event time
             items.append({
                 "key": key,
                 "type": "deadline",
@@ -419,8 +498,9 @@ def get_user_tasks():
                 "emailId": email_id,
                 "source": source,
                 "receivedAt": received,
-                "time": time_val,
+                "time": deadline_time,
                 "location": location_val,
+                "priorityLevel": analysis.get("priorityLevel", 4),
             })
 
     return jsonify({"items": items}), 200
@@ -600,31 +680,54 @@ Question: {question}
 @app.route("/api/drafts/user", methods=["GET"])
 def get_user_drafts():
     """
-    Return emails that the AI flagged as needing a reply, along with the
-    AI-generated draft reply text.
+    Return emails from the current Mon-Sun week that the AI flagged as needing
+    a reply, along with the AI-generated draft reply text.
+    Emails from previous weeks are silently excluded (and hard-deleted from DB).
     """
+    from datetime import datetime, timedelta
+
     username = get_username_from_request()
     if not username:
         return jsonify({"error": "Unauthorized."}), 401
+
+    # Compute Monday midnight of the current week (UTC) as a comparable string
+    today = datetime.utcnow()
+    monday = today - timedelta(days=today.weekday())
+    week_start_str = monday.strftime("%Y-%m-%d")  # "YYYY-MM-DD"
 
     dismissed_ids = {d["emailId"] for d in db.dismissed_emails.find({"username": username}, {"emailId": 1})}
     query = {"username": username, "isSpam": False, "aiAnalysis.needsReply": True}
     if dismissed_ids:
         query["id"] = {"$nin": list(dismissed_ids)}
 
-    docs = list(db.emails.find(query).sort("_id", -1).limit(100))
+    docs = list(db.emails.find(query).sort("_id", -1).limit(200))
 
+    # Hard-delete drafts from previous weeks and build the current-week list
+    old_ids = []
     drafts = []
     for doc in docs:
+        received = doc.get("receivedAt", "")
+        # receivedAt may be a full ISO string; compare only the date prefix
+        date_prefix = received[:10] if len(received) >= 10 else ""
+        if date_prefix and date_prefix < week_start_str:
+            old_ids.append(doc.get("_id"))
+            continue
         analysis = doc.get("aiAnalysis", {})
         drafts.append({
             "id":         doc.get("id", str(doc.get("_id", ""))),
             "subject":    doc.get("subject", "No Subject"),
             "sender":     doc.get("sender", ""),
             "draftReply": analysis.get("draftReply", ""),
-            "receivedAt": doc.get("receivedAt", ""),
+            "receivedAt": received,
             "source":     doc.get("source", ""),
         })
+
+    # Remove stale drafts from DB so they never come back
+    if old_ids:
+        try:
+            db.emails.delete_many({"_id": {"$in": old_ids}})
+        except Exception:
+            pass
 
     return jsonify({"drafts": drafts}), 200
 
