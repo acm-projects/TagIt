@@ -27,6 +27,7 @@ try:
         pass
     db.emails.create_index([("id", 1), ("username", 1)], unique=True, sparse=True)
     db.dismissed_tasks.create_index([("username", 1), ("key", 1)], unique=True, sparse=True)
+    db.dismissed_emails.create_index([("username", 1), ("emailId", 1)], unique=True, sparse=True)
     client.admin.command('ping')
     print("Connected to MongoDB and pinged")
 except Exception as e:
@@ -48,6 +49,8 @@ def _format_email_result(doc):
         "events":           analysis.get("events", []),
         "location":         analysis.get("location", ""),
         "time":             analysis.get("time", ""),
+        "needsReply":       analysis.get("needsReply", False),
+        "draftReply":       analysis.get("draftReply", ""),
         "isSpam":           doc.get("isSpam", False),
         "spamReason":       doc.get("spamReason", ""),
         "sender":           doc.get("sender", ""),
@@ -70,17 +73,45 @@ def _get_user_preferences(username):
 
 @app.route("/api/emails/user", methods=["GET"])
 def get_user_emails():
-    """Return all non-spam emails for the authenticated user, newest first."""
+    """Return all non-spam, non-dismissed emails for the authenticated user, newest first."""
     username = get_username_from_request()
     if not username:
         return jsonify({"error": "Unauthorized."}), 401
 
-    docs = list(db.emails.find(
-        {"username": username, "isSpam": {"$ne": True}},
-    ).sort("_id", -1).limit(200))
+    dismissed_ids = {d["emailId"] for d in db.dismissed_emails.find({"username": username}, {"emailId": 1})}
+
+    query = {
+        "username": username,
+        "isSpam": False,
+        "aiAnalysis.uiBadges": {"$nin": ["Error"]},
+    }
+    if dismissed_ids:
+        query["id"] = {"$nin": list(dismissed_ids)}
+
+    docs = list(db.emails.find(query).sort("_id", -1).limit(200))
 
     emails = [_format_email_result(doc) for doc in docs]
     return jsonify({"emails": emails}), 200
+
+
+@app.route("/api/emails/dismiss", methods=["POST"])
+def dismiss_email():
+    """Permanently hide an email from the user's mail list."""
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    data = request.json
+    email_id = (data or {}).get("emailId", "").strip()
+    if not email_id:
+        return jsonify({"error": "Missing emailId."}), 400
+
+    try:
+        db.dismissed_emails.insert_one({"username": username, "emailId": email_id})
+    except Exception:
+        pass  # Already dismissed — idempotent
+
+    return jsonify({"message": "Dismissed."}), 200
 
 
 @app.route("/", methods=["GET"])
@@ -90,6 +121,10 @@ def home():
 
 @app.route("/api/emails", methods=["POST"])
 def add_email():
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
     incoming_data = request.json
 
     email_id = incoming_data.get("id")
@@ -97,7 +132,6 @@ def add_email():
     body     = incoming_data.get("body", "No Body Content")
     sender   = incoming_data.get("sender", "")
 
-    username = get_username_from_request() or ""
     incoming_data["username"] = username
 
     # Return cached version if this email id was already processed
@@ -170,6 +204,10 @@ def add_emails_batch():
     """
     incoming_emails = request.json
 
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
     if not isinstance(incoming_emails, list) or len(incoming_emails) == 0:
         return jsonify({"error": "Request body must be a non-empty array of emails."}), 400
 
@@ -181,8 +219,6 @@ def add_emails_batch():
     new_indices = []   # their original positions
     results_map = {}   # index -> result dict
 
-    username = get_username_from_request() or ""
-
     all_ids = [e.get("id") for e in incoming_emails if e.get("id")]
     existing_docs = {
         doc["id"]: doc
@@ -193,10 +229,20 @@ def add_emails_batch():
     for i, email_data in enumerate(incoming_emails):
         email_id = email_data.get("id")
         if email_id and email_id in existing_docs:
-            formatted = _format_email_result(existing_docs[email_id])
-            formatted["cached"] = True
-            results_map[i] = formatted
-            print(f"[batch] Cache hit: {email_id}")
+            doc = existing_docs[email_id]
+            # If the cached doc is missing newer AI fields or has an Error badge, force re-analysis
+            ai = doc.get("aiAnalysis", {})
+            has_error = "Error" in ai.get("uiBadges", [])
+            if "needsReply" not in ai or has_error:
+                reason = "Error badge" if has_error else "missing needsReply"
+                print(f"[batch] Stale cache ({reason}), re-analyzing: {email_id}")
+                new_emails.append(email_data)
+                new_indices.append(i)
+            else:
+                formatted = _format_email_result(doc)
+                formatted["cached"] = True
+                results_map[i] = formatted
+                print(f"[batch] Cache hit: {email_id}")
         else:
             new_emails.append(email_data)
             new_indices.append(i)
@@ -267,16 +313,20 @@ def add_emails_batch():
             email_data["spamReason"] = ""
 
             try:
-                insert_result = db.emails.insert_one(email_data)
-                mongo_id = str(insert_result.inserted_id)
+                # Use upsert so re-analyzed emails update the existing record instead of failing
+                doc_to_set = {k: v for k, v in email_data.items() if k != "_id"}
+                result = db.emails.update_one(
+                    {"id": email_data.get("id"), "username": username},
+                    {"$set": doc_to_set},
+                    upsert=True,
+                )
+                if result.upserted_id:
+                    mongo_id = str(result.upserted_id)
+                else:
+                    existing = db.emails.find_one({"id": email_data.get("id"), "username": username})
+                    mongo_id = str(existing.get("_id", "")) if existing else "unknown"
             except Exception as e:
-                print(f"[batch] Insert conflict for {email_data.get('id')}: {e}")
-                existing = db.emails.find_one({"id": email_data.get("id")})
-                if existing:
-                    formatted = _format_email_result(existing)
-                    formatted["cached"] = True
-                    results_map[legit_indices[j]] = formatted
-                    continue
+                print(f"[batch] Upsert error for {email_data.get('id')}: {e}")
                 mongo_id = "unknown"
 
             results_map[legit_indices[j]] = {
@@ -327,7 +377,7 @@ def get_user_tasks():
     dismissed_keys = {d["key"] for d in dismissed_docs}
 
     docs = list(db.emails.find(
-        {"username": username, "isSpam": {"$ne": True}},
+        {"username": username, "isSpam": False},
     ).sort("_id", -1).limit(200))
 
     items = []
@@ -441,7 +491,7 @@ def get_user_events():
     dismissed_keys = {d["key"] for d in dismissed_docs}
 
     docs = list(db.emails.find(
-        {"username": username, "isSpam": {"$ne": True}},
+        {"username": username, "isSpam": False},
     ).sort("_id", -1).limit(200))
 
     items = []
@@ -480,16 +530,19 @@ def chat():
     RAG-based inbox Q&A. Pull recent email summaries from MongoDB
     and let Gemini answer the user's question using only that data.
     """
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
     data = request.json
-    question = data.get("question", "").strip()
-    username = data.get("username", "")
+    question = (data or {}).get("question", "").strip()
 
     if not question:
         return jsonify({"error": "No question provided."}), 400
 
-    # Pull the last 50 processed (non-spam) emails to use as context
+    # Pull the last 50 processed (non-spam) emails for this user only
     recent_docs = list(db.emails.find(
-        {"isSpam": {"$ne": True}},
+        {"username": username, "isSpam": False},
         {"subject": 1, "aiAnalysis": 1, "_id": 0}
     ).sort("_id", -1).limit(50))
 
@@ -542,6 +595,38 @@ Question: {question}
     except Exception as e:
         print(f"Chat error: {e}")
         return jsonify({"error": "Could not generate a response."}), 500
+
+
+@app.route("/api/drafts/user", methods=["GET"])
+def get_user_drafts():
+    """
+    Return emails that the AI flagged as needing a reply, along with the
+    AI-generated draft reply text.
+    """
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    dismissed_ids = {d["emailId"] for d in db.dismissed_emails.find({"username": username}, {"emailId": 1})}
+    query = {"username": username, "isSpam": False, "aiAnalysis.needsReply": True}
+    if dismissed_ids:
+        query["id"] = {"$nin": list(dismissed_ids)}
+
+    docs = list(db.emails.find(query).sort("_id", -1).limit(100))
+
+    drafts = []
+    for doc in docs:
+        analysis = doc.get("aiAnalysis", {})
+        drafts.append({
+            "id":         doc.get("id", str(doc.get("_id", ""))),
+            "subject":    doc.get("subject", "No Subject"),
+            "sender":     doc.get("sender", ""),
+            "draftReply": analysis.get("draftReply", ""),
+            "receivedAt": doc.get("receivedAt", ""),
+            "source":     doc.get("source", ""),
+        })
+
+    return jsonify({"drafts": drafts}), 200
 
 
 if __name__ == "__main__":

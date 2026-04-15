@@ -780,6 +780,35 @@ app.post('/calendar/add-event', requireAuth, async (req, res) => {
     }
 });
 
+// POST /gtasks/add — add a task to the user's default Google Tasks list
+app.post('/gtasks/add', requireAuth, async (req, res) => {
+    const { title, notes, due } = req.body;
+    if (!title) return res.status(400).json({ error: 'title is required' });
+
+    try {
+        const authClient = await getGoogleClientForUser(req.userToken);
+        const tasksApi = google.tasks({ version: 'v1', auth: authClient });
+
+        const taskBody = { title, notes: notes || '' };
+        if (due) taskBody.due = new Date(due).toISOString();
+
+        const response = await tasksApi.tasks.insert({
+            tasklist: '@default',
+            requestBody: taskBody,
+        });
+        res.json({ success: true, taskId: response.data.id });
+    } catch (err) {
+        if (err.message === 'NO_GOOGLE_TOKEN') {
+            return res.status(401).json({ error: 'NO_GOOGLE_TOKEN' });
+        }
+        if (err.response?.status === 403) {
+            return res.status(403).json({ error: 'INSUFFICIENT_SCOPES' });
+        }
+        console.error(err);
+        res.status(500).json({ error: err.message || String(err) });
+    }
+});
+
 // GET /calendar/events — fetch upcoming events from the user's primary Google Calendar
 app.get('/calendar/events', requireAuth, async (req, res) => {
     try {

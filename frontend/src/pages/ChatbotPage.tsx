@@ -79,7 +79,7 @@ const ChatbotPage: React.FC = () => {
 
   return (
     <div
-      className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6]"
+      className="flex h-screen flex-col overflow-hidden bg-[#f1f6ff]"
       style={{
         backgroundImage: `url(${authenticationBg})`,
         backgroundSize: "cover",

@@ -8,7 +8,7 @@ const Popup: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F9F8F6]">
+      <div className="flex min-h-screen items-center justify-center bg-[#f1f6ff]">
         <p className="text-lg text-[#6B7280]">Loading…</p>
       </div>
     );

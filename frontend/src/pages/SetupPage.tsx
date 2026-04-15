@@ -24,18 +24,8 @@ const initialPriorities: Priority[] = [
 
 const SetupPage: React.FC = () => {
   const navigate = useNavigate();
-  const [priorities, setPriorities] = useState<Priority[]>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_PRIORITIES);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Priority[];
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {
-      /* ignore */
-    }
-    return initialPriorities;
-  });
+  // Always start with defaults — this is the onboarding flow for a new user
+  const [priorities, setPriorities] = useState<Priority[]>(initialPriorities);
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [newPriority, setNewPriority] = useState("");

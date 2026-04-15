@@ -212,6 +212,8 @@ Body: {email.get('body', 'No Body Content')}{utd_note}
     7. "events": Array of event statements.
     8. "location": The physical room number, address, or virtual link for the event. If none, output "".
     9. "time": The date and time of the event in ISO 8601 format. If none, output "".
+    10. "needsReply": true if this email is a direct personal message to the user that requires a reply (e.g. interview invitation, direct question, recruiter outreach, professor asking something). false for newsletters, announcements, automated notifications, and mass emails.
+    11. "draftReply": If needsReply is true, write a concise and professional draft reply (3-5 sentences) appropriate for the email context. If needsReply is false, output "".
 
     Emails to analyze:
     {emails_block}
@@ -257,6 +259,8 @@ Body: {email.get('body', 'No Body Content')}{utd_note}
                 "events": [],
                 "location": "",
                 "time": "",
+                "needsReply": False,
+                "draftReply": "",
             }
             for _ in emails
         ]
@@ -289,10 +293,11 @@ def analyze_email_with_gemini(subject, body, sender="", school="", priority_topi
     7. "events": Array of event statements.
     8. "location": The physical room number, address, or virtual link for the event. If there is no location mentioned, output an empty string "".
     9. "time": The date and time of the event in ISO 8601 format. If there is no time mentioned, output an empty string "".
-    
+    10. "needsReply": true if this email is a direct personal message to the user that requires a reply (e.g. interview invitation, direct question, recruiter outreach, professor asking something). false for newsletters, announcements, automated notifications, and mass emails.
+    11. "draftReply": If needsReply is true, write a concise and professional draft reply (3-5 sentences) appropriate for the email context. If needsReply is false, output "".
 
-    Input Email: 
-    Subject: {subject} 
+    Input Email:
+    Subject: {subject}
     Body: {body}
     """
 
@@ -321,5 +326,9 @@ def analyze_email_with_gemini(subject, body, sender="", school="", priority_topi
             "uiBadges": ["Error"],
             "tasks": [],
             "deadlines": [],
-            "events": []
+            "events": [],
+            "location": "",
+            "time": "",
+            "needsReply": False,
+            "draftReply": "",
         }

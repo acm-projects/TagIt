@@ -10,6 +10,12 @@ import {
 } from "../services/categories";
 import { loadConnectedEmails } from "../services/connectedUser";
 import { getUserEvents, dismissTask, addEventToGoogleCalendar, getGoogleCalendarEvents, type EmailEventItem, type GoogleCalendarEvent } from "../services/api";
+import {
+  getCachedEmailEvents,
+  setCachedEmailEvents,
+  getCachedGCalEvents,
+  setCachedGCalEvents,
+} from "../services/dataCache";
 
 type CalendarEvent = {
   id: string;
@@ -175,7 +181,11 @@ const CalendarPage: React.FC = () => {
   const categories = useUserCategories();
 
   const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>(() => {
+    const fromBackend = (getCachedEmailEvents() ?? []).map(emailEventToCalendarEvent);
+    const fromGCal = (getCachedGCalEvents() ?? []).map(googleCalEventToCalendarEvent);
+    return [...fromBackend, ...fromGCal];
+  });
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [slidingEventIds, setSlidingEventIds] = useState<Set<string>>(() => new Set());
@@ -274,6 +284,7 @@ const CalendarPage: React.FC = () => {
     try {
       const resp = await getUserEvents();
       if (resp.success && resp.data?.items) {
+        setCachedEmailEvents(resp.data.items);
         setEvents((prev) => {
           // Keep manually-added and GCal events; replace email-backend ones
           const keep = prev.filter((e) => !e.emailKey);
@@ -292,6 +303,7 @@ const CalendarPage: React.FC = () => {
   const loadGCalEvents = useCallback(async () => {
     const resp = await getGoogleCalendarEvents();
     if (resp.success && resp.data?.items) {
+      setCachedGCalEvents(resp.data.items);
       setEvents((prev) => {
         const keep = prev.filter((e) => !e.fromGCal);
         const fromGCal = resp.data!.items.map(googleCalEventToCalendarEvent);
@@ -416,14 +428,14 @@ const CalendarPage: React.FC = () => {
   useEffect(() => () => clearCalendarToastTimer(), []);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f1f6ff] p-4">
       <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
             <NullableConnectedDaysFilter
-              className="!mt-0 sticky top-0 z-20 bg-[#F9F8F6]"
+              className="!mt-0 sticky top-0 z-20 bg-[#f1f6ff]"
               value={calendarDay}
               onChange={setCalendarDay}
             />

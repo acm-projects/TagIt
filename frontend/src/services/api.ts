@@ -246,6 +246,13 @@ export async function getUserEmails(): Promise<
   return apiRequest("/api/emails/user", { method: "GET" });
 }
 
+export async function dismissEmail(emailId: string): Promise<ApiResponse> {
+  return apiRequest("/api/emails/dismiss", {
+    method: "POST",
+    body: JSON.stringify({ emailId }),
+  });
+}
+
 export interface EmailTaskItem {
   key: string;
   type: "task" | "deadline";
@@ -311,6 +318,17 @@ export async function getGoogleCalendarEvents(): Promise<
   return nodeApiRequest("/calendar/events", { method: "GET" });
 }
 
+export async function addGoogleTask(params: {
+  title: string;
+  notes?: string;
+  due?: string;
+}): Promise<ApiResponse<{ taskId: string }>> {
+  return nodeApiRequest("/gtasks/add", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
 export async function addEventToGoogleCalendar(params: {
   title: string;
   date?: string;
@@ -320,4 +338,17 @@ export async function addEventToGoogleCalendar(params: {
     method: "POST",
     body: JSON.stringify(params),
   });
+}
+
+export interface DraftEmail {
+  id: string;
+  subject: string;
+  sender: string;
+  draftReply: string;
+  receivedAt: string;
+  source: string;
+}
+
+export async function getDraftEmails(): Promise<ApiResponse<{ drafts: DraftEmail[] }>> {
+  return apiRequest("/api/drafts/user", { method: "GET" });
 }

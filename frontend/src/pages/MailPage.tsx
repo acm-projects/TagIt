@@ -15,10 +15,18 @@ import {
 import {
   getUserEmails,
   syncEmails,
+  getDraftEmails,
+  dismissEmail,
   type ProcessedEmail,
 } from "../services/api";
 import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
 import { loadConnectedEmails } from "../services/connectedUser";
+import {
+  getCachedEmails,
+  setCachedEmails,
+  getCachedDrafts,
+  setCachedDrafts,
+} from "../services/dataCache";
 
 /**
  * A prioritized mail card item.
@@ -39,7 +47,10 @@ type MailItem = {
 
 type DraftItem = {
   id: string;
+  subject: string;
   sender: string;
+  senderEmail: string;
+  draftReply: string;
 };
 
 const parseIsoDate = (value?: string): Date | null => {
@@ -53,6 +64,13 @@ const extractSenderName = (raw: string): string => {
   if (!raw) return "Unknown sender";
   const match = raw.match(/^"?([^"<]+)"?\s*</);
   return match ? match[1].trim() : raw.replace(/<[^>]+>/, "").trim() || raw;
+};
+
+const extractSenderEmail = (raw: string): string => {
+  if (!raw) return "";
+  const match = raw.match(/<([^>]+)>/);
+  if (match) return match[1];
+  return raw.includes("@") ? raw.trim() : "";
 };
 
 const mapEmailToMailItem = (e: ProcessedEmail): MailItem => {
@@ -85,26 +103,66 @@ const MailPage: React.FC = () => {
   const [selectedAccount, setSelectedAccount] = useState<string>("all");
   const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
 
-  const [mails, setMails] = useState<MailItem[]>([]);
+  const [mails, setMails] = useState<MailItem[]>(() => {
+    const cached = getCachedEmails();
+    if (!cached) return [];
+    return cached
+      .filter((e) => !e.isSpam && !e.uiBadges?.includes("Error"))
+      .map(mapEmailToMailItem);
+  });
   const [isSyncing, setIsSyncing] = useState(false);
   const categories = useUserCategories();
 
   const loadEmails = useCallback(async () => {
     const resp = await getUserEmails();
     if (resp.success && resp.data?.emails) {
-      setMails(resp.data.emails.map(mapEmailToMailItem));
+      setCachedEmails(resp.data.emails);
+      setMails(
+        resp.data.emails
+          .filter((e) => !e.isSpam && !e.uiBadges?.includes("Error"))
+          .map(mapEmailToMailItem)
+      );
+    }
+  }, []);
+
+  const [draftReplies, setDraftReplies] = useState<DraftItem[]>(() => {
+    const cached = getCachedDrafts();
+    if (!cached) return [];
+    return cached.map((d) => ({
+      id: d.id,
+      subject: d.subject,
+      sender: extractSenderName(d.sender),
+      senderEmail: extractSenderEmail(d.sender),
+      draftReply: d.draftReply,
+    }));
+  });
+
+  const loadDrafts = useCallback(async () => {
+    const resp = await getDraftEmails();
+    if (resp.success && resp.data?.drafts) {
+      setCachedDrafts(resp.data.drafts);
+      setDraftReplies(
+        resp.data.drafts.map((d) => ({
+          id: d.id,
+          subject: d.subject,
+          sender: extractSenderName(d.sender),
+          senderEmail: extractSenderEmail(d.sender),
+          draftReply: d.draftReply,
+        }))
+      );
     }
   }, []);
 
   useEffect(() => {
     void loadEmails();
+    void loadDrafts();
 
-    // Kick off background sync, then refresh
+    // Kick off background sync, then refresh both emails and drafts
     setIsSyncing(true);
     syncEmails()
-      .then(() => loadEmails())
+      .then(() => Promise.all([loadEmails(), loadDrafts()]))
       .finally(() => setIsSyncing(false));
-  }, [loadEmails]);
+  }, [loadEmails, loadDrafts]);
 
   const [expandedMailId, setExpandedMailId] = useState<string | null>(null);
   const leaveCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -150,13 +208,6 @@ const MailPage: React.FC = () => {
     }, MAIL_ROW_LEAVE_COLLAPSE_MS);
   }, [clearMailHoverTimers]);
 
-  const [draftReplies] = useState<DraftItem[]>([
-    {
-      id: "d1",
-      sender: "John Mathew @Verizon @Handshake",
-    },
-  ]);
-
   const filteredMails = useMemo(
     () =>
       mails.filter((mail) => {
@@ -187,13 +238,22 @@ const MailPage: React.FC = () => {
     // Placeholder until mail detail workflow is wired.
   };
 
-  const handleOpenDraft = (_draft: DraftItem) => {
-    // Placeholder until draft editor is wired.
+  const handleOpenDraft = (draft: DraftItem) => {
+    const to = encodeURIComponent(draft.senderEmail);
+    const subject = encodeURIComponent(`Re: ${draft.subject}`);
+    const body = encodeURIComponent(draft.draftReply);
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${subject}&body=${body}`;
+    chrome.tabs.create({ url: gmailUrl });
   };
 
   const handleDraftReply = (_mail: MailItem) => {
     // Placeholder: open draft composer prefilled with this mail's context.
   };
+
+  const handleDismissMail = useCallback(async (mail: MailItem) => {
+    setMails((prev) => prev.filter((m) => m.id !== mail.id));
+    await dismissEmail(mail.id);
+  }, []);
 
   useEffect(() => {
     setConnectedEmails(loadConnectedEmails());
@@ -206,7 +266,7 @@ const MailPage: React.FC = () => {
   );
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f1f6ff] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
@@ -299,23 +359,13 @@ const MailPage: React.FC = () => {
                         </button>
 
                         <div className="flex shrink-0 items-center gap-2 self-center">
-                          {mail.needsReply && (
-                            <button
-                              type="button"
-                              onClick={() => handleDraftReply(mail)}
-                              className="inline-flex h-7 items-center justify-center rounded-full border border-[#E5E7EB] px-3 text-[11px] font-semibold text-[#374151] opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
-                              aria-label={`Draft reply to ${mail.summary}`}
-                            >
-                              Draft reply
-                            </button>
-                          )}
                           <button
                             type="button"
-                            onClick={() => handleOpenMail(mail)}
-                            className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
-                            aria-label={`Open ${mail.summary}`}
+                            onClick={() => handleDismissMail(mail)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[#9CA3AF] opacity-0 transition-opacity duration-150 ease-out hover:bg-[#F3F4F6] hover:text-[#374151] group-hover:opacity-100 group-focus-within:opacity-100"
+                            aria-label={`Dismiss ${mail.summary}`}
                           >
-                            <span className="material-symbols-outlined text-[16px]">check</span>
+                            <span className="material-symbols-outlined text-[16px]">close</span>
                           </button>
                         </div>
                       </div>
@@ -334,37 +384,37 @@ const MailPage: React.FC = () => {
                 </div>
 
                 <div className="mt-3 space-y-0.5 pl-2.5 sm:pl-3.5">
-                  {draftReplies.map((draft, index) => (
-                    <div
-                      key={draft.id}
-                      className="tagged-item group flex items-start gap-3 py-1.5 text-sm text-[#1F2933]"
-                      style={{
-                        borderBottom: index === draftReplies.length - 1 ? "none" : "0.5px solid #E5E7EB",
-                      }}
-                    >
+                  {draftReplies.length === 0 ? (
+                    <p className="py-2 text-[12px] text-[#6B7280]">No drafts yet.</p>
+                  ) : (
+                    draftReplies.map((draft, index) => (
                       <button
+                        key={draft.id}
                         type="button"
                         onClick={() => handleOpenDraft(draft)}
-                        className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
+                        className="group/draft relative w-full flex flex-col items-start gap-0.5 py-3 text-left"
+                        style={{
+                          borderBottom: index === draftReplies.length - 1 ? "none" : "0.5px solid #E5E7EB",
+                        }}
+                        aria-label={`Open draft for ${draft.subject}`}
                       >
-                        <span className="text-sm font-semibold text-[#111827] truncate">
+                        <span className="text-sm font-semibold text-[#111827] truncate w-full">
+                          {draft.subject}
+                        </span>
+                        <span className="text-[12px] text-[#9CA3AF] truncate w-full">
                           {draft.sender}
                         </span>
-                        <p className="w-full truncate text-[12px] text-[#6B7280] leading-tight">Draft reply</p>
+                        <p className="w-full line-clamp-2 text-[12px] text-[#6B7280] leading-snug">
+                          {draft.draftReply || "Draft reply"}
+                        </p>
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/draft:opacity-100 transition-opacity duration-150 rounded-lg bg-white/70">
+                          <span className="rounded-full bg-[#f9ab7b] px-4 py-1.5 text-[12px] font-semibold text-white shadow-sm">
+                            Open in Gmail
+                          </span>
+                        </div>
                       </button>
-
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenDraft(draft)}
-                          className="inline-flex h-7 w-7 items-center justify-center text-[#f9ab7b] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100"
-                          aria-label={`Open draft for ${draft.sender}`}
-                        >
-                          <span className="material-symbols-outlined text-[16px]">check</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </section>

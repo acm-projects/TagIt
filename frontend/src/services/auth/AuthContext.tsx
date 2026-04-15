@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { verifyToken, clearToken, getStoredToken, syncEmails } from "../api";
+import { setCurrentUsername, clearCurrentUsername } from "../currentUser";
+import { clearDataCache } from "../dataCache";
 
 export interface AuthContextType {
   isAuthenticated: boolean;
@@ -30,9 +32,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       const response = await verifyToken();
       if (response.success && response.data?.username) {
+        setCurrentUsername(response.data.username);
         setIsAuthenticated(true);
         setUsername(response.data.username);
       } else {
+        clearCurrentUsername();
         setIsAuthenticated(false);
         setUsername(null);
         await clearToken();
@@ -51,6 +55,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const logout = async () => {
+    clearCurrentUsername();
+    clearDataCache();
     await clearToken();
     setIsAuthenticated(false);
     setUsername(null);

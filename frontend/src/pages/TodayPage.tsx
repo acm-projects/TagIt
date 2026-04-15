@@ -18,10 +18,18 @@ import {
 import {
   getUserEmails,
   syncEmails,
+  getUserTasks,
   type ProcessedEmail,
+  type EmailTaskItem,
 } from "../services/api";
 import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
 import { loadConnectedEmails } from "../services/connectedUser";
+import {
+  getCachedEmails,
+  setCachedEmails,
+  getCachedEmailItems,
+  setCachedEmailItems,
+} from "../services/dataCache";
 
 /**
  * Important email preview shown on Today.
@@ -204,10 +212,45 @@ const TodayPage: React.FC = () => {
   const navigate = useNavigate();
   const selectedCalendarDate = TODAY;
 
-  const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
+  const computeProgress = useCallback((): TaskProgress => {
+    const userTasks = loadTasks();
+    const emailItems = getCachedEmailItems() ?? [];
+    const userBase = getTaskProgress(userTasks);
+    const total = userBase.totalTasks + emailItems.length;
+    const completed = userBase.completedTasks;
+    return {
+      totalTasks: total,
+      completedTasks: completed,
+      progressPercentage: total === 0 ? 0 : Math.round((completed / total) * 100),
+    };
+  }, []);
+
+  const [progress, setProgress] = useState(() => computeProgress());
   const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
-  const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>([]);
-  const [events, setEvents] = useState<TodayEvent[]>([]);
+  const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(() => {
+    const cached = getCachedEmails();
+    if (!cached) return [];
+    const nonSpam = cached.filter((e) => !e.isSpam && !e.uiBadges?.includes("Error"));
+    return nonSpam.map(mapEmailToPreview);
+  });
+  const [events, setEvents] = useState<TodayEvent[]>(() => {
+    const cached = getCachedEmails();
+    if (!cached) return [];
+    const nonSpam = cached.filter((e) => !e.isSpam && !e.uiBadges?.includes("Error"));
+    return extractEventsFromEmails(nonSpam);
+  });
+  const [todayDeadlines, setTodayDeadlines] = useState<EmailTaskItem[]>(() => {
+    const cached = getCachedEmailItems();
+    if (!cached) return [];
+    return cached.filter((item) => {
+      if (item.type !== "deadline" || !item.time) return false;
+      const datePart = item.time.split("T")[0];
+      if (!datePart) return false;
+      const [y, m, d] = datePart.split("-").map(Number);
+      if (!y || !m || !d) return false;
+      return isSameLocalDay(new Date(y, m - 1, d), TODAY);
+    });
+  });
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [slidingEmailIds, setSlidingEmailIds] = useState<Set<string>>(new Set());
@@ -300,28 +343,49 @@ const TodayPage: React.FC = () => {
   const loadEmails = useCallback(async () => {
     const resp = await getUserEmails();
     if (resp.success && resp.data?.emails) {
-      setImportantEmails(resp.data.emails.map(mapEmailToPreview));
-      setEvents(extractEventsFromEmails(resp.data.emails));
+      setCachedEmails(resp.data.emails);
+      const nonSpam = resp.data.emails.filter((e) => !e.isSpam && !e.uiBadges?.includes("Error"));
+      setImportantEmails(nonSpam.map(mapEmailToPreview));
+      setEvents(extractEventsFromEmails(nonSpam));
     }
   }, []);
 
-  useEffect(() => {
-    const refreshProgress = () => {
-      setProgress(getTaskProgress(loadTasks()));
-    };
+  const loadDeadlines = useCallback(async () => {
+    const resp = await getUserTasks();
+    if (resp.success && resp.data?.items) {
+      const items = resp.data.items;
+      setCachedEmailItems(items);
+      const deadlines = items.filter((item) => {
+        if (item.type !== "deadline") return false;
+        if (!item.time) return false;
+        // Parse the date portion of the ISO time string as local date
+        const datePart = item.time.split("T")[0];
+        if (!datePart) return false;
+        const [y, m, d] = datePart.split("-").map(Number);
+        if (!y || !m || !d) return false;
+        return isSameLocalDay(new Date(y, m - 1, d), TODAY);
+      });
+      setTodayDeadlines(deadlines);
+      // Re-compute progress now that email items count is known
+      setProgress(computeProgress());
+    }
+  }, [computeProgress]);
 
+  useEffect(() => {
+    const refreshProgress = () => setProgress(computeProgress());
     refreshProgress();
     return subscribeToTaskUpdates(refreshProgress);
-  }, []);
+  }, [computeProgress]);
 
   useEffect(() => {
     void loadEmails();
+    void loadDeadlines();
 
     setIsSyncing(true);
     syncEmails()
-      .then(() => loadEmails())
+      .then(() => Promise.all([loadEmails(), loadDeadlines()]))
       .finally(() => setIsSyncing(false));
-  }, [loadEmails]);
+  }, [loadEmails, loadDeadlines]);
 
   useEffect(() => {
     const emails = loadConnectedEmails();
@@ -452,7 +516,7 @@ const TodayPage: React.FC = () => {
   );
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f1f6ff] p-4">
       <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <header className="page-header w-full shrink-0 px-0 pb-3 pt-4 text-[#1F2933]">
@@ -605,38 +669,48 @@ const TodayPage: React.FC = () => {
                 </div>
 
                 <div className="mt-3 space-y-0.5 pl-2.5 sm:pl-3.5">
-                  {filteredEvents.length === 0 ? (
-                    <p className="py-2 text-[12px] text-[#6B7280]">No events on this day.</p>
+                  {filteredEvents.length === 0 && todayDeadlines.length === 0 ? (
+                    <p className="py-2 text-[12px] text-[#6B7280]">No events or deadlines today.</p>
                   ) : (
-                  filteredEvents.map((event, index) => {
-                    return (
-                      <div
-                        key={event.title}
-                        className="tagged-item group flex items-start gap-2.5 py-0.5 text-sm text-[#1F2933]"
-                        style={{ borderBottom: index === filteredEvents.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
-                      >
+                    <>
+                      {filteredEvents.map((event, index) => (
                         <div
-                          aria-hidden="true"
-                          className="color-line h-9 w-[6px] self-center rounded-full"
-                          style={{ backgroundColor: getCategoryColorById(categories, event.tagCategoryId) }}
-                        />
-
-                        <div className="flex min-w-0 flex-1 flex-col gap-1 text-left">
-                          <div className="flex items-center justify-between gap-3 pr-4">
-                            <span className="text-sm font-semibold text-[#111827] truncate">
-                              {event.title}
-                            </span>
-                            <div className="flex items-center gap-2 whitespace-nowrap text-[12px] font-medium text-[#6B7280]">
-                              <span>{event.date}</span>
-                              <span className="text-[#D1D5DB]">•</span>
-                              <span>{event.time}</span>
-                            </div>
+                          key={event.title + index}
+                          className="tagged-item group flex items-start gap-2.5 py-2 text-sm text-[#1F2933]"
+                          style={{ borderBottom: "0.5px solid #E5E7EB" }}
+                        >
+                          <div
+                            aria-hidden="true"
+                            className="color-line h-9 w-[6px] self-center rounded-full"
+                            style={{ backgroundColor: getCategoryColorById(categories, event.tagCategoryId) }}
+                          />
+                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <span className="text-sm font-semibold text-[#111827] truncate">{event.title}</span>
+                            {event.time && (
+                              <span className="text-[11px] text-[#6B7280]">{event.time}</span>
+                            )}
                           </div>
                         </div>
-
-                      </div>
-                    );
-                  })
+                      ))}
+                      {todayDeadlines.map((item, index) => (
+                        <div
+                          key={item.key}
+                          className="flex items-start gap-2.5 py-2"
+                          style={{ borderBottom: index === todayDeadlines.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
+                        >
+                          <span className="material-symbols-outlined shrink-0 text-[16px] text-[#ef4444] mt-0.5">alarm</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-[#111827]">{item.text}</p>
+                            <p className="truncate text-[11px] text-[#9CA3AF]">{item.emailSubject}</p>
+                          </div>
+                          {item.time && (
+                            <span className="shrink-0 text-[11px] font-medium text-[#6B7280]">
+                              {new Date(item.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </>
                   )}
                 </div>
               </div>

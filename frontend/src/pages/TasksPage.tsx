@@ -17,19 +17,30 @@ import {
   getUserTasks,
   dismissTask,
   addEventToGoogleCalendar,
+  addGoogleTask,
   type EmailTaskItem,
 } from "../services/api";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
 import { loadConnectedEmails } from "../services/connectedUser";
+import { getCurrentUsername } from "../services/currentUser";
+import {
+  getCachedEmailItems,
+  setCachedEmailItems,
+} from "../services/dataCache";
 
-/** Keys of email items already pushed to GCal — persisted in chrome.storage */
-const GCAL_PUSHED_STORAGE_KEY = "tagit_gcal_pushed_keys";
+/** Returns the per-user chrome.storage key for GCal pushed items */
+const getGCalStorageKey = () => `tagit_gcal_pushed_keys.${getCurrentUsername()}`;
+/** Returns the per-user chrome.storage key for GTasks pushed items */
+const getGTaskStorageKey = () => `tagit_gtask_pushed_keys.${getCurrentUsername()}`;
+/** In-memory lock to prevent duplicate pushes from concurrent calls (e.g. React StrictMode) */
+const CURRENTLY_PUSHING = new Set<string>();
 
 async function getGCalPushedKeys(): Promise<Set<string>> {
   try {
-    const result = await chrome.storage.local.get(GCAL_PUSHED_STORAGE_KEY);
-    const arr = result[GCAL_PUSHED_STORAGE_KEY];
+    const key = getGCalStorageKey();
+    const result = await chrome.storage.local.get(key);
+    const arr = result[key];
     return new Set(Array.isArray(arr) ? arr : []);
   } catch {
     return new Set();
@@ -39,9 +50,9 @@ async function getGCalPushedKeys(): Promise<Set<string>> {
 async function markGCalPushed(keys: string[]): Promise<void> {
   if (!keys.length) return;
   try {
+    const key = getGCalStorageKey();
     const existing = await getGCalPushedKeys();
-    const merged = [...existing, ...keys];
-    await chrome.storage.local.set({ [GCAL_PUSHED_STORAGE_KEY]: merged });
+    await chrome.storage.local.set({ [key]: [...existing, ...keys] });
   } catch {
     // Silently fail — dedup is best-effort
   }
@@ -147,7 +158,7 @@ const TasksPage: React.FC = () => {
   const [isEditingTimeEnabled, setIsEditingTimeEnabled] = useState(true);
 
   // Email-extracted tasks & deadlines from backend
-  const [emailItems, setEmailItems] = useState<EmailTaskItem[]>([]);
+  const [emailItems, setEmailItems] = useState<EmailTaskItem[]>(() => getCachedEmailItems() ?? []);
   const [isLoadingEmailItems, setIsLoadingEmailItems] = useState(false);
 
   const loadEmailItems = useCallback(async () => {
@@ -156,36 +167,84 @@ const TasksPage: React.FC = () => {
       const resp = await getUserTasks();
       if (resp.success && resp.data?.items) {
         const items = resp.data.items;
+        setCachedEmailItems(items);
         setEmailItems(items);
 
-        // Auto-push new items to Google Calendar (deduped via chrome.storage)
-        const pushed = await getGCalPushedKeys();
-        const newItems = items.filter((item) => !pushed.has(item.key));
-        if (newItems.length > 0) {
-          // Probe with the first item — if auth fails, skip everything
-          const firstItem = newItems[0];
+        // Auto-push deadlines → Google Calendar, tasks → Google Tasks (deduped)
+        const [gcalPushed, gtaskPushed] = await Promise.all([
+          getGCalPushedKeys(),
+          (async () => {
+            try {
+              const key = getGTaskStorageKey();
+              const r = await chrome.storage.local.get(key);
+              return new Set<string>(Array.isArray(r[key]) ? r[key] : []);
+            } catch { return new Set<string>(); }
+          })(),
+        ]);
+
+        const newDeadlines = items.filter(
+          (i) => i.type === "deadline" && !gcalPushed.has(i.key) && !CURRENTLY_PUSHING.has(i.key)
+        );
+        const newTasks = items.filter(
+          (i) => i.type === "task" && !gtaskPushed.has(i.key) && !CURRENTLY_PUSHING.has(i.key)
+        );
+
+        // Claim keys in-memory immediately to prevent race conditions
+        [...newDeadlines, ...newTasks].forEach((i) => CURRENTLY_PUSHING.add(i.key));
+
+        // Push deadlines to Google Calendar
+        if (newDeadlines.length > 0) {
           const probeResult = await addEventToGoogleCalendar({
-            title: `[${firstItem.type === "deadline" ? "Deadline" : "Task"}] ${firstItem.text}`,
-            date: firstItem.time ? firstItem.time.split("T")[0] : undefined,
-            location: firstItem.location || undefined,
+            title: `[Deadline] ${newDeadlines[0].text}`,
+            date: newDeadlines[0].time ? newDeadlines[0].time.split("T")[0] : undefined,
+            location: newDeadlines[0].location || undefined,
           });
-          const authFailed =
-            probeResult.error === "INSUFFICIENT_SCOPES" ||
-            probeResult.error === "NO_GOOGLE_TOKEN";
+          const authFailed = probeResult.error === "INSUFFICIENT_SCOPES" || probeResult.error === "NO_GOOGLE_TOKEN";
           if (!authFailed) {
-            const newKeys: string[] = [];
-            if (probeResult.success) newKeys.push(firstItem.key);
-            for (const item of newItems.slice(1)) {
-              const result = await addEventToGoogleCalendar({
-                title: `[${item.type === "deadline" ? "Deadline" : "Task"}] ${item.text}`,
+            const pushed: string[] = [];
+            if (probeResult.success) pushed.push(newDeadlines[0].key);
+            for (const item of newDeadlines.slice(1)) {
+              const r = await addEventToGoogleCalendar({
+                title: `[Deadline] ${item.text}`,
                 date: item.time ? item.time.split("T")[0] : undefined,
                 location: item.location || undefined,
               });
-              if (result.success) newKeys.push(item.key);
+              if (r.success) pushed.push(item.key);
             }
-            await markGCalPushed(newKeys);
+            await markGCalPushed(pushed);
           }
         }
+
+        // Push tasks to Google Tasks
+        if (newTasks.length > 0) {
+          const probeResult = await addGoogleTask({
+            title: newTasks[0].text,
+            notes: newTasks[0].emailSubject,
+            due: newTasks[0].time || undefined,
+          });
+          const authFailed = probeResult.error === "INSUFFICIENT_SCOPES" || probeResult.error === "NO_GOOGLE_TOKEN";
+          if (!authFailed) {
+            const pushed: string[] = [];
+            if (probeResult.success) pushed.push(newTasks[0].key);
+            for (const item of newTasks.slice(1)) {
+              const r = await addGoogleTask({
+                title: item.text,
+                notes: item.emailSubject,
+                due: item.time || undefined,
+              });
+              if (r.success) pushed.push(item.key);
+            }
+            try {
+              const key = getGTaskStorageKey();
+              const existing = await chrome.storage.local.get(key);
+              const merged = [...(Array.isArray(existing[key]) ? existing[key] : []), ...pushed];
+              await chrome.storage.local.set({ [key]: merged });
+            } catch { /* best-effort */ }
+          }
+        }
+
+        // Release in-memory lock
+        [...newDeadlines, ...newTasks].forEach((i) => CURRENTLY_PUSHING.delete(i.key));
       }
     } catch {
       // Silently fail — manual tasks are still shown
@@ -199,8 +258,12 @@ const TasksPage: React.FC = () => {
   }, [loadEmailItems]);
 
   const handleDismissEmailItem = useCallback(async (key: string) => {
-    // Optimistically remove from UI
-    setEmailItems((prev) => prev.filter((item) => item.key !== key));
+    // Optimistically remove from UI and cache
+    setEmailItems((prev) => {
+      const next = prev.filter((item) => item.key !== key);
+      setCachedEmailItems(next);
+      return next;
+    });
     await dismissTask(key);
   }, []);
 
@@ -266,7 +329,7 @@ const TasksPage: React.FC = () => {
 
     const nextId =
       tasks.length === 0 ? 1 : Math.max(...tasks.map((task) => task.id)) + 1;
-    const accountEmail = connectedEmails[0] ?? "";
+    const accountEmail = connectedEmails[0] || undefined;
 
     setTasks((previousTasks) => [
       ...previousTasks,
@@ -388,7 +451,7 @@ const TasksPage: React.FC = () => {
     "rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fde6d7]";
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f1f6ff] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
