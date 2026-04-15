@@ -15,13 +15,6 @@ const MascotPage: React.FC = () => {
         backgroundPosition: "center",
       }}
     >
-      <button
-        type="button"
-        className="absolute top-4 left-4 rounded-full border border-[#F3D4C0] bg-white px-3 py-1 text-xs font-semibold text-[#F9A36E] shadow-sm transition hover:bg-[#FFF5EE]"
-        onClick={() => navigate("/setup")}
-      >
-        Dummy Setup
-      </button>
       <div className="pointer-events-none absolute inset-0 bg-white/20" />
 
       <div className="relative z-10 -translate-y-6 flex flex-col items-center gap-3">

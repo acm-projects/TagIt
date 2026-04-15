@@ -288,7 +288,7 @@ const MailPage: React.FC = () => {
                     <FilterMenuButton
                       options={accountOptions}
                       selectedValue={selectedAccount}
-                      onSelect={setSelectedAccount}
+                      onSelect={() => {}}
                       ariaLabel="Filter mails by account"
                       emptyMessage="No accounts yet"
                     />

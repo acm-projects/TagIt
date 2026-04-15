@@ -606,7 +606,7 @@ const TodayPage: React.FC = () => {
                     <FilterMenuButton
                       options={filterOptions}
                       selectedValue={selectedFilter}
-                      onSelect={setSelectedFilter}
+                      onSelect={() => {}}
                       ariaLabel="Filter important emails"
                       emptyMessage="No accounts yet"
                     />
