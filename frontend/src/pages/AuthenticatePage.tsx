@@ -22,7 +22,7 @@ const AuthenticatePage: React.FC = () => {
           return;
         }
         if (response?.success && response.data?.email) {
-          navigate("/connected-emails");
+          navigate("/setup");
           return;
         }
         setError(response?.error ?? "Google sign-in failed");
@@ -42,7 +42,7 @@ const AuthenticatePage: React.FC = () => {
           return;
         }
         if (response?.success && response.data?.email) {
-          navigate("/connected-emails");
+          navigate("/setup");
           return;
         }
         setError(response?.error ?? "Microsoft sign-in failed");

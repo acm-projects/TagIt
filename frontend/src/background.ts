@@ -5,8 +5,7 @@
 
 import {
   buildGoogleAuthUrl,
-  fetchGoogleUserEmail,
-  parseTokenFromRedirect,
+  parseCodeFromRedirect,
 } from "./services/auth/googleOAuth";
 import {
   buildMicrosoftAuthUrl,
@@ -14,6 +13,9 @@ import {
   fetchMicrosoftUserEmail,
 } from "./services/auth/microsoftOAuth";
 import { saveToken } from "./services/auth/tokenStorage";
+import { getStoredToken } from "./services/api";
+
+const NODE_BACKEND_URL = "http://localhost:3000";
 
 type SidePanelApiWithToggle = typeof chrome.sidePanel & {
   close?: (options: { tabId: number }) => Promise<void>;
@@ -72,11 +74,30 @@ chrome.action.onClicked.addListener((tab) => {
   const tabId = tab.id;
   if (tabId == null) return;
 
-  const togglePromise = openPanelTabIds.has(tabId)
-    ? closeSidePanelForTab(tabId)
-    : openSidePanelForTab(tabId);
+  const toggle = async () => {
+    if (openPanelTabIds.has(tabId)) {
+      try {
+        await closeSidePanelForTab(tabId);
+      } catch {
+        // Panel wasn't actually open (stale tracking) — open it instead
+        setPanelOpenState(tabId, false);
+        await openSidePanelForTab(tabId);
+      }
+    } else {
+      try {
+        await openSidePanelForTab(tabId);
+      } catch {
+        // Panel was already open (tracking lost during SW restart) — close it
+        setPanelOpenState(tabId, true);
+        if (typeof sidePanelApi.close === "function") {
+          await sidePanelApi.close({ tabId });
+          setPanelOpenState(tabId, false);
+        }
+      }
+    }
+  };
 
-  togglePromise.catch((error) => {
+  toggle().catch((error) => {
     console.error("Unable to toggle side panel.", error);
   });
 });
@@ -158,11 +179,35 @@ async function runGoogleOAuth(): Promise<{ email: string }> {
     );
   });
 
-  const accessToken = parseTokenFromRedirect(redirectUrl);
-  const email = await fetchGoogleUserEmail(accessToken);
+  // Parse the authorization code from the redirect URL
+  const code = parseCodeFromRedirect(redirectUrl);
 
+  // Get the user's JWT so the Node backend can associate the tokens
+  const jwt = await getStoredToken();
+  if (!jwt) {
+    throw new Error("You must be logged in before connecting a Gmail account.");
+  }
+
+  // Forward the redirect URL to the Node backend for token exchange + DB storage
+  const resp = await fetch(`${NODE_BACKEND_URL}/auth/google/exchange`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({ redirectUrl }),
+  });
+
+  const data = (await resp.json()) as { success?: boolean; email?: string; error?: string };
+  if (!resp.ok || !data.success) {
+    throw new Error(data.error ?? "Failed to exchange Google code for tokens");
+  }
+
+  const email = data.email ?? "unknown@gmail.com";
+
+  // Also save locally so the ConnectedEmailsPage can show it immediately
   await saveToken("google", {
-    access_token: accessToken,
+    access_token: code, // placeholder — real tokens are on the server
     email,
   });
 
@@ -204,6 +249,34 @@ async function runMicrosoftOAuth(): Promise<{ email: string }> {
     refresh_token: tokens.refresh_token,
     email,
   });
+
+  // Save the MS refresh token + email to the DB so the Node server can
+  // fetch Outlook emails during sync-emails
+  const jwt = await getStoredToken();
+  if (jwt && tokens.refresh_token) {
+    try {
+      await fetch(`${NODE_BACKEND_URL}/auth/microsoft/exchange`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${jwt}`,
+        },
+        body: JSON.stringify({ redirectUrl }),
+      }).catch(() => {
+        // Fallback: save tokens directly to Flask
+        fetch("http://localhost:8000/auth/oauth-tokens", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${jwt}`,
+          },
+          body: JSON.stringify({ msRefreshToken: tokens.refresh_token, msEmail: email }),
+        }).catch(() => {});
+      });
+    } catch {
+      // Non-critical — emails just won't sync from Outlook
+    }
+  }
 
   return { email };
 }

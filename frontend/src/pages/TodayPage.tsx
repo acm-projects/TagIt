@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
-import WeekHeader from "../components/WeekHeader";
+import { isSameLocalDay } from "../components/DaysFilter";
 import {
   getTaskProgress,
   loadTasks,
@@ -15,8 +15,25 @@ import {
   getCategoryColorById,
   useUserCategories,
 } from "../services/categories";
+import {
+  getUserEmails,
+  syncEmails,
+  getUserTasks,
+  type ProcessedEmail,
+  type EmailTaskItem,
+} from "../services/api";
 import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
 import { loadConnectedEmails } from "../services/connectedUser";
+import { getCurrentUsername } from "../services/currentUser";
+import {
+  getCachedEmails,
+  setCachedEmails,
+  getCachedEmailItems,
+  setCachedEmailItems,
+} from "../services/dataCache";
+import { loadCompletedEmailTasks } from "../services/completedEmailTasks";
+
+const getFirstSyncSeenKey = () => `tagit.first-sync-seen.v1.${getCurrentUsername()}`;
 
 /**
  * Important email preview shown on Today.
@@ -25,13 +42,14 @@ import { loadConnectedEmails } from "../services/connectedUser";
 type ImportantEmailPreview = {
   id: string;
   sender: string;
-  source: "gmail" | "handshake";
+  source: "gmail" | "outlook";
   tone: "urgent" | "soon" | "done";
   summary: string;
   /** Email account the message belongs to (user can have multiple accounts). */
   accountEmail: string;
   priority?: "urgent";
   tagCategoryId?: string;
+  date: string;
 };
 
 /**
@@ -45,64 +63,55 @@ type TodayEvent = {
   tagCategoryId?: string;
 };
 
-const IMPORTANT_EMAILS_FILLER: ImportantEmailPreview[] = [
-  {
-    id: "mail-1",
-    sender: "Internship Application Update @Amazon",
-    source: "gmail",
-    tone: "urgent",
-    summary: "Recruiter requested availability for next round; check attached timeline and confirm slots.",
-    accountEmail: "primary@university.edu",
-    priority: "urgent",
-    tagCategoryId: "priority-3",
-  },
-  {
-    id: "mail-2",
-    sender: "Club meeting today",
-    source: "gmail",
-    tone: "soon",
-    summary: "Agenda covers officer elections, budget approval, and venue change for next semester events.",
-    accountEmail: "primary@university.edu",
-    tagCategoryId: "priority-1",
-  },
-  {
-    id: "mail-3",
-    sender: "Tution deadline reminder",
-    source: "gmail",
-    tone: "done",
-    summary: "Billing portal shows outstanding balance due Friday; late fee applies after 5 PM CST.",
-    accountEmail: "finance@university.edu",
-    tagCategoryId: "priority-4",
-  },
-  {
-    id: "mail-4",
-    sender: "John Dollinger @CS 3377",
-    source: "gmail",
-    tone: "soon",
-    summary: "Project checkpoint moved to next Monday; submit design doc draft before lab session.",
-    accountEmail: "primary@university.edu",
-    priority: "urgent",
-    tagCategoryId: "priority-2",
-  },
-  {
-    id: "mail-5",
-    sender: "Career Center Digest",
-    source: "gmail",
-    tone: "soon",
-    summary: "Two on-campus career fairs open registration this week; RSVP to reserve an early slot.",
-    accountEmail: "career@university.edu",
-    tagCategoryId: "priority-3",
-  },
-];
-
-const assignAccountsToEmails = (emails: string[]): ImportantEmailPreview[] => {
-  if (emails.length === 0) return IMPORTANT_EMAILS_FILLER;
-  return IMPORTANT_EMAILS_FILLER.map((mail, index) => ({
-    ...mail,
-    accountEmail: emails[index % emails.length],
-  }));
+const extractSenderName = (raw: string): string => {
+  if (!raw) return "Unknown sender";
+  const match = raw.match(/^"?([^"<]+)"?\s*</);
+  return match ? match[1].trim() : raw.replace(/<[^>]+>/, "").trim() || raw;
 };
 
+const mapEmailToPreview = (e: ProcessedEmail): ImportantEmailPreview => {
+  const dateStr = e.receivedAt ? e.receivedAt.slice(0, 10) : "";
+  const tone: ImportantEmailPreview["tone"] =
+    e.priorityLevel === 1 ? "urgent" : e.priorityLevel <= 3 ? "soon" : "done";
+  return {
+    id: e.id,
+    sender: extractSenderName(e.sender),
+    source: e.source === "outlook" ? "outlook" : "gmail",
+    tone,
+    summary: e.summary || e.subject,
+    accountEmail: e.source || "",
+    priority: e.priorityLevel === 1 ? "urgent" : undefined,
+    tagCategoryId: `priority-${e.priorityLevel}`,
+    date: dateStr,
+  };
+};
+
+const extractEventsFromEmails = (emails: ProcessedEmail[]): TodayEvent[] => {
+  const events: TodayEvent[] = [];
+  for (const e of emails) {
+    if (e.events?.length) {
+      const dateStr = e.receivedAt ? e.receivedAt.slice(0, 10) : "";
+      for (const ev of e.events) {
+        events.push({
+          time: e.time || "",
+          title: ev,
+          tagCategoryId: `priority-${e.priorityLevel}`,
+          date: dateStr,
+        });
+      }
+    }
+  }
+  return events;
+};
+
+const parseIsoDate = (value?: string): Date | null => {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+/** Static events used by the mascot timer for approaching-event messages. */
 const EVENTS: TodayEvent[] = [
   { date: "Tue, Apr 01", time: "03:00 - 03:30", title: "Exam Prep", tagCategoryId: "priority-2" },
   { date: "Tue, Apr 01", time: "04:00 - 05:30", title: "Government Class", tagCategoryId: "priority-2" },
@@ -197,13 +206,73 @@ function pickNormalMascotMessage(
   return pickRandomLine(pool);
 }
 
+const TODAY = new Date();
+
+const formatTodayLabel = (date: Date): string => {
+  return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+};
+
 const TodayPage: React.FC = () => {
   const navigate = useNavigate();
-  const [progress, setProgress] = useState(() => getTaskProgress(loadTasks()));
+  const selectedCalendarDate = TODAY;
+
+  const computeProgress = useCallback((): TaskProgress => {
+    const userTasks = loadTasks();
+    const userBase = getTaskProgress(userTasks);
+    const completedEmailTasks = loadCompletedEmailTasks();
+    const completedKeys = new Set(completedEmailTasks.map((t) => t.key));
+    const activeEmailTaskCount = (getCachedEmailItems() ?? [])
+      .filter((i) => i.type === "task" && !completedKeys.has(i.key))
+      .length;
+    const completedEmailCount = completedEmailTasks.length;
+    const total = userBase.totalTasks + activeEmailTaskCount + completedEmailCount;
+    const completed = userBase.completedTasks + completedEmailCount;
+    return {
+      totalTasks: total,
+      completedTasks: completed,
+      progressPercentage: total === 0 ? 0 : Math.round((completed / total) * 100),
+    };
+  }, []);
+
+  const [progress, setProgress] = useState(() => computeProgress());
   const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
-  const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(() =>
-    assignAccountsToEmails(loadConnectedEmails())
-  );
+  const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(() => {
+    const cached = getCachedEmails();
+    if (!cached) return [];
+    const nonSpam = cached.filter((e) => !e.isSpam && !e.uiBadges?.includes("Error"));
+    return nonSpam.map(mapEmailToPreview);
+  });
+  const [events, setEvents] = useState<TodayEvent[]>(() => {
+    const cached = getCachedEmails();
+    if (!cached) return [];
+    const nonSpam = cached.filter((e) => !e.isSpam && !e.uiBadges?.includes("Error"));
+    return extractEventsFromEmails(nonSpam);
+  });
+  const [todayDeadlines, setTodayDeadlines] = useState<EmailTaskItem[]>(() => {
+    const cached = getCachedEmailItems();
+    if (!cached) return [];
+    return cached.filter((item) => {
+      if (item.type !== "deadline") return false;
+      // New format: item.time is "YYYY-MM-DDT00:00:00" — filter to today only
+      // Legacy items with no parseable date still show (fall through)
+      if (item.time) {
+        const datePart = item.time.split("T")[0];
+        const parts = datePart.split("-").map(Number);
+        if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+          return isSameLocalDay(new Date(parts[0], parts[1] - 1, parts[2]), TODAY);
+        }
+      }
+      return true; // legacy item with no date — always show
+    });
+  });
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isFirstTimeUser] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem(getFirstSyncSeenKey());
+    } catch {
+      return false;
+    }
+  });
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [slidingEmailIds, setSlidingEmailIds] = useState<Set<string>>(new Set());
   const [closingEmailIds, setClosingEmailIds] = useState<Set<string>>(new Set());
@@ -292,24 +361,63 @@ const TodayPage: React.FC = () => {
     }, TAGI_EXCITED_MS);
   }, [progress.completedTasks]);
 
-  useEffect(() => {
-    const refreshProgress = () => {
-      setProgress(getTaskProgress(loadTasks()));
-    };
+  const loadEmails = useCallback(async () => {
+    const resp = await getUserEmails();
+    if (resp.success && resp.data?.emails) {
+      setCachedEmails(resp.data.emails);
+      const nonSpam = resp.data.emails.filter((e) => !e.isSpam && !e.uiBadges?.includes("Error"));
+      setImportantEmails(nonSpam.map(mapEmailToPreview));
+      setEvents(extractEventsFromEmails(nonSpam));
+    }
+  }, []);
 
+  const loadDeadlines = useCallback(async () => {
+    const resp = await getUserTasks();
+    if (resp.success && resp.data?.items) {
+      const items = resp.data.items;
+      setCachedEmailItems(items);
+      setTodayDeadlines(items.filter((item) => {
+        if (item.type !== "deadline") return false;
+        if (item.time) {
+          const datePart = item.time.split("T")[0];
+          const parts = datePart.split("-").map(Number);
+          if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+            return isSameLocalDay(new Date(parts[0], parts[1] - 1, parts[2]), TODAY);
+          }
+        }
+        return true; // legacy item with no date — always show
+      }));
+      setProgress(computeProgress());
+    }
+  }, [computeProgress]);
+
+  useEffect(() => {
+    const refreshProgress = () => setProgress(computeProgress());
     refreshProgress();
     return subscribeToTaskUpdates(refreshProgress);
-  }, []);
+  }, [computeProgress]);
 
-  // Reset important emails to the placeholder set on mount (helps restore if any were dismissed previously)
   useEffect(() => {
-    setImportantEmails(assignAccountsToEmails(connectedEmails));
-  }, []);
+    void loadEmails();
+    void loadDeadlines();
+
+    setIsSyncing(true);
+    syncEmails()
+      .then(() => Promise.all([loadEmails(), loadDeadlines()]))
+      .finally(() => {
+        setIsSyncing(false);
+        // Mark that the user has seen the first-sync banner so it never shows again
+        try {
+          localStorage.setItem(getFirstSyncSeenKey(), "1");
+        } catch {
+          // ignore
+        }
+      });
+  }, [loadEmails, loadDeadlines]);
 
   useEffect(() => {
     const emails = loadConnectedEmails();
     setConnectedEmails(emails);
-    setImportantEmails(assignAccountsToEmails(emails));
   }, []);
 
   const getSourceIcon = (source: ImportantEmailPreview["source"]) => {
@@ -319,7 +427,7 @@ const TodayPage: React.FC = () => {
 
     return (
       <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-[#5C9BFF] text-[10px] font-bold text-white">
-        H
+        O
       </span>
     );
   };
@@ -398,15 +506,33 @@ const TodayPage: React.FC = () => {
     setToast(null);
   };
 
+  const dateFilteredEmails = useMemo(
+    () =>
+      importantEmails.filter((mail) => {
+        const d = parseIsoDate(mail.date);
+        return d ? isSameLocalDay(d, selectedCalendarDate) : true;
+      }),
+    [importantEmails, selectedCalendarDate],
+  );
+
+  const filteredEvents = useMemo(
+    () =>
+      events.filter((event) => {
+        const d = parseIsoDate(event.date);
+        return d ? isSameLocalDay(d, selectedCalendarDate) : true;
+      }),
+    [events, selectedCalendarDate],
+  );
+
   const availableAccounts =
     connectedEmails.length > 0
       ? connectedEmails
-      : Array.from(new Set(importantEmails.map((mail) => mail.accountEmail || "Unknown account")));
+      : Array.from(new Set(dateFilteredEmails.map((mail) => mail.accountEmail || "Unknown account")));
 
   const filteredEmails =
     selectedFilter === "all"
-      ? importantEmails
-      : importantEmails.filter(
+      ? dateFilteredEmails
+      : dateFilteredEmails.filter(
           (mail) => (mail.accountEmail || "Unknown account") === selectedFilter
         );
 
@@ -418,12 +544,19 @@ const TodayPage: React.FC = () => {
   );
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f1f6ff] p-4">
       <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
-          <WeekHeader showYear={false} />
+          <header className="page-header w-full shrink-0 px-0 pb-3 pt-4 text-[#1F2933]">
+            <div className="relative flex min-h-16 items-center justify-center">
+              <h1 className="min-w-0 w-full max-w-full truncate px-2 text-center text-2xl font-semibold leading-tight tracking-[0.12em] text-[#111827] sm:text-3xl">
+                {formatTodayLabel(TODAY)}
+              </h1>
+            </div>
+          </header>
 
           <div className="mt-2.5 space-y-4 sm:mt-3">
+
             <section className="w-full max-w-4xl">
               <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_6px_14px_rgba(15,23,42,0.05)]">
                 <div className="flex items-start gap-2">
@@ -465,12 +598,15 @@ const TodayPage: React.FC = () => {
                       star
                     </span>
                     <span>Important Emails</span>
+                    {isSyncing && (
+                      <span className="ml-1 text-[11px] font-normal text-[#9CA3AF]">syncing…</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 pr-1">
                     <FilterMenuButton
                       options={filterOptions}
                       selectedValue={selectedFilter}
-                      onSelect={setSelectedFilter}
+                      onSelect={() => {}}
                       ariaLabel="Filter important emails"
                       emptyMessage="No accounts yet"
                     />
@@ -481,7 +617,7 @@ const TodayPage: React.FC = () => {
                   {filteredEmails.length === 0 ? (
                     <div className="flex items-center justify-center gap-2 py-3 text-sm font-semibold text-[#6B7280]">
                       <span className="material-symbols-outlined text-base text-[#34d399]">task_alt</span>
-                      <span>That’s everything!</span>
+                      <span>That's everything!</span>
                     </div>
                   ) : (
                     filteredEmails.map((mail, index) => {
@@ -561,39 +697,69 @@ const TodayPage: React.FC = () => {
                 </div>
 
                 <div className="mt-3 space-y-0.5 pl-2.5 sm:pl-3.5">
-                  {EVENTS.map((event, index) => {
-                    return (
-                      <div
-                        key={event.title}
-                        className="tagged-item group flex items-start gap-2.5 py-0.5 text-sm text-[#1F2933]"
-                        style={{ borderBottom: index === EVENTS.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
-                      >
+                  {filteredEvents.length === 0 && todayDeadlines.length === 0 ? (
+                    <p className="py-2 text-[12px] text-[#6B7280]">No events or deadlines today.</p>
+                  ) : (
+                    <>
+                      {filteredEvents.map((event, index) => (
                         <div
-                          aria-hidden="true"
-                          className="color-line h-9 w-[6px] self-center rounded-full"
-                          style={{ backgroundColor: getCategoryColorById(categories, event.tagCategoryId) }}
-                        />
-
-                        <div className="flex min-w-0 flex-1 flex-col gap-1 text-left">
-                          <div className="flex items-center justify-between gap-3 pr-4">
-                            <span className="text-sm font-semibold text-[#111827] truncate">
-                              {event.title}
-                            </span>
-                            <div className="flex items-center gap-2 whitespace-nowrap text-[12px] font-medium text-[#6B7280]">
-                              <span>{event.date}</span>
-                              <span className="text-[#D1D5DB]">•</span>
-                              <span>{event.time}</span>
-                            </div>
+                          key={event.title + index}
+                          className="tagged-item group flex items-start gap-2.5 py-2 text-sm text-[#1F2933]"
+                          style={{ borderBottom: "0.5px solid #E5E7EB" }}
+                        >
+                          <div
+                            aria-hidden="true"
+                            className="color-line h-9 w-[6px] self-center rounded-full"
+                            style={{ backgroundColor: getCategoryColorById(categories, event.tagCategoryId) }}
+                          />
+                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <span className="text-sm font-semibold text-[#111827] truncate">{event.title}</span>
+                            {event.time && (
+                              <span className="text-[11px] text-[#6B7280]">{event.time}</span>
+                            )}
                           </div>
                         </div>
-
-                      </div>
-                    );
-                  })}
+                      ))}
+                      {todayDeadlines.map((item, index) => (
+                        <div
+                          key={item.key}
+                          className="flex items-start gap-2.5 py-2"
+                          style={{ borderBottom: index === todayDeadlines.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
+                        >
+                          <span className="material-symbols-outlined shrink-0 text-[16px] text-[#ef4444] mt-0.5">alarm</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-[#111827]">{item.text}</p>
+                            <p className="truncate text-[11px] text-[#9CA3AF]">{item.emailSubject}</p>
+                          </div>
+                          {item.time && (
+                            <span className="shrink-0 text-[11px] font-medium text-[#6B7280]">
+                              {new Date(item.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               </div>
             </section>
           </div>
+
+          {/* First-time user loading banner — shown once per account until first sync finishes */}
+          {isFirstTimeUser && isSyncing && (
+            <div className="mt-4 flex flex-col items-center gap-3 rounded-2xl border border-[#fde6d7] bg-[#fff7f2] px-5 py-5 text-center shadow-[0_4px_12px_rgba(249,171,123,0.12)]">
+              <div
+                className="h-10 w-10 rounded-full border-4 border-[#f9ab7b] border-t-transparent animate-spin"
+                aria-label="Loading"
+              />
+              <div>
+                <p className="text-[15px] font-semibold text-[#c97d6e]">Welcome to TagIt!</p>
+                <p className="mt-0.5 text-[12px] text-[#9CA3AF]">
+                  Your emails are being processed — this only takes a moment.
+                </p>
+              </div>
+            </div>
+          )}
         </main>
 
         {toast && (

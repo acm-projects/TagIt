@@ -14,12 +14,7 @@ export type TaskProgress = {
   progressPercentage: number;
 };
 
-export const DEFAULT_TASKS: SharedTask[] = [
-  { id: 1, label: "GOV 2306 review", done: false },
-  { id: 2, label: "PHYS review", done: false },
-  { id: 3, label: "Math Ch.2 practice", done: false },
-  { id: 4, label: "Bash scripting exercises", done: false },
-];
+export const DEFAULT_TASKS: SharedTask[] = [];
 
 const LEGACY_DEFAULT_TASK_LABEL_SETS = [
   [
@@ -43,7 +38,10 @@ const LEGACY_DEFAULT_TASK_LABEL_SETS = [
   ],
 ];
 
-const TASKS_STORAGE_KEY = "tagit.tasks.v1";
+import { getCurrentUsername } from "./currentUser";
+
+const TASKS_KEY_PREFIX = "tagit.tasks.v1";
+const getTasksStorageKey = () => `${TASKS_KEY_PREFIX}.${getCurrentUsername()}`;
 const TASKS_UPDATED_EVENT = "tagit:tasks-updated";
 
 /** Synced in saveTasks so Today can detect completions after navigating from Tasks. */
@@ -89,26 +87,26 @@ const isSharedTaskArray = (value: unknown): value is SharedTask[] => {
 
 export const loadTasks = (): SharedTask[] => {
   try {
-    const raw = localStorage.getItem(TASKS_STORAGE_KEY);
-    if (!raw) return cloneTasks(DEFAULT_TASKS);
+    const raw = localStorage.getItem(getTasksStorageKey());
+    if (!raw) return [];
 
     const parsed: unknown = JSON.parse(raw);
-    if (!isSharedTaskArray(parsed)) return cloneTasks(DEFAULT_TASKS);
+    if (!isSharedTaskArray(parsed)) return [];
 
     if (matchesLegacySeedTasks(parsed)) {
-      return cloneTasks(DEFAULT_TASKS);
+      return [];
     }
 
     return cloneTasks(parsed);
   } catch {
-    return cloneTasks(DEFAULT_TASKS);
+    return [];
   }
 };
 
 export const saveTasks = (tasks: SharedTask[]) => {
   let previousCompleted = 0;
   try {
-    const previousRaw = localStorage.getItem(TASKS_STORAGE_KEY);
+    const previousRaw = localStorage.getItem(getTasksStorageKey());
     if (previousRaw) {
       const parsed: unknown = JSON.parse(previousRaw);
       if (isSharedTaskArray(parsed)) {
@@ -122,7 +120,7 @@ export const saveTasks = (tasks: SharedTask[]) => {
   const newCompleted = tasks.filter((t) => t.done).length;
 
   try {
-    localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
+    localStorage.setItem(getTasksStorageKey(), JSON.stringify(tasks));
     try {
       if (newCompleted > previousCompleted) {
         sessionStorage.setItem(MASCOT_LAST_COMPLETED_TASKS_KEY, String(previousCompleted));
@@ -149,7 +147,7 @@ export const getTaskProgress = (tasks: SharedTask[]): TaskProgress => {
 
 export const subscribeToTaskUpdates = (onUpdate: () => void): (() => void) => {
   const storageListener = (event: StorageEvent) => {
-    if (event.key === TASKS_STORAGE_KEY || event.key === null) {
+    if (event.key === getTasksStorageKey() || event.key === null) {
       onUpdate();
     }
   };

@@ -3,6 +3,7 @@ import Popup from "./Popup";
 import React from "react";
 import { HashRouter, Route, Routes } from "react-router-dom";
 import { DayFilterProvider } from "./components/DaysFilter";
+import { AuthProvider } from "./services/auth/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import TodayPage from "./pages/TodayPage";
@@ -19,6 +20,7 @@ import ChatbotPage from "./pages/ChatbotPage";
 const App: React.FC = () => {
   return (
     <HashRouter>
+      <AuthProvider>
       <DayFilterProvider>
       <Routes>
         <Route path="/" element={<Popup />} />
@@ -36,6 +38,7 @@ const App: React.FC = () => {
         <Route path="/mascot" element={<MascotPage />} />
       </Routes>
       </DayFilterProvider>
+      </AuthProvider>
     </HashRouter>
   );
 };

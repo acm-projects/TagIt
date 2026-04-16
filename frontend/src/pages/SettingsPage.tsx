@@ -3,7 +3,9 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import AppNavbar from "../components/AppNavbar";
 import SectionHeader from "../components/SectionHeader";
-import { removeToken } from "../services/auth/tokenStorage";
+import { useAuth } from "../services/auth/AuthContext";
+import { getToken, removeToken } from "../services/auth/tokenStorage";
+import { clearToken, getPreferences, updatePreferences, getConnectedEmails } from "../services/api";
 import {
   getCategoryIdForPriority,
   loadUserPriorities,
@@ -16,7 +18,6 @@ import {
 } from "../services/categories";
 import deleteIcon from "../assets/page_buttons/delete.png";
 import {
-  loadConnectedUser,
   saveConnectedUser,
   type ConnectedUser,
 } from "../services/connectedUser";
@@ -152,14 +153,72 @@ const SortablePriorityRow: React.FC<SortablePriorityRowProps> = ({
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { username, logout: authLogout } = useAuth();
 
-  // Connected user and emails; updated when user authenticates new accounts.
-  // Backend will use these to connect and read inboxes for the AI pipeline.
-  const [connectedUser, setConnectedUser] = useState<ConnectedUser>(() => loadConnectedUser());
+  // Connected user and emails; loaded from the database.
+  const [connectedUser, setConnectedUser] = useState<ConnectedUser>(() => ({
+    username: "...",
+    emails: [],
+  }));
 
-  // Priorities: load from localStorage so changes are permanent across sessions.
+  const loadConnectedEmails = useCallback(async () => {
+    // Try database first, fall back to local token storage
+    const res = await getConnectedEmails();
+    if (res.success && res.data?.emails) {
+      setConnectedUser((prev) => ({
+        ...prev,
+        emails: res.data!.emails.map((e: { email: string }) => e.email),
+      }));
+    } else {
+      const [google, microsoft] = await Promise.all([
+        getToken("google"),
+        getToken("microsoft"),
+      ]);
+      const emails: string[] = [];
+      if (google?.email) emails.push(google.email);
+      if (microsoft?.email) emails.push(microsoft.email);
+      setConnectedUser((prev) => ({ ...prev, emails }));
+    }
+  }, []);
+
+  // Load real username + connected emails on mount
+  useEffect(() => {
+    setConnectedUser((prev) => ({ ...prev, username: username ?? "..." }));
+    void loadConnectedEmails();
+  }, [username, loadConnectedEmails]);
+
+  // Also refresh when chrome storage changes (new account connected)
+  useEffect(() => {
+    const listener = () => void loadConnectedEmails();
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, [loadConnectedEmails]);
+
+  // Priorities: seed from localStorage, then overwrite with backend data.
   const [priorities, setPriorities] = useState<PriorityRule[]>(() => loadUserPriorities());
+  const [prioritiesLoaded, setPrioritiesLoaded] = useState(false);
   const categories = useUserCategories();
+
+  // Load priorities from the backend on mount
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await getPreferences();
+        if (res.success && res.data?.priorityTopics && res.data.priorityTopics.length > 0) {
+          const backendPriorities: PriorityRule[] = res.data.priorityTopics.map(
+            (label: string, i: number) => ({ id: i + 1, label })
+          );
+          setPriorities(backendPriorities);
+          saveUserPriorities(backendPriorities);
+        }
+      } catch {
+        // fall back to localStorage values already loaded
+      } finally {
+        setPrioritiesLoaded(true);
+      }
+    };
+    void load();
+  }, []);
 
   // Track which priority (if any) is currently being edited inline.
   const [editingPriorityId, setEditingPriorityId] = useState<number | null>(
@@ -169,10 +228,14 @@ const SettingsPage: React.FC = () => {
   const [dragId, setDragId] = useState<number | null>(null);
   const [confirmEmailIndex, setConfirmEmailIndex] = useState<number | null>(null);
 
-  // Persist priorities to localStorage whenever they change (reorder, add, remove, edit).
+  // Persist priorities to localStorage + backend whenever they change.
   useEffect(() => {
     saveUserPriorities(priorities);
-  }, [priorities]);
+    if (prioritiesLoaded) {
+      const topics = priorities.map((p) => p.label);
+      void updatePreferences(undefined, topics);
+    }
+  }, [priorities, prioritiesLoaded]);
 
   // Persist connected user whenever their accounts change.
   useEffect(() => {
@@ -254,8 +317,13 @@ const SettingsPage: React.FC = () => {
   }, [priorities]);
 
   const handleLogout = async () => {
-    await Promise.all([removeToken("google"), removeToken("microsoft")]);
-    navigate("/login");
+    await Promise.all([
+      removeToken("google"),
+      removeToken("microsoft"),
+      clearToken(),
+    ]);
+    await authLogout();
+    navigate("/");
   };
 
   const handlePriorityDragStart = (id: number, event: React.DragEvent<HTMLDivElement>) => {
@@ -296,7 +364,7 @@ const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f1f6ff] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           {/* Same outer + row height as WeekHeader/DateHeader so content below aligns with Mail/Calendar */}
@@ -329,6 +397,7 @@ const SettingsPage: React.FC = () => {
                   </button>
                 </div>
 
+
                 <div className="mt-3 space-y-3 text-sm">
                   <div className="flex min-w-0 items-center gap-3 rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 py-3">
                     <span className="shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-[#9CA3AF]">
@@ -339,9 +408,14 @@ const SettingsPage: React.FC = () => {
                     </span>
                   </div>
 
-                  {connectedUser.emails.length > 0 && (
-                    <div className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 text-sm text-[#1F2933]">
-                      {connectedUser.emails.map((email, index) => {
+                  <div className="rounded-xl border border-[#F0F0F0] bg-[#FBFBFB] px-4 text-sm text-[#1F2933]">
+                    <p className="px-0 pb-1 pt-3 text-[11px] font-medium uppercase tracking-[0.12em] text-[#9CA3AF]">
+                      Connected Emails
+                    </p>
+                    {connectedUser.emails.length === 0 ? (
+                      <p className="pb-3 text-[12px] text-[#9CA3AF]">No emails connected yet.</p>
+                    ) : (
+                      connectedUser.emails.map((email, index) => {
                         const isLast = index === connectedUser.emails.length - 1;
                         const rowDivider = {
                           borderBottom: isLast ? "none" : "0.5px solid #E5E7EB",
@@ -381,9 +455,9 @@ const SettingsPage: React.FC = () => {
                             </button>
                           </div>
                         );
-                      })}
-                    </div>
-                  )}
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
             </section>
@@ -476,10 +550,10 @@ const SettingsPage: React.FC = () => {
                     type="button"
                     onClick={() => {
                       setShowConnectModal(false);
-                      setConnectedUser((u) => ({
-                        ...u,
-                        emails: [...u.emails, "your@gmail.com"],
-                      }));
+                      chrome.runtime.sendMessage(
+                        { type: "startGoogleOAuth" },
+                        () => void loadConnectedEmails()
+                      );
                     }}
                     className="rounded-lg bg-[#f9ab7b] px-4 py-2 text-sm font-semibold text-white hover:bg-[#ef9967]"
                   >
@@ -489,10 +563,10 @@ const SettingsPage: React.FC = () => {
                     type="button"
                     onClick={() => {
                       setShowConnectModal(false);
-                      setConnectedUser((u) => ({
-                        ...u,
-                        emails: [...u.emails, "your@outlook.com"],
-                      }));
+                      chrome.runtime.sendMessage(
+                        { type: "startMicrosoftOAuth" },
+                        () => void loadConnectedEmails()
+                      );
                     }}
                     className="rounded-lg bg-[#DBEAFE] px-4 py-2 text-sm font-semibold text-[#1D4ED8] hover:bg-[#bfdbfe]"
                   >

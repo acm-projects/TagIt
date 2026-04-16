@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "TagIt",
+  "version": "1.0.0",
+  "description": "A Chrome extension built with Vite and React",
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "scripting",
+    "identity",
+    "storage",
+    "tabs"
+  ],
+  "action": {
+    "default_title": "TagIt"
+  },
+  "background": {
+    "service_worker": "service-worker-loader.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content.js-loader.js"
+      ]
+    }
+  ],
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "resources": [
+        "**/*",
+        "*"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}

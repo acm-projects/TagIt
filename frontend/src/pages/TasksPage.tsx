@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppNavbar from "../components/AppNavbar";
 import {
   NullableConnectedDaysFilter,
@@ -13,10 +13,57 @@ import {
   saveTasks,
   type SharedTask,
 } from "../services/taskProgress";
+import {
+  getUserTasks,
+  dismissTask,
+  addEventToGoogleCalendar,
+  addGoogleTask,
+  type EmailTaskItem,
+} from "../services/api";
 import addIcon from "../assets/page_buttons/add.png";
 import deleteIcon from "../assets/page_buttons/delete.png";
-import FilterMenuButton, { type FilterOption } from "../components/FilterMenuButton";
 import { loadConnectedEmails } from "../services/connectedUser";
+import { getCurrentUsername } from "../services/currentUser";
+import {
+  getCachedEmailItems,
+  setCachedEmailItems,
+} from "../services/dataCache";
+import {
+  loadCompletedEmailTasks,
+  markEmailTaskCompleted,
+  unmarkEmailTaskCompleted,
+  removeCompletedEmailTask,
+  type CompletedEmailTask,
+} from "../services/completedEmailTasks";
+
+/** Returns the per-user chrome.storage key for GCal pushed items */
+const getGCalStorageKey = () => `tagit_gcal_pushed_keys.${getCurrentUsername()}`;
+/** Returns the per-user chrome.storage key for GTasks pushed items */
+const getGTaskStorageKey = () => `tagit_gtask_pushed_keys.${getCurrentUsername()}`;
+/** In-memory lock to prevent duplicate pushes from concurrent calls (e.g. React StrictMode) */
+const CURRENTLY_PUSHING = new Set<string>();
+
+async function getGCalPushedKeys(): Promise<Set<string>> {
+  try {
+    const key = getGCalStorageKey();
+    const result = await chrome.storage.local.get(key);
+    const arr = result[key];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+async function markGCalPushed(keys: string[]): Promise<void> {
+  if (!keys.length) return;
+  try {
+    const key = getGCalStorageKey();
+    const existing = await getGCalPushedKeys();
+    await chrome.storage.local.set({ [key]: [...existing, ...keys] });
+  } catch {
+    // Silently fail — dedup is best-effort
+  }
+}
 
 /**
  * Represents a single task on the Tasks page.
@@ -103,7 +150,6 @@ const TasksPage: React.FC = () => {
   const { nullableDay: taskDay, setNullableDay: setTaskDay } = useNullableDayFilter();
   const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
   const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
-  const [selectedAccount, setSelectedAccount] = useState<string>("all");
   const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks().map((task, index) => ({
     ...task,
     accountEmail: task.accountEmail ?? loadConnectedEmails()[index % Math.max(loadConnectedEmails().length, 1)] ?? "primary@university.edu",
@@ -118,6 +164,155 @@ const TasksPage: React.FC = () => {
   const [editingTime, setEditingTime] = useState("");
   const [isEditingTimeEnabled, setIsEditingTimeEnabled] = useState(true);
 
+  // Email-extracted tasks & deadlines from backend
+  const [emailItems, setEmailItems] = useState<EmailTaskItem[]>(() => getCachedEmailItems() ?? []);
+  const [isLoadingEmailItems, setIsLoadingEmailItems] = useState(false);
+  const [completedEmailTasks, setCompletedEmailTasks] = useState<CompletedEmailTask[]>(
+    () => loadCompletedEmailTasks()
+  );
+
+  const [emailTaskSort, setEmailTaskSort] = useState<"most-important" | "least-important" | "alpha-asc" | "alpha-desc">("most-important");
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close sort dropdown when clicking outside the menu container
+  useEffect(() => {
+    if (!showSortMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setShowSortMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showSortMenu]);
+
+  const loadEmailItems = useCallback(async () => {
+    setIsLoadingEmailItems(true);
+    try {
+      const resp = await getUserTasks();
+      if (resp.success && resp.data?.items) {
+        const items = resp.data.items;
+        setCachedEmailItems(items);
+        setEmailItems(items);
+
+        // Auto-push deadlines → Google Calendar, tasks → Google Tasks (deduped)
+        const [gcalPushed, gtaskPushed] = await Promise.all([
+          getGCalPushedKeys(),
+          (async () => {
+            try {
+              const key = getGTaskStorageKey();
+              const r = await chrome.storage.local.get(key);
+              return new Set<string>(Array.isArray(r[key]) ? r[key] : []);
+            } catch { return new Set<string>(); }
+          })(),
+        ]);
+
+        const newDeadlines = items.filter(
+          (i) => i.type === "deadline" && !gcalPushed.has(i.key) && !CURRENTLY_PUSHING.has(i.key)
+        );
+        const newTasks = items.filter(
+          (i) => i.type === "task" && !gtaskPushed.has(i.key) && !CURRENTLY_PUSHING.has(i.key)
+        );
+
+        // Claim keys in-memory immediately to prevent race conditions
+        [...newDeadlines, ...newTasks].forEach((i) => CURRENTLY_PUSHING.add(i.key));
+
+        // Push deadlines to Google Calendar
+        if (newDeadlines.length > 0) {
+          const probeResult = await addEventToGoogleCalendar({
+            title: `[Deadline] ${newDeadlines[0].text}`,
+            date: newDeadlines[0].time ? newDeadlines[0].time.split("T")[0] : undefined,
+            location: newDeadlines[0].location || undefined,
+          });
+          const authFailed = probeResult.error === "INSUFFICIENT_SCOPES" || probeResult.error === "NO_GOOGLE_TOKEN";
+          if (!authFailed) {
+            const pushed: string[] = [];
+            if (probeResult.success) pushed.push(newDeadlines[0].key);
+            for (const item of newDeadlines.slice(1)) {
+              const r = await addEventToGoogleCalendar({
+                title: `[Deadline] ${item.text}`,
+                date: item.time ? item.time.split("T")[0] : undefined,
+                location: item.location || undefined,
+              });
+              if (r.success) pushed.push(item.key);
+            }
+            await markGCalPushed(pushed);
+          }
+        }
+
+        // Push tasks to Google Tasks
+        if (newTasks.length > 0) {
+          const probeResult = await addGoogleTask({
+            title: newTasks[0].text,
+            notes: newTasks[0].emailSubject,
+            due: newTasks[0].time || undefined,
+          });
+          const authFailed = probeResult.error === "INSUFFICIENT_SCOPES" || probeResult.error === "NO_GOOGLE_TOKEN";
+          if (!authFailed) {
+            const pushed: string[] = [];
+            if (probeResult.success) pushed.push(newTasks[0].key);
+            for (const item of newTasks.slice(1)) {
+              const r = await addGoogleTask({
+                title: item.text,
+                notes: item.emailSubject,
+                due: item.time || undefined,
+              });
+              if (r.success) pushed.push(item.key);
+            }
+            try {
+              const key = getGTaskStorageKey();
+              const existing = await chrome.storage.local.get(key);
+              const merged = [...(Array.isArray(existing[key]) ? existing[key] : []), ...pushed];
+              await chrome.storage.local.set({ [key]: merged });
+            } catch { /* best-effort */ }
+          }
+        }
+
+        // Release in-memory lock
+        [...newDeadlines, ...newTasks].forEach((i) => CURRENTLY_PUSHING.delete(i.key));
+      }
+    } catch {
+      // Silently fail — manual tasks are still shown
+    } finally {
+      setIsLoadingEmailItems(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadEmailItems();
+  }, [loadEmailItems]);
+
+  /** Check off an email task — crosses it out and moves it to the bottom. */
+  const handleCompleteEmailTask = useCallback((item: EmailTaskItem) => {
+    markEmailTaskCompleted({
+      key: item.key,
+      text: item.text,
+      emailSubject: item.emailSubject,
+      priorityLevel: item.priorityLevel,
+    });
+    setCompletedEmailTasks(loadCompletedEmailTasks());
+  }, []);
+
+  /** Undo a completed email task — moves it back to the active list. */
+  const handleUncompleteEmailTask = useCallback((key: string) => {
+    unmarkEmailTaskCompleted(key);
+    setCompletedEmailTasks(loadCompletedEmailTasks());
+  }, []);
+
+  /** Permanently remove a completed email task from the list forever. */
+  const handlePermanentlyDismissEmailTask = useCallback(async (key: string) => {
+    removeCompletedEmailTask(key);
+    setCompletedEmailTasks(loadCompletedEmailTasks());
+    // Also remove from in-memory cache so it won't reappear
+    setEmailItems((prev) => {
+      const next = prev.filter((item) => item.key !== key);
+      setCachedEmailItems(next);
+      return next;
+    });
+    await dismissTask(key);
+  }, []);
+
   useEffect(() => {
     saveTasks(tasks);
   }, [tasks]);
@@ -130,14 +325,17 @@ const TasksPage: React.FC = () => {
   const visibleTasks = useMemo(() => {
     const filtered = tasks.filter((task) => {
       const d = parseIsoDate(task.date);
-      const matchesDay = selectedCalendarDay ? (d ? isSameLocalDay(d, selectedCalendarDay) : false) : true;
-      const matchesAccount =
-        selectedAccount === "all" ||
-        (task.accountEmail ?? "Unknown account") === selectedAccount;
-      return matchesDay && matchesAccount;
+      if (d) {
+        // Always show the full current week (Mon–Sun) regardless of day selection
+        const weekMon = getDateForWeekdayInAnchorWeek(weekAnchor, "mon");
+        const weekSun = getDateForWeekdayInAnchorWeek(weekAnchor, "sun");
+        weekSun.setHours(23, 59, 59, 999);
+        return d >= weekMon && d <= weekSun;
+      }
+      return true;
     });
     return [...filtered].sort(compareTasksByHierarchy);
-  }, [tasks, selectedCalendarDay, selectedAccount]);
+  }, [tasks, weekAnchor]);
 
   const toggleTask = (taskId: number) => {
     setTasks((previousTasks) =>
@@ -177,10 +375,7 @@ const TasksPage: React.FC = () => {
 
     const nextId =
       tasks.length === 0 ? 1 : Math.max(...tasks.map((task) => task.id)) + 1;
-    const accountEmail =
-      selectedAccount !== "all"
-        ? selectedAccount
-        : connectedEmails[0] ?? "primary@university.edu";
+    const accountEmail = connectedEmails[0] || undefined;
 
     setTasks((previousTasks) => [
       ...previousTasks,
@@ -228,7 +423,7 @@ const TasksPage: React.FC = () => {
               label: trimmedLabel,
               date: editingDate,
               time: isEditingTimeEnabled ? editingTime : undefined,
-              accountEmail: task.accountEmail ?? (selectedAccount !== "all" ? selectedAccount : connectedEmails[0]),
+              accountEmail: task.accountEmail ?? connectedEmails[0],
             }
           : task,
       ),
@@ -258,12 +453,6 @@ const TasksPage: React.FC = () => {
       })),
     );
   }, []);
-
-  const accountOptions: FilterOption[] = [{ value: "all", label: "All" }].concat(
-    (connectedEmails.length ? connectedEmails : Array.from(new Set(tasks.map((t) => t.accountEmail).filter(Boolean) as string[]))).map(
-      (email) => ({ value: email, label: email })
-    )
-  );
 
   const deleteTask = (taskId: number) => {
     setTasks((previousTasks) => previousTasks.filter((task) => task.id !== taskId));
@@ -308,7 +497,7 @@ const TasksPage: React.FC = () => {
     "rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 text-sm text-[#111827] focus:border-[#f9ab7b] focus:outline-none focus:ring-2 focus:ring-[#fde6d7]";
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#F9F8F6] p-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f1f6ff] p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <WeekHeader showYear={false} onDateChange={handleWeekDateChange} />
@@ -329,15 +518,6 @@ const TasksPage: React.FC = () => {
                       <path d="M268-240 42-466l57-56 170 170 56 56-57 56Zm226 0L268-466l56-57 170 170 368-368 56 57-424 424Zm0-226-57-56 198-198 57 56-198 198Z" />
                     </svg>
                     <span>Tasks</span>
-                  </div>
-                  <div className="flex items-center gap-2 pr-1">
-                    <FilterMenuButton
-                      options={accountOptions}
-                      selectedValue={selectedAccount}
-                      onSelect={setSelectedAccount}
-                      ariaLabel="Filter tasks by account"
-                      emptyMessage="No accounts yet"
-                    />
                   </div>
                 </div>
 
@@ -484,6 +664,174 @@ const TasksPage: React.FC = () => {
 
               </div>
 
+            </section>
+
+            {/* Email-extracted Tasks & Deadlines */}
+            <section className="w-full max-w-4xl">
+              <div className="rounded-2xl border border-[#EFE7DC] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F2933]">
+                    <span className="material-symbols-outlined text-[18px] text-[#f9ab7b]">mail</span>
+                    <span>Tasks from Emails</span>
+                    {isLoadingEmailItems && (
+                      <span className="ml-1 text-[11px] font-normal text-[#9CA3AF]">loading…</span>
+                    )}
+                  </div>
+                  {/* Filter/sort button */}
+                  <div ref={sortMenuRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowSortMenu((v) => !v)}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-[#f9ab7b] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#e89960]"
+                      aria-label="Sort tasks"
+                    >
+                      <span className="material-symbols-outlined text-[14px] leading-none">filter_list</span>
+                      <span>
+                        {emailTaskSort === "most-important" ? "Most Important"
+                          : emailTaskSort === "least-important" ? "Least Important"
+                          : emailTaskSort === "alpha-asc" ? "A → Z"
+                          : "Z → A"}
+                      </span>
+                    </button>
+                    {showSortMenu && (
+                      <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-xl border border-[#E5E7EB] bg-white py-1 shadow-lg">
+                        {(
+                          [
+                            ["most-important", "Most Important"],
+                            ["least-important", "Least Important"],
+                            ["alpha-asc", "A → Z"],
+                            ["alpha-desc", "Z → A"],
+                          ] as [EmailTaskSort, string][]
+                        ).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => { setEmailTaskSort(value); setShowSortMenu(false); }}
+                            className={`w-full px-4 py-2 text-left text-[13px] transition-colors hover:bg-[#FEF3EC] ${emailTaskSort === value ? "font-semibold text-[#f9ab7b]" : "text-[#374151]"}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  {(() => {
+                    const completedKeys = new Set(completedEmailTasks.map((t) => t.key));
+                    const activeTasks = emailItems
+                      .filter((i) => i.type === "task" && !completedKeys.has(i.key))
+                      .slice()
+                      .sort((a, b) => {
+                        if (emailTaskSort === "most-important") {
+                          return (a.priorityLevel ?? 4) - (b.priorityLevel ?? 4);
+                        } else if (emailTaskSort === "least-important") {
+                          return (b.priorityLevel ?? 4) - (a.priorityLevel ?? 4);
+                        } else if (emailTaskSort === "alpha-asc") {
+                          return a.text.localeCompare(b.text);
+                        } else {
+                          return b.text.localeCompare(a.text);
+                        }
+                      });
+                    // AI scale: 1=Critical, 2=High, 3=Medium, 4=Low
+                    const getPriorityColor = (level: number) =>
+                      level === 1 ? "#dc2626"   // Critical → dark red
+                      : level === 2 ? "#f97316" // High     → orange
+                      : level === 3 ? "#84cc16" // Medium   → lime
+                      : "#22c55e";              // Low      → bright green
+
+                    if (activeTasks.length === 0 && completedEmailTasks.length === 0 && !isLoadingEmailItems) {
+                      return (
+                        <p className="py-2 text-[12px] text-[#6B7280]">
+                          No pending tasks from your emails.
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <>
+                        {/* Active tasks */}
+                        {activeTasks.map((item, index) => {
+                          const isLast = index === activeTasks.length - 1 && completedEmailTasks.length === 0;
+                          const priorityColor = getPriorityColor(item.priorityLevel ?? 4);
+                          return (
+                            <div
+                              key={item.key}
+                              className="group grid grid-cols-[6px_minmax(0,1fr)_auto] items-stretch gap-x-3 py-3"
+                              style={{ borderBottom: isLast ? "none" : "0.5px solid #E5E7EB" }}
+                            >
+                              <div
+                                aria-hidden="true"
+                                className="w-[6px] shrink-0 self-stretch rounded-full min-h-[2.5rem]"
+                                style={{ backgroundColor: priorityColor }}
+                              />
+                              <div className="min-w-0 text-left self-center">
+                                <span className="block text-sm font-normal text-[#111827]">{item.text}</span>
+                                <span className="mt-0.5 block truncate text-[11px] text-[#9CA3AF]">{item.emailSubject}</span>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2 self-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCompleteEmailTask(item)}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#E5E7EB] text-[#6B7280] opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[#F3F4F6]"
+                                  aria-label={`Complete "${item.text}"`}
+                                  title="Mark done"
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">check</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* Completed tasks — crossed out, at the bottom */}
+                        {completedEmailTasks.map((item, index) => {
+                          const isLast = index === completedEmailTasks.length - 1;
+                          const priorityColor = getPriorityColor(item.priorityLevel ?? 4);
+                          return (
+                            <div
+                              key={item.key}
+                              className="group grid grid-cols-[6px_minmax(0,1fr)_auto] items-stretch gap-x-3 py-3"
+                              style={{ borderBottom: isLast ? "none" : "0.5px solid #E5E7EB" }}
+                            >
+                              <div
+                                aria-hidden="true"
+                                className="w-[6px] shrink-0 self-stretch rounded-full min-h-[2.5rem] opacity-40"
+                                style={{ backgroundColor: priorityColor }}
+                              />
+                              <div className="min-w-0 text-left self-center opacity-50">
+                                <span className="block text-sm font-normal text-[#111827] line-through">{item.text}</span>
+                                <span className="mt-0.5 block truncate text-[11px] text-[#9CA3AF]">{item.emailSubject}</span>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-1 self-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUncompleteEmailTask(item.key)}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#E5E7EB] text-[#6B7280] opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[#F3F4F6]"
+                                  aria-label={`Undo "${item.text}"`}
+                                  title="Undo"
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">undo</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handlePermanentlyDismissEmailTask(item.key)}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#E5E7EB] text-[#6B7280] opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[#F3F4F6]"
+                                  aria-label={`Remove "${item.text}"`}
+                                  title="Remove permanently"
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">close</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
             </section>
 
             <div className="flex items-center justify-center gap-3">

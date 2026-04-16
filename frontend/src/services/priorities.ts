@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { getCurrentUsername } from "./currentUser";
 
 export type PriorityRule = {
   id: number;
   label: string;
 };
 
-const STORAGE_KEY_PRIORITIES = "tagit-settings-priorities";
+const getPrioritiesKey = () => `tagit-settings-priorities.${getCurrentUsername()}`;
 const PRIORITIES_UPDATED_EVENT = "tagit:priorities-updated";
 
 export const DEFAULT_PRIORITIES: PriorityRule[] = [
@@ -31,7 +32,7 @@ const isPriorityRuleArray = (value: unknown): value is PriorityRule[] => {
 
 export const loadUserPriorities = (): PriorityRule[] => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_PRIORITIES);
+    const raw = localStorage.getItem(getPrioritiesKey());
     if (!raw) return clonePriorities(DEFAULT_PRIORITIES);
 
     const parsed: unknown = JSON.parse(raw);
@@ -47,7 +48,7 @@ export const loadUserPriorities = (): PriorityRule[] => {
 
 export const saveUserPriorities = (priorities: PriorityRule[]): void => {
   try {
-    localStorage.setItem(STORAGE_KEY_PRIORITIES, JSON.stringify(priorities));
+    localStorage.setItem(getPrioritiesKey(), JSON.stringify(priorities));
     window.dispatchEvent(new Event(PRIORITIES_UPDATED_EVENT));
   } catch {
     // Ignore storage errors so the UI remains usable.
@@ -56,7 +57,7 @@ export const saveUserPriorities = (priorities: PriorityRule[]): void => {
 
 export const subscribeToPriorityUpdates = (listener: () => void): (() => void) => {
   const storageListener = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEY_PRIORITIES || event.key === null) {
+    if (event.key === getPrioritiesKey() || event.key === null) {
       listener();
     }
   };

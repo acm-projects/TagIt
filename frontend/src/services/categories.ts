@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getCurrentUsername } from "./currentUser";
 import {
   getCategoryIdForPriority,
   loadUserPriorities,
@@ -15,7 +16,7 @@ export type UserCategory = {
 
 export const DEFAULT_CATEGORY_COLOR = "#E5E7EB";
 
-const STORAGE_KEY = "tagit.user-categories.v1";
+const getCategoriesKey = () => `tagit.user-categories.v1.${getCurrentUsername()}`;
 const CATEGORIES_UPDATED_EVENT = "tagit:categories-updated";
 const DEFAULT_CATEGORY_PALETTE = ["#FEE2E2", "#DBEAFE", "#E0F2FE", "#FCE7F3", "#EDE9FE"];
 
@@ -50,7 +51,7 @@ const isUserCategoryArray = (value: unknown): value is UserCategory[] => {
 
 const readStoredCategories = (): UserCategory[] | null => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(getCategoriesKey());
     if (!raw) return null;
 
     const parsed: unknown = JSON.parse(raw);
@@ -87,7 +88,7 @@ const dispatchCategoriesUpdated = () => {
 
 const writeStoredCategories = (categories: UserCategory[]) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(categories));
+    localStorage.setItem(getCategoriesKey(), JSON.stringify(categories));
     dispatchCategoriesUpdated();
   } catch {
     // Ignore storage errors so the UI remains usable.
@@ -143,7 +144,7 @@ export const syncUserCategoriesFromBackend = async (
 
 export const subscribeToCategoryUpdates = (listener: () => void): (() => void) => {
   const storageListener = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEY || event.key === null) {
+    if (event.key === getCategoriesKey() || event.key === null) {
       listener();
     }
   };
