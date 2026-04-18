@@ -1,4 +1,4 @@
-#!/Users/aryan/Documents/GitHub/TagIt/backend/venv/bin/python3
+#!/Users/aryan/Documents/GitHub/TagIt/backend/venv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

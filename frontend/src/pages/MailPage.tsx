@@ -246,10 +246,6 @@ const MailPage: React.FC = () => {
     chrome.tabs.create({ url: gmailUrl });
   };
 
-  const handleDraftReply = (_mail: MailItem) => {
-    // Placeholder: open draft composer prefilled with this mail's context.
-  };
-
   const handleDismissMail = useCallback(async (mail: MailItem) => {
     setMails((prev) => prev.filter((m) => m.id !== mail.id));
     await dismissEmail(mail.id);
@@ -288,7 +284,7 @@ const MailPage: React.FC = () => {
                     <FilterMenuButton
                       options={accountOptions}
                       selectedValue={selectedAccount}
-                      onSelect={() => {}}
+                      onSelect={setSelectedAccount}
                       ariaLabel="Filter mails by account"
                       emptyMessage="No accounts yet"
                     />

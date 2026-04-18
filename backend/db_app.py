@@ -1,11 +1,12 @@
 import os
+import traceback
 from flask import Flask, jsonify, request
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import certifi
 from flask_cors import CORS
 
-from AI_Summary import analyze_email_with_gemini, analyze_emails_batch, is_spam, is_spam_batch, client as gemini_client
+from AI_Summary import analyze_email_with_gemini, analyze_emails_batch, is_spam, is_spam_batch, call_gemini_with_retry
 from auth_routes import auth_bp, get_username_from_request
 
 # Bump this whenever the spam detection logic improves significantly.
@@ -629,14 +630,34 @@ def chat():
     if not recent_docs:
         return jsonify({"answer": "No emails have been processed yet. Fetch your emails first!"}), 200
 
+    def _summary_list(items):
+        if not items:
+            return ""
+        normalized = []
+        for item in items:
+            if isinstance(item, dict):
+                text = item.get("text", "")
+                date = item.get("date", "")
+                if text and date:
+                    normalized.append(f"{text} ({date})")
+                elif text:
+                    normalized.append(text)
+                elif date:
+                    normalized.append(date)
+            elif item is None:
+                continue
+            else:
+                normalized.append(str(item))
+        return "; ".join(normalized)
+
     context_parts = []
     for doc in recent_docs:
         analysis = doc.get("aiAnalysis", {})
         subject = doc.get("subject", "No Subject")
         summary = analysis.get("summary", "")
-        tasks = "; ".join(analysis.get("tasks", []))
-        deadlines = "; ".join(analysis.get("deadlines", []))
-        events = "; ".join(analysis.get("events", []))
+        tasks = _summary_list(analysis.get("tasks", []))
+        deadlines = _summary_list(analysis.get("deadlines", []))
+        events = _summary_list(analysis.get("events", []))
         location = analysis.get("location", "")
         time_val = analysis.get("time", "")
 
@@ -667,14 +688,15 @@ Question: {question}
 """
 
     try:
-        response = gemini_client.models.generate_content(
+        response = call_gemini_with_retry(
+            prompt,
             model="gemini-2.5-flash",
-            contents=prompt,
         )
         return jsonify({"answer": response.text.strip()}), 200
     except Exception as e:
         print(f"Chat error: {e}")
-        return jsonify({"error": "Could not generate a response."}), 500
+        traceback.print_exc()
+        return jsonify({"error": "Could not generate a response.", "detail": str(e)}), 500
 
 
 @app.route("/api/drafts/user", methods=["GET"])

@@ -91,12 +91,20 @@ export async function apiRequest<T = any>(
       headers,
     });
 
-    const data = await response.json();
+    const contentType = response.headers.get("content-type") || "";
+    let data: any;
+
+    if (contentType.includes("application/json")) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      data = { error: text, text };
+    }
 
     if (!response.ok) {
       return {
         success: false,
-        error: data.error || `HTTP ${response.status}`,
+        error: (data && (data.error || data.text)) || `HTTP ${response.status}`,
       };
     }
 

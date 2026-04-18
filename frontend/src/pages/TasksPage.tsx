@@ -28,6 +28,8 @@ import {
   getCachedEmailItems,
   setCachedEmailItems,
 } from "../services/dataCache";
+
+type EmailTaskSort = "most-important" | "least-important" | "alpha-asc" | "alpha-desc";
 import {
   loadCompletedEmailTasks,
   markEmailTaskCompleted,

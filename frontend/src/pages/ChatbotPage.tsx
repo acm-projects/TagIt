@@ -146,7 +146,7 @@ const ChatbotPage: React.FC = () => {
                   )}
 
                   <div
-                    className={`max-w-[85%] rounded-[1.35rem] px-4 py-3 text-sm leading-6 ${
+                    className={`max-w-[85%] rounded-[1.35rem] px-4 py-3 text-sm leading-6 whitespace-pre-wrap break-words ${
                       isAssistant
                         ? "rounded-tl-md bg-white text-[#1F2933] shadow-[0_10px_22px_rgba(15,23,42,0.08)]"
                         : "rounded-tr-md bg-white text-[#1F2933] shadow-[0_10px_22px_rgba(15,23,42,0.08)]"

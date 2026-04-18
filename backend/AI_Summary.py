@@ -2,14 +2,32 @@ from dotenv import load_dotenv
 import json
 from google import genai
 import requests
-import os 
+import os
+import time
 
 
 load_dotenv()
 api = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=api) 
+client = genai.Client(api_key=api)
 
 TAGS = ["Internship", "Job Offer", "Meeting Request", "Assigments/Deadlines", "Newsletter", "Other"]
+
+
+def call_gemini_with_retry(prompt, model="gemini-2.5-flash", max_retries=3, initial_backoff=1.0):
+    """Send a Gemini request with retry/backoff on temporary failures."""
+    backoff = initial_backoff
+    last_exception = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            return client.models.generate_content(model=model, contents=prompt)
+        except Exception as e:
+            last_exception = e
+            print(f"Gemini request failed (attempt {attempt}/{max_retries}): {e}")
+            if attempt == max_retries:
+                break
+            time.sleep(backoff)
+            backoff *= 2
+    raise last_exception
 
 # Known UTD building abbreviations and locations used in email contexts
 UTD_LOCATIONS = {
@@ -106,9 +124,9 @@ Body: {body[:1500]}
 Return ONLY the JSON. No explanation, no markdown.
 """
     try:
-        response = client.models.generate_content(
+        response = call_gemini_with_retry(
+            prompt,
             model="gemini-2.5-flash",
-            contents=prompt,
         )
         raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         result = json.loads(raw)
@@ -163,9 +181,9 @@ Emails:
 Return ONLY the JSON array. No explanation, no markdown fences.
 """
     try:
-        response = client.models.generate_content(
+        response = call_gemini_with_retry(
+            prompt,
             model="gemini-2.5-flash",
-            contents=prompt,
         )
         raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         results = json.loads(raw)
@@ -284,9 +302,9 @@ Body: {email.get('body', 'No Body Content')}{received_note}{utd_note}
     """
 
     try:
-        response = client.models.generate_content(
+        response = call_gemini_with_retry(
+            prompt,
             model="gemini-2.5-flash",
-            contents=prompt,
         )
 
         raw_text = response.text.strip()
@@ -366,9 +384,9 @@ def analyze_email_with_gemini(subject, body, sender="", school="", priority_topi
     """
 
     try:
-        response = client.models.generate_content(
+        response = call_gemini_with_retry(
+            prompt,
             model="gemini-2.5-flash",
-            contents=prompt,
         )
         
         raw_text = response.text.strip()

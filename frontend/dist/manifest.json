@@ -20,11 +20,11 @@
   },
   "content_scripts": [
     {
+      "js": [
+        "assets/content.js-l0sNRNKZ.js"
+      ],
       "matches": [
         "<all_urls>"
-      ],
-      "js": [
-        "src/content.js-loader.js"
       ]
     }
   ],
@@ -37,8 +37,7 @@
         "<all_urls>"
       ],
       "resources": [
-        "**/*",
-        "*"
+        "assets/content.js-l0sNRNKZ.js"
       ],
       "use_dynamic_url": false
     }
