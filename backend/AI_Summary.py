@@ -13,7 +13,7 @@ client = genai.Client(api_key=api)
 TAGS = ["Internship", "Job Offer", "Meeting Request", "Assigments/Deadlines", "Newsletter", "Other"]
 
 
-def call_gemini_with_retry(prompt, model="gemini-2.5-flash", max_retries=3, initial_backoff=1.0):
+def call_gemini_with_retry(prompt, model="Gemini 3.1 Flash Lite", max_retries=3, initial_backoff=1.0):
     """Send a Gemini request with retry/backoff on temporary failures."""
     backoff = initial_backoff
     last_exception = None
@@ -126,7 +126,7 @@ Return ONLY the JSON. No explanation, no markdown.
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-2.5-flash",
+            model="Gemini 3.1 Flash Lite",
         )
         raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         result = json.loads(raw)
@@ -183,7 +183,7 @@ Return ONLY the JSON array. No explanation, no markdown fences.
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-2.5-flash",
+            model="Gemini 3.1 Flash Lite",
         )
         raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         results = json.loads(raw)
@@ -304,7 +304,7 @@ Body: {email.get('body', 'No Body Content')}{received_note}{utd_note}
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-2.5-flash",
+            model="Gemini 3.1 Flash Lite",
         )
 
         raw_text = response.text.strip()
@@ -386,7 +386,7 @@ def analyze_email_with_gemini(subject, body, sender="", school="", priority_topi
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-2.5-flash",
+            model="Gemini 3.1 Flash Lite",
         )
         
         raw_text = response.text.strip()
