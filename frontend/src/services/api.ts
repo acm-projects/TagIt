@@ -168,7 +168,7 @@ export async function verifyToken(): Promise<ApiResponse<{ username: string }>> 
 export async function getPreferences(): Promise<
   ApiResponse<{ school: string; priorityTopics: string[] }>
 > {
-  return apiRequest("/auth/preferences", {
+  return nodeApiRequest("/auth/preferences", {
     method: "GET",
   });
 }
@@ -184,7 +184,7 @@ export async function updatePreferences(
   if (school !== undefined) body.school = school;
   if (priorityTopics !== undefined) body.priorityTopics = priorityTopics;
 
-  return apiRequest("/auth/preferences", {
+  return nodeApiRequest("/auth/preferences", {
     method: "PUT",
     body: JSON.stringify(body),
   });

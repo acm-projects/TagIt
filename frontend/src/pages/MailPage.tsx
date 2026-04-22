@@ -164,6 +164,23 @@ const MailPage: React.FC = () => {
       .finally(() => setIsSyncing(false));
   }, [loadEmails, loadDrafts]);
 
+  // Listen for priority changes and reload emails to re-tag and re-sort
+  useEffect(() => {
+    const handlePrioritySynced = () => {
+      // Priorities have been updated on backend and priorityVersion cleared
+      // Now trigger a refresh of emails and re-sync
+      setIsSyncing(true);
+      syncEmails()
+        .then(() => Promise.all([loadEmails(), loadDrafts()]))
+        .finally(() => setIsSyncing(false));
+    };
+
+    window.addEventListener("tagit:priorities-updated-synced", handlePrioritySynced);
+    return () => {
+      window.removeEventListener("tagit:priorities-updated-synced", handlePrioritySynced);
+    };
+  }, [loadEmails, loadDrafts]);
+
   const [expandedMailId, setExpandedMailId] = useState<string | null>(null);
   const leaveCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const expandAfterCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

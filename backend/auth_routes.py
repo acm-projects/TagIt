@@ -17,6 +17,7 @@ JWT_SECRET = os.getenv("JWT_SECRET", "changeme_use_a_real_secret")
 client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
 db = client.get_default_database()
 users_col = db["Users"]
+emails_col = db["emails"]
 
 
 def make_token(username: str) -> str:
@@ -96,6 +97,7 @@ def update_preferences():
 
     data = request.json
     update = {}
+    has_priority_change = False
 
     if "school" in data:
         school = data["school"].strip()
@@ -108,11 +110,21 @@ def update_preferences():
         if not isinstance(topics, list):
             return jsonify({"error": "priorityTopics must be an array."}), 400
         update["priorityTopics"] = [str(t).strip() for t in topics if str(t).strip()][:20]
+        has_priority_change = True
 
     if not update:
         return jsonify({"error": "Nothing to update."}), 400
 
     users_col.update_one({"username": username}, {"$set": update})
+
+    # If priorities changed, clear priorityVersion from all user's emails
+    # so they get re-analyzed with the new priority topics on next sync
+    if has_priority_change:
+        emails_col.update_many(
+            {"username": username},
+            {"$unset": {"priorityVersion": ""}}
+        )
+
     return jsonify({"message": "Preferences saved."}), 200
 
 

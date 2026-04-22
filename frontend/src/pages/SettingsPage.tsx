@@ -205,11 +205,29 @@ const SettingsPage: React.FC = () => {
       try {
         const res = await getPreferences();
         if (res.success && res.data?.priorityTopics && res.data.priorityTopics.length > 0) {
-          const backendPriorities: PriorityRule[] = res.data.priorityTopics.map(
-            (label: string, i: number) => ({ id: i + 1, label })
+          // Merge backend data with localStorage, preferring localStorage order
+          const localPriorities = loadUserPriorities();
+          const localLabels = new Set(localPriorities.map((p) => p.label));
+
+          // Start with local priorities in their current order
+          let mergedPriorities = [...localPriorities];
+
+          // Add any new labels from backend that aren't in localStorage
+          let nextNewId = Math.max(...localPriorities.map((p) => p.id), 0) + 1;
+          for (const backendLabel of res.data.priorityTopics) {
+            if (!localLabels.has(backendLabel)) {
+              mergedPriorities.push({ id: nextNewId++, label: backendLabel });
+            }
+          }
+
+          // Only update state if there are new items from backend
+          const hasNewItems = res.data.priorityTopics.some(
+            (label: string) => !localLabels.has(label)
           );
-          setPriorities(backendPriorities);
-          saveUserPriorities(backendPriorities);
+          if (hasNewItems) {
+            setPriorities(mergedPriorities);
+            saveUserPriorities(mergedPriorities);
+          }
         }
       } catch {
         // fall back to localStorage values already loaded
@@ -230,11 +248,25 @@ const SettingsPage: React.FC = () => {
 
   // Persist priorities to localStorage + backend whenever they change.
   useEffect(() => {
+    // Always save to localStorage
     saveUserPriorities(priorities);
-    if (prioritiesLoaded) {
-      const topics = priorities.map((p) => p.label);
-      void updatePreferences(undefined, topics);
-    }
+
+    // Only sync to backend after initial load is complete
+    if (!prioritiesLoaded) return;
+
+    const topics = priorities.map((p) => p.label);
+    // Update backend and wait for completion before letting MailPage know to sync
+    updatePreferences(undefined, topics)
+      .then(() => {
+        // Backend has been updated with new priorities and cleared priorityVersion
+        // Now dispatch event for MailPage to sync
+        window.dispatchEvent(new Event("tagit:priorities-updated-synced"));
+      })
+      .catch((err) => {
+        console.error("Failed to update preferences on backend:", err);
+        // Still trigger sync even if backend update failed
+        window.dispatchEvent(new Event("tagit:priorities-updated-synced"));
+      });
   }, [priorities, prioritiesLoaded]);
 
   // Persist connected user whenever their accounts change.

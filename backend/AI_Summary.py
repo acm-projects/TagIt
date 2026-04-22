@@ -13,7 +13,7 @@ client = genai.Client(api_key=api)
 TAGS = ["Internship", "Job Offer", "Meeting Request", "Assigments/Deadlines", "Newsletter", "Other"]
 
 
-def call_gemini_with_retry(prompt, model="Gemini 3.1 Flash Lite", max_retries=3, initial_backoff=1.0):
+def call_gemini_with_retry(prompt, model="gemini-3.1-flash-lite-preview-0415", max_retries=3, initial_backoff=1.0):
     """Send a Gemini request with retry/backoff on temporary failures."""
     backoff = initial_backoff
     last_exception = None
@@ -126,7 +126,7 @@ Return ONLY the JSON. No explanation, no markdown.
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="Gemini 3.1 Flash Lite",
+            model="gemini-3.1-flash-lite-preview-0415",
         )
         raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         result = json.loads(raw)
@@ -183,7 +183,7 @@ Return ONLY the JSON array. No explanation, no markdown fences.
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="Gemini 3.1 Flash Lite",
+            model="gemini-3.1-flash-lite-preview-0415",
         )
         raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         results = json.loads(raw)
@@ -236,10 +236,12 @@ def _priority_topics_context(priority_topics):
         return ""
     ranked = ", ".join(f'"{t}"' for t in priority_topics)
     return (
-        f"The user has a personal priority list (most to least important): [{ranked}]. "
-        "If the email subject or body closely relates to any of these topics, "
-        "boost its priorityLevel accordingly — topics earlier in the list warrant a higher boost. "
-        "Also add the matching topic as a uiBadge."
+        f"CRITICAL: The user has a personal priority list (from most to least important): [{ranked}]. "
+        f"For emails matching these topics, SET priorityLevel to 1 or 2 (1=Critical, 2=High). "
+        f"Topics at position 1 in the list are MOST important - set those to priorityLevel 1. "
+        f"Topics later in the list are LESS important - set those to priorityLevel 2. "
+        f"Topics not in the list should keep their normal priorityLevel (usually 3-4). "
+        f"Also add the matching topic name as a uiBadge (e.g., ['Newsletter'] or ['Deadlines'])."
     )
 
 
@@ -304,7 +306,7 @@ Body: {email.get('body', 'No Body Content')}{received_note}{utd_note}
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="Gemini 3.1 Flash Lite",
+            model="gemini-3.1-flash-lite-preview-0415",
         )
 
         raw_text = response.text.strip()
@@ -386,7 +388,7 @@ def analyze_email_with_gemini(subject, body, sender="", school="", priority_topi
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="Gemini 3.1 Flash Lite",
+            model="gemini-3.1-flash-lite-preview-0415",
         )
         
         raw_text = response.text.strip()

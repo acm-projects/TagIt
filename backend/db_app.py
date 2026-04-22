@@ -13,6 +13,10 @@ from auth_routes import auth_bp, get_username_from_request
 # Any cached non-spam email with a lower spamVersion will be re-spam-checked on next sync.
 CURRENT_SPAM_VERSION = 2
 
+# Bump this whenever priorities need to be re-evaluated for all emails.
+# Any email with a lower priorityVersion will be re-analyzed on next sync.
+CURRENT_PRIORITY_VERSION = 1
+
 load_dotenv()
 app = Flask(__name__)
 MONGO_URI = os.getenv("MONGO_URI")
@@ -160,6 +164,8 @@ def add_email():
         print(f"Spam detected: {subject}")
         incoming_data["isSpam"] = True
         incoming_data["spamReason"] = spam_reason
+        incoming_data["spamVersion"] = CURRENT_SPAM_VERSION
+        incoming_data["priorityVersion"] = CURRENT_PRIORITY_VERSION
         incoming_data["aiAnalysis"] = {
             "summary": f"Spam/phishing detected: {spam_reason}",
             "assignedCategory": "Spam",
@@ -190,6 +196,7 @@ def add_email():
     incoming_data["isSpam"] = False
     incoming_data["spamReason"] = ""
     incoming_data["spamVersion"] = CURRENT_SPAM_VERSION
+    incoming_data["priorityVersion"] = CURRENT_PRIORITY_VERSION
 
     result = db.emails.insert_one(incoming_data)
 
@@ -229,6 +236,8 @@ def add_emails_batch():
     results_map = {}   # index -> result dict
     # Cached non-spam emails whose spam check predates CURRENT_SPAM_VERSION
     respam_emails  = []   # (incoming email_data, existing doc, original index)
+    # Cached emails whose priority analysis predates CURRENT_PRIORITY_VERSION
+    repriority_emails = []  # (incoming email_data, existing doc, original index)
 
     all_ids = [e.get("id") for e in incoming_emails if e.get("id")]
     existing_docs = {
@@ -259,6 +268,11 @@ def add_emails_batch():
                 # Non-spam email from before this spam version — re-check with new rules
                 respam_emails.append((email_data, doc, i))
                 print(f"[batch] Stale spam version, will re-check: {email_id}")
+            elif (not doc.get("isSpam", False)
+                  and doc.get("priorityVersion", 0) < CURRENT_PRIORITY_VERSION):
+                # Non-spam email from before this priority version — re-analyze with new priorities
+                repriority_emails.append((email_data, doc, i))
+                print(f"[batch] Stale priority version, will re-analyze: {email_id}")
             else:
                 formatted = _format_email_result(doc)
                 formatted["cached"] = True
@@ -298,14 +312,50 @@ def add_emails_batch():
                     "spamReason": reason, "mongo_id": "", "cached": True,
                 }
             else:
-                # Still clean — just bump the version stamp
+                # Still clean — just bump the version stamps
                 db.emails.update_one(
                     {"id": eid, "username": username},
-                    {"$set": {"spamVersion": CURRENT_SPAM_VERSION}},
+                    {"$set": {"spamVersion": CURRENT_SPAM_VERSION, "priorityVersion": CURRENT_PRIORITY_VERSION}},
                 )
                 formatted = _format_email_result(doc)
                 formatted["cached"] = True
                 results_map[orig_idx] = formatted
+
+    # Re-analyze emails with outdated priority version
+    if repriority_emails:
+        print(f"[batch] Found {len(repriority_emails)} emails to re-prioritize")
+        school, priority_topics = _get_user_preferences(username)
+        print(f"[batch] User priorities: {priority_topics}")
+        repriority_payloads = [
+            {
+                "subject": ed.get("subject", ""),
+                "body": ed.get("body", ""),
+                "received_at": ed.get("receivedAt", "")
+            }
+            for ed, _, _ in repriority_emails
+        ]
+        repriority_results = analyze_emails_batch(repriority_payloads, school, priority_topics)
+        for (email_data, doc, orig_idx), new_analysis in zip(repriority_emails, repriority_results):
+            eid = email_data.get("id")
+            old_priority = doc.get("aiAnalysis", {}).get("priorityLevel", "?")
+            new_priority = new_analysis.get("priorityLevel", "?")
+            print(f"[batch] Re-prioritized '{email_data.get('subject')}': level {old_priority} → {new_priority}, badges: {new_analysis.get('uiBadges', [])}")
+            # Update with new analysis and priority version
+            db.emails.update_one(
+                {"id": eid, "username": username},
+                {
+                    "$set": {
+                        "aiAnalysis": new_analysis,
+                        "priorityVersion": CURRENT_PRIORITY_VERSION,
+                        "spamVersion": CURRENT_SPAM_VERSION
+                    }
+                },
+            )
+            formatted = _format_email_result(db.emails.find_one({"id": eid, "username": username}))
+            formatted["cached"] = True
+            results_map[orig_idx] = formatted
+    else:
+        print(f"[batch] No emails to re-prioritize for user {username}")
 
     # Only call Gemini for emails we have never seen before
     if new_emails:
@@ -339,6 +389,8 @@ def add_emails_batch():
             email_data["aiAnalysis"] = spam_analysis
             email_data["isSpam"] = True
             email_data["spamReason"] = reason
+            email_data["spamVersion"] = CURRENT_SPAM_VERSION
+            email_data["priorityVersion"] = CURRENT_PRIORITY_VERSION
             try:
                 db.emails.insert_one(email_data)
             except Exception:
@@ -381,6 +433,7 @@ def add_emails_batch():
             email_data["isSpam"] = False
             email_data["spamReason"] = ""
             email_data["spamVersion"] = CURRENT_SPAM_VERSION
+            email_data["priorityVersion"] = CURRENT_PRIORITY_VERSION
 
             try:
                 # Use upsert so re-analyzed emails update the existing record instead of failing
@@ -690,7 +743,7 @@ Question: {question}
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="Gemini 3.1 Flash Lite",
+            model="gemini-3.1-flash-lite-preview-0415",
         )
         return jsonify({"answer": response.text.strip()}), 200
     except Exception as e:
