@@ -44,29 +44,27 @@ export const isSameLocalDay = (a: Date, b: Date): boolean =>
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate();
 
-const OFFSET_FROM_MONDAY: Record<WeekdayShort, number> = {
-  mon: 0,
-  tue: 1,
-  wed: 2,
-  thur: 3,
-  fri: 4,
-  sat: 5,
-  sun: 6,
+const OFFSET_FROM_SUNDAY: Record<WeekdayShort, number> = {
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thur: 4,
+  fri: 5,
+  sat: 6,
 };
 
-const startOfWeekMonday = (anchor: Date): Date => {
+const startOfWeekSunday = (anchor: Date): Date => {
   const d = new Date(anchor);
   d.setHours(0, 0, 0, 0);
-  const day = d.getDay();
-  const diffToMonday = (day + 6) % 7;
-  d.setDate(d.getDate() - diffToMonday);
+  d.setDate(d.getDate() - d.getDay()); // getDay() returns 0 for Sunday
   return d;
 };
 
 export const getDateForWeekdayInAnchorWeek = (weekAnchor: Date, slot: WeekdayShort): Date => {
-  const monday = startOfWeekMonday(weekAnchor);
-  const out = new Date(monday);
-  out.setDate(monday.getDate() + OFFSET_FROM_MONDAY[slot]);
+  const sunday = startOfWeekSunday(weekAnchor);
+  const out = new Date(sunday);
+  out.setDate(sunday.getDate() + OFFSET_FROM_SUNDAY[slot]);
   out.setHours(0, 0, 0, 0);
   return out;
 };

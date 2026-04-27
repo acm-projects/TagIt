@@ -33,6 +33,23 @@ import {
 } from "../services/dataCache";
 import { loadCompletedEmailTasks } from "../services/completedEmailTasks";
 
+const getDismissedEmailsKey = () => `tagit.dismissed-emails.v1.${getCurrentUsername()}`;
+
+const loadDismissedEmailIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(getDismissedEmailsKey());
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch { return new Set(); }
+};
+
+const saveDismissedEmailId = (id: string): void => {
+  try {
+    const ids = loadDismissedEmailIds();
+    ids.add(id);
+    localStorage.setItem(getDismissedEmailsKey(), JSON.stringify([...ids]));
+  } catch { /* ignore */ }
+};
+
 const getFirstSyncSeenKey = () => `tagit.first-sync-seen.v1.${getCurrentUsername()}`;
 
 /**
@@ -239,7 +256,8 @@ const TodayPage: React.FC = () => {
   const [importantEmails, setImportantEmails] = useState<ImportantEmailPreview[]>(() => {
     const cached = getCachedEmails();
     if (!cached) return [];
-    const nonSpam = cached.filter((e) => !e.isSpam && !e.uiBadges?.includes("Error"));
+    const dismissed = loadDismissedEmailIds();
+    const nonSpam = cached.filter((e) => !e.isSpam && !e.uiBadges?.includes("Error") && !dismissed.has(e.id));
     return nonSpam.map(mapEmailToPreview);
   });
   const [events, setEvents] = useState<TodayEvent[]>(() => {
@@ -365,7 +383,8 @@ const TodayPage: React.FC = () => {
     const resp = await getUserEmails();
     if (resp.success && resp.data?.emails) {
       setCachedEmails(resp.data.emails);
-      const nonSpam = resp.data.emails.filter((e) => !e.isSpam && !e.uiBadges?.includes("Error"));
+      const dismissed = loadDismissedEmailIds();
+      const nonSpam = resp.data.emails.filter((e) => !e.isSpam && !e.uiBadges?.includes("Error") && !dismissed.has(e.id));
       setImportantEmails(nonSpam.map(mapEmailToPreview));
       setEvents(extractEventsFromEmails(nonSpam));
     }
@@ -458,6 +477,7 @@ const TodayPage: React.FC = () => {
     }, 220);
 
     const removeTimer = setTimeout(() => {
+      saveDismissedEmailId(mail.id);
       setImportantEmails((prev) => prev.filter((m) => m.id !== mail.id));
       setSlidingEmailIds((prev) => {
         const next = new Set(prev);
@@ -510,9 +530,9 @@ const TodayPage: React.FC = () => {
     () =>
       importantEmails.filter((mail) => {
         const d = parseIsoDate(mail.date);
-        return d ? isSameLocalDay(d, selectedCalendarDate) : true;
+        return d ? isSameLocalDay(d, new Date()) : true;
       }),
-    [importantEmails, selectedCalendarDate],
+    [importantEmails],
   );
 
   const filteredEvents = useMemo(
@@ -549,7 +569,7 @@ const TodayPage: React.FC = () => {
         <main className="app-main-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-auto px-3 py-2 text-[#1F2933] sm:px-6 sm:py-4 lg:px-8 lg:py-5">
           <header className="page-header w-full shrink-0 px-0 pb-3 pt-4 text-[#1F2933]">
             <div className="relative flex min-h-16 items-center justify-center">
-              <h1 className="min-w-0 w-full max-w-full truncate px-2 text-center text-2xl font-semibold leading-tight tracking-[0.12em] text-[#111827] sm:text-3xl">
+              <h1 className="min-w-0 w-full max-w-full truncate px-2 text-center text-2xl font-instrument font-semibold italic leading-tight tracking-[0.01em] text-[#111827] sm:text-3xl">
                 {formatTodayLabel(TODAY)}
               </h1>
             </div>

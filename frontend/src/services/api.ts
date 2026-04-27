@@ -349,6 +349,10 @@ export async function addEventToGoogleCalendar(params: {
   });
 }
 
+export async function deleteGoogleCalendarEvent(gCalEventId: string): Promise<ApiResponse<void>> {
+  return nodeApiRequest(`/calendar/events/${encodeURIComponent(gCalEventId)}`, { method: "DELETE" });
+}
+
 export interface DraftEmail {
   id: string;
   subject: string;

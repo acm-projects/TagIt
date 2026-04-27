@@ -14,6 +14,7 @@ import {
 import {
   getCategoryColorById,
   setUserCategoryColor,
+  setUserCategories,
   useUserCategories,
 } from "../services/categories";
 import deleteIcon from "../assets/page_buttons/delete.png";
@@ -359,6 +360,8 @@ const SettingsPage: React.FC = () => {
   };
 
   const handlePriorityDragStart = (id: number, event: React.DragEvent<HTMLDivElement>) => {
+    // Persist current colors by ID before any reorder so they travel with their tag
+    setUserCategories(categories);
     setDragId(id);
     const img = new Image();
     img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -402,7 +405,7 @@ const SettingsPage: React.FC = () => {
           {/* Same outer + row height as WeekHeader/DateHeader so content below aligns with Mail/Calendar */}
           <header className="page-header w-full shrink-0 px-0 pb-3 pt-4 text-[#1F2933]">
             <div className="relative flex min-h-16 items-center justify-center">
-              <h1 className="min-w-0 w-full max-w-full truncate px-2 text-center text-2xl font-semibold leading-tight tracking-[0.12em] text-[#111827] sm:text-3xl">
+              <h1 className="min-w-0 w-full max-w-full truncate px-2 text-center text-2xl font-instrument font-semibold italic leading-tight tracking-[0.01em] text-[#111827] sm:text-3xl">
                 SETTINGS
               </h1>
             </div>

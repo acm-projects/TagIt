@@ -9,7 +9,7 @@ import {
   useUserCategories,
 } from "../services/categories";
 import { loadConnectedEmails } from "../services/connectedUser";
-import { getUserEvents, dismissTask, addEventToGoogleCalendar, getGoogleCalendarEvents, type EmailEventItem, type GoogleCalendarEvent } from "../services/api";
+import { getUserEvents, dismissTask, addEventToGoogleCalendar, getGoogleCalendarEvents, deleteGoogleCalendarEvent, type EmailEventItem, type GoogleCalendarEvent } from "../services/api";
 import {
   getCachedEmailEvents,
   setCachedEmailEvents,
@@ -30,6 +30,7 @@ type CalendarEvent = {
   accountEmail?: string;
   emailKey?: string; // stable key for backend-sourced events (dismissal)
   fromGCal?: boolean; // true for events fetched directly from Google Calendar
+  gCalEventId?: string; // raw Google Calendar event ID for deletion
 };
 
 /** Parse an ISO 8601 datetime string and return { dateLabel: "MM/DD/YYYY", dayLabel: "Mon" } */
@@ -155,6 +156,7 @@ const googleCalEventToCalendarEvent = (item: GoogleCalendarEvent): CalendarEvent
     source: "google" as const,
     tagCategoryId: "priority-3",
     fromGCal: true,
+    gCalEventId: item.id,
   };
 };
 
@@ -203,13 +205,13 @@ const CalendarPage: React.FC = () => {
   const filteredEvents = useMemo(() => {
     const target = calendarDay ? dayCode(calendarDay) : null;
     return events.filter((event) => {
-      // Always enforce current-week boundary (Mon–Sun)
+      // Always enforce current-week boundary (Sun–Sat, matching the header)
       const d = parseMmDdYyyy(event.date1);
       if (d) {
-        const weekMon = getDateForWeekdayInAnchorWeek(weekAnchor, "mon");
-        const weekSun = getDateForWeekdayInAnchorWeek(weekAnchor, "sun");
-        weekSun.setHours(23, 59, 59, 999);
-        if (d < weekMon || d > weekSun) return false;
+        const weekStart = getDateForWeekdayInAnchorWeek(weekAnchor, "sun");
+        const weekEnd = getDateForWeekdayInAnchorWeek(weekAnchor, "sat");
+        weekEnd.setHours(23, 59, 59, 999);
+        if (d < weekStart || d > weekEnd) return false;
       }
       // If a specific day is selected, also filter by day-of-week
       if (target) {
@@ -409,6 +411,8 @@ const CalendarPage: React.FC = () => {
       showCalendarToast({ type: "removed", event, insertIndex });
       // Permanently dismiss backend-sourced events
       if (event.emailKey) void dismissTask(event.emailKey);
+      // Delete from Google Calendar if this came from GCal
+      if (event.fromGCal && event.gCalEventId) void deleteGoogleCalendarEvent(event.gCalEventId);
     }, 520);
   };
 

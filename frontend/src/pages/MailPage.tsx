@@ -12,6 +12,7 @@ import {
   getCategoryColorById,
   useUserCategories,
 } from "../services/categories";
+import { useUserPriorities } from "../services/priorities";
 import {
   getUserEmails,
   syncEmails,
@@ -136,6 +137,7 @@ const MailPage: React.FC = () => {
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const categories = useUserCategories();
+  const priorities = useUserPriorities();
 
   const loadEmails = useCallback(async () => {
     const resp = await getUserEmails();
@@ -270,10 +272,20 @@ const MailPage: React.FC = () => {
     [mails, mailDay, weekAnchor, selectedAccount],
   );
 
-  const sortedMails = useMemo(
-    () => [...filteredMails].sort((a, b) => b.priorityScore - a.priorityScore),
-    [filteredMails],
-  );
+  const priorityRankMap = useMemo(() => {
+    const map = new Map<string, number>();
+    priorities.forEach((p, index) => map.set(`priority-${p.id}`, index));
+    return map;
+  }, [priorities]);
+
+  const sortedMails = useMemo(() => {
+    const unranked = priorities.length;
+    return [...filteredMails].sort((a, b) => {
+      const rankA = a.tagCategoryId != null ? (priorityRankMap.get(a.tagCategoryId) ?? unranked) : unranked;
+      const rankB = b.tagCategoryId != null ? (priorityRankMap.get(b.tagCategoryId) ?? unranked) : unranked;
+      return rankA - rankB;
+    });
+  }, [filteredMails, priorityRankMap, priorities.length]);
 
   const handleOpenMail = (_mail: MailItem) => {
     // Placeholder until mail detail workflow is wired.

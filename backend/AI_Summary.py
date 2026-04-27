@@ -13,7 +13,7 @@ client = genai.Client(api_key=api)
 TAGS = ["Internship", "Job Offer", "Meeting Request", "Assigments/Deadlines", "Newsletter", "Other"]
 
 
-def call_gemini_with_retry(prompt, model="gemini-3.1-pro-preview", max_retries=3, initial_backoff=1.0):
+def call_gemini_with_retry(prompt, model="gemini-2.0-flash", max_retries=3, initial_backoff=1.0):
     """Send a Gemini request with retry/backoff on temporary failures."""
     backoff = initial_backoff
     last_exception = None
@@ -126,7 +126,7 @@ Return ONLY the JSON. No explanation, no markdown.
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-3.1-pro-preview",
+            model="gemini-2.0-flash",
         )
         raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         result = json.loads(raw)
@@ -183,7 +183,7 @@ Return ONLY the JSON array. No explanation, no markdown fences.
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-3.1-pro-preview",
+            model="gemini-2.0-flash",
         )
         raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         results = json.loads(raw)
@@ -287,7 +287,7 @@ Body: {email.get('body', 'No Body Content')}{received_note}{utd_note}
     2. "assignedCategory": The single best-fitting category from the list.
     3. "priorityLevel": Integer 1-4 (1=Critical, 4=Low).
     4. "uiBadges": Array of 1-2 short tags (e.g. ["Internship", "Resume"]).
-    5. "tasks": Array of actionable tasks (plain strings).
+    5. "tasks": Array of actionable tasks (plain strings). Default to an empty array for newsletters, announcements, and purely informational emails. Generate exactly 1 task for emails with a single clear action item. Only generate 2-4 tasks if the email explicitly lists multiple distinct actions the user must take.
     6. "deadlines": Array of deadline objects. Each object MUST have:
        - "text": concise description of what needs to be done
        - "date": the actual due date as "YYYY-MM-DD", calculated from the email's "Received" date and any relative time references in the body ("in 24 hours" = received + 1 day, "by Friday" = the next Friday on or after the received date, "by end of week" = that Friday, etc.). Use absolute dates from the body when stated. If truly no date can be determined, use the received date.
@@ -306,7 +306,7 @@ Body: {email.get('body', 'No Body Content')}{received_note}{utd_note}
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-3.1-pro-preview",
+            model="gemini-2.0-flash",
         )
 
         raw_text = response.text.strip()
@@ -370,7 +370,7 @@ def analyze_email_with_gemini(subject, body, sender="", school="", priority_topi
     2. "assignedCategory": The single best-fitting category from the list.
     3. "priorityLevel": Integer 1-4 (1=Critical, 4=Low).
     4. "uiBadges": Array of 1-2 short tags (e.g. ["Internship", "Resume"]).
-    5. "tasks": Array of actionable tasks (plain strings).
+    5. "tasks": Array of actionable tasks (plain strings). Default to an empty array for newsletters, announcements, and purely informational emails. Generate exactly 1 task for emails with a single clear action item. Only generate 2-4 tasks if the email explicitly lists multiple distinct actions the user must take.
     6. "deadlines": Array of deadline objects. Each object MUST have:
        - "text": concise description of what needs to be done
        - "date": the actual due date as "YYYY-MM-DD", calculated from the email received date ({received_at[:10] if received_at else "unknown"}) and any relative time references in the body ("in 24 hours" = received + 1 day, "by Friday" = the next Friday on or after the received date, "by end of week" = that Friday, etc.). Use absolute dates from the body when stated. If truly no date can be determined, use the received date.
@@ -388,7 +388,7 @@ def analyze_email_with_gemini(subject, body, sender="", school="", priority_topi
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-3.1-pro-preview",
+            model="gemini-2.0-flash",
         )
         
         raw_text = response.text.strip()

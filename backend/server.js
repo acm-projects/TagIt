@@ -841,6 +841,21 @@ app.get('/calendar/events', requireAuth, async (req, res) => {
     }
 });
 
+// DELETE /calendar/events/:id — remove an event from the user's Google Calendar
+app.delete('/calendar/events/:id', requireAuth, async (req, res) => {
+    try {
+        const authClient = await getGoogleClientForUser(req.userToken);
+        const calendar = google.calendar({ version: 'v3', auth: authClient });
+        await calendar.events.delete({ calendarId: 'primary', eventId: req.params.id });
+        res.json({ success: true });
+    } catch (err) {
+        if (err.message === 'NO_GOOGLE_TOKEN') return res.status(401).json({ error: 'NO_GOOGLE_TOKEN' });
+        if (err.response?.status === 410) return res.json({ success: true }); // already deleted
+        console.error(err);
+        res.status(500).json({ error: err.message || String(err) });
+    }
+});
+
 // Helpers
 
 function extractPlainBody(message) {
