@@ -86,8 +86,18 @@ const extractSenderName = (raw: string): string => {
   return match ? match[1].trim() : raw.replace(/<[^>]+>/, "").trim() || raw;
 };
 
+const localDateFromIso = (receivedAt: string): string => {
+  if (!receivedAt) return "";
+  const d = new Date(receivedAt);
+  if (isNaN(d.getTime())) return receivedAt.slice(0, 10);
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const dy = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mo}-${dy}`;
+};
+
 const mapEmailToPreview = (e: ProcessedEmail): ImportantEmailPreview => {
-  const dateStr = e.receivedAt ? e.receivedAt.slice(0, 10) : "";
+  const dateStr = e.receivedAt ? localDateFromIso(e.receivedAt) : "";
   const tone: ImportantEmailPreview["tone"] =
     e.priorityLevel === 1 ? "urgent" : e.priorityLevel <= 3 ? "soon" : "done";
   return {
@@ -107,7 +117,7 @@ const extractEventsFromEmails = (emails: ProcessedEmail[]): TodayEvent[] => {
   const events: TodayEvent[] = [];
   for (const e of emails) {
     if (e.events?.length) {
-      const dateStr = e.receivedAt ? e.receivedAt.slice(0, 10) : "";
+      const dateStr = e.receivedAt ? localDateFromIso(e.receivedAt) : "";
       for (const ev of e.events) {
         events.push({
           time: e.time || "",
@@ -231,7 +241,7 @@ const formatTodayLabel = (date: Date): string => {
 
 const TodayPage: React.FC = () => {
   const navigate = useNavigate();
-  const selectedCalendarDate = TODAY;
+  //const selectedCalendarDate = TODAY;
 
   const computeProgress = useCallback((): TaskProgress => {
     const userTasks = loadTasks();
@@ -269,18 +279,19 @@ const TodayPage: React.FC = () => {
   const [todayDeadlines, setTodayDeadlines] = useState<EmailTaskItem[]>(() => {
     const cached = getCachedEmailItems();
     if (!cached) return [];
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const end = new Date(start); end.setDate(start.getDate() + 2); end.setHours(23, 59, 59, 999);
     return cached.filter((item) => {
       if (item.type !== "deadline") return false;
-      // New format: item.time is "YYYY-MM-DDT00:00:00" — filter to today only
-      // Legacy items with no parseable date still show (fall through)
       if (item.time) {
         const datePart = item.time.split("T")[0];
         const parts = datePart.split("-").map(Number);
         if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
-          return isSameLocalDay(new Date(parts[0], parts[1] - 1, parts[2]), TODAY);
+          const d = new Date(parts[0], parts[1] - 1, parts[2]);
+          return d >= start && d <= end;
         }
       }
-      return true; // legacy item with no date — always show
+      return true;
     });
   });
   const [isSyncing, setIsSyncing] = useState(false);
@@ -395,16 +406,19 @@ const TodayPage: React.FC = () => {
     if (resp.success && resp.data?.items) {
       const items = resp.data.items;
       setCachedEmailItems(items);
+      const dlStart = new Date(); dlStart.setHours(0, 0, 0, 0);
+      const dlEnd = new Date(dlStart); dlEnd.setDate(dlStart.getDate() + 2); dlEnd.setHours(23, 59, 59, 999);
       setTodayDeadlines(items.filter((item) => {
         if (item.type !== "deadline") return false;
         if (item.time) {
           const datePart = item.time.split("T")[0];
           const parts = datePart.split("-").map(Number);
           if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
-            return isSameLocalDay(new Date(parts[0], parts[1] - 1, parts[2]), TODAY);
+            const d = new Date(parts[0], parts[1] - 1, parts[2]);
+            return d >= dlStart && d <= dlEnd;
           }
         }
-        return true; // legacy item with no date — always show
+        return true;
       }));
       setProgress(computeProgress());
     }
@@ -529,20 +543,24 @@ const TodayPage: React.FC = () => {
   const dateFilteredEmails = useMemo(
     () =>
       importantEmails.filter((mail) => {
+        if (mail.tone !== "urgent") return false;
         const d = parseIsoDate(mail.date);
         return d ? isSameLocalDay(d, new Date()) : true;
       }),
     [importantEmails],
   );
 
-  const filteredEvents = useMemo(
-    () =>
-      events.filter((event) => {
-        const d = parseIsoDate(event.date);
-        return d ? isSameLocalDay(d, selectedCalendarDate) : true;
-      }),
-    [events, selectedCalendarDate],
-  );
+  const filteredEvents = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const rangeEnd = new Date(todayStart);
+    rangeEnd.setDate(todayStart.getDate() + 2);
+    rangeEnd.setHours(23, 59, 59, 999);
+    return events.filter((event) => {
+      const d = parseIsoDate(event.date);
+      return d ? d >= todayStart && d <= rangeEnd : true;
+    });
+  }, [events]);
 
   const availableAccounts =
     connectedEmails.length > 0
@@ -718,7 +736,7 @@ const TodayPage: React.FC = () => {
 
                 <div className="mt-3 space-y-0.5 pl-2.5 sm:pl-3.5">
                   {filteredEvents.length === 0 && todayDeadlines.length === 0 ? (
-                    <p className="py-2 text-[12px] text-[#6B7280]">No events or deadlines today.</p>
+                    <p className="py-2 text-[12px] text-[#6B7280]">No events or deadlines in the next 3 days.</p>
                   ) : (
                     <>
                       {filteredEvents.map((event, index) => (

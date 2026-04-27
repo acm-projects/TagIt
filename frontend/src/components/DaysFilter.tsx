@@ -97,19 +97,35 @@ export const eventOccursOnLocalDay = (event: EventWithMmDdDates, day: Date): boo
 
 const STORAGE_KEY = "tagit-selected-weekday";
 
+const localDateStr = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 const readStoredDay = (): WeekdayShort | null => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw && isWeekdayShort(raw)) return raw;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      isWeekdayShort(parsed.day) &&
+      parsed.date === localDateStr(new Date())
+    ) {
+      return parsed.day as WeekdayShort;
+    }
   } catch {
-    /* private mode / quota */
+    /* private mode / quota / old string format */
   }
   return null;
 };
 
 const writeStoredDay = (day: WeekdayShort) => {
   try {
-    localStorage.setItem(STORAGE_KEY, day);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ day, date: localDateStr(new Date()) }));
   } catch {
     /* ignore */
   }
