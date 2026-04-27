@@ -263,6 +263,7 @@ app.post('/auth/google/exchange', requireAuth, async (req, res) => {
     if (!redirectUrl) return res.status(400).json({ error: 'Missing redirectUrl' });
 
     let code;
+    let redirectUriUsed;
     try {
         const parsed = new URL(redirectUrl);
         const error = parsed.searchParams.get('error');
@@ -270,6 +271,10 @@ app.post('/auth/google/exchange', requireAuth, async (req, res) => {
             return res.status(400).json({ error: `OAuth denied: ${error}` });
         }
         code = parsed.searchParams.get('code');
+        // Use the exact redirect URI from the actual auth flow so it matches
+        // what Google recorded — avoids redirect_uri_mismatch if the .env
+        // CHROME_EXTENSION_ID differs from the runtime extension ID.
+        redirectUriUsed = `${parsed.origin}${parsed.pathname}`;
     } catch {
         return res.status(400).json({ error: 'Invalid redirectUrl' });
     }
@@ -277,7 +282,7 @@ app.post('/auth/google/exchange', requireAuth, async (req, res) => {
     if (!code) return res.status(400).json({ error: 'Missing code in redirectUrl' });
 
     try {
-        const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
+        const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, redirectUriUsed);
         const { tokens } = await oauth2Client.getToken(code);
 
         const tokensToSave = {};
@@ -312,7 +317,8 @@ app.post('/auth/google/exchange', requireAuth, async (req, res) => {
         res.json({ success: true, email });
     } catch (err) {
         console.error('Google token exchange error:', err);
-        res.status(500).json({ error: 'Failed to exchange code for tokens' });
+        const detail = err?.response?.data?.error_description || err?.response?.data?.error || err?.message || String(err);
+        res.status(500).json({ error: `Failed to exchange code for tokens: ${detail}` });
     }
 });
 
@@ -815,28 +821,31 @@ app.get('/calendar/events', requireAuth, async (req, res) => {
         const authClient = await getGoogleClientForUser(req.userToken);
         const calendar = google.calendar({ version: 'v3', auth: authClient });
 
-        // Start from 60 days ago so existing/past events are included
-        const timeMin = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-        const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+        const timeMin = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+        const timeMax = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
 
         const response = await calendar.events.list({
             calendarId: 'primary',
             timeMin,
             timeMax,
-            maxResults: 50,
+            maxResults: 250,
             singleEvents: true,
             orderBy: 'startTime',
         });
 
-        res.json({ items: response.data.items || [] });
+        const items = response.data.items || [];
+        console.log(`[GCal GET] returning ${items.length} events`);
+        res.json({ items });
     } catch (err) {
         if (err.message === 'NO_GOOGLE_TOKEN') {
+            console.warn('[GCal GET] NO_GOOGLE_TOKEN');
             return res.status(401).json({ error: 'NO_GOOGLE_TOKEN' });
         }
         if (err.response?.status === 403) {
+            console.warn('[GCal GET] INSUFFICIENT_SCOPES:', err.response?.data);
             return res.status(403).json({ error: 'INSUFFICIENT_SCOPES' });
         }
-        console.error(err);
+        console.error('[GCal GET] error:', err.message, err.response?.data);
         res.status(500).json({ error: err.message || String(err) });
     }
 });

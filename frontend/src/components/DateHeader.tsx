@@ -154,6 +154,9 @@ const DateHeader: React.FC<DateHeaderProps> = ({
   );
 
   const [currentDate, setCurrentDate] = useState<Date>(() => {
+    // Week-mode pages should always open on today's week, not a stale URL date
+    // from a previous session where the user navigated to a different week.
+    if (mode === "week" && !date) return new Date();
     return initialQueryDate ?? initialPropDate ?? new Date();
   });
   const [isPickerOpen, setIsPickerOpen] = useState(false);

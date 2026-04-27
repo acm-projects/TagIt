@@ -189,6 +189,7 @@ const CalendarPage: React.FC = () => {
     return [...fromBackend, ...fromGCal];
   });
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [gCalError, setGCalError] = useState<"no_token" | "scope" | null>(null);
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [slidingEventIds, setSlidingEventIds] = useState<Set<string>>(() => new Set());
   const [closingEventIds, setClosingEventIds] = useState<Set<string>>(() => new Set());
@@ -304,15 +305,28 @@ const CalendarPage: React.FC = () => {
   // Load events from the user's actual Google Calendar
   const loadGCalEvents = useCallback(async () => {
     const resp = await getGoogleCalendarEvents();
+    console.log("[GCal] fetch response:", resp);
     if (resp.success && resp.data?.items) {
+      console.log("[GCal] items count:", resp.data.items.length);
+      setGCalError(null);
       setCachedGCalEvents(resp.data.items);
       setEvents((prev) => {
         const keep = prev.filter((e) => !e.fromGCal);
         const fromGCal = resp.data!.items.map(googleCalEventToCalendarEvent);
+        console.log("[GCal] mapped events:", fromGCal);
         return [...keep, ...fromGCal];
       });
+    } else if (!resp.success) {
+      const err = resp.error ?? "";
+      console.warn("[GCal] error:", err);
+      if (err.includes("NO_GOOGLE_TOKEN") || err.includes("401")) {
+        setGCalError("no_token");
+      } else if (err.includes("INSUFFICIENT_SCOPES") || err.includes("403")) {
+        setGCalError("scope");
+      } else {
+        setGCalError("no_token");
+      }
     }
-    // If INSUFFICIENT_SCOPES / NO_GOOGLE_TOKEN, just show nothing
   }, []);
 
   useEffect(() => {
@@ -457,6 +471,14 @@ const CalendarPage: React.FC = () => {
                     )}
                   </div>
                 </div>
+
+                {gCalError && (
+                  <p className="mt-2 text-[11px] text-[#9CA3AF]">
+                    {gCalError === "no_token"
+                      ? "Google Calendar not connected. Reconnect your Gmail account in Settings to see Google Calendar events."
+                      : "Google Calendar access needs additional permissions. Reconnect your Gmail account in Settings."}
+                  </p>
+                )}
 
                 <div className="mt-3">
                   {filteredEvents.length === 0 ? (
