@@ -743,7 +743,7 @@ Question: {question}
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-3.1-flash-lite-preview-0415",
+            model="gemini-3.1-pro-preview",
         )
         return jsonify({"answer": response.text.strip()}), 200
     except Exception as e:
