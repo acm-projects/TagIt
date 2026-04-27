@@ -55,6 +55,20 @@ type DraftItem = {
 
 const parseIsoDate = (value?: string): Date | null => {
   if (!value) return null;
+
+  // Try to parse as full ISO datetime first to extract local date
+  if (value.includes("T") || value.includes(" ")) {
+    const fullDate = new Date(value);
+    if (!isNaN(fullDate.getTime())) {
+      // Successfully parsed as datetime, extract local date components
+      const year = fullDate.getFullYear();
+      const month = fullDate.getMonth();
+      const date = fullDate.getDate();
+      return new Date(year, month, date);
+    }
+  }
+
+  // Fall back to simple YYYY-MM-DD parsing as local time
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day);
@@ -74,7 +88,7 @@ const extractSenderEmail = (raw: string): string => {
 };
 
 const mapEmailToMailItem = (e: ProcessedEmail): MailItem => {
-  const dateStr = e.receivedAt ? e.receivedAt.slice(0, 10) : "";
+  const dateStr = e.receivedAt || "";
   const deadlineStr = e.deadlines?.length ? e.deadlines.join("; ") : undefined;
   return {
     id: e.id,
@@ -99,7 +113,17 @@ const MAIL_BODY_TRANSITION_MS = 320;
 
 const MailPage: React.FC = () => {
   const { nullableDay: mailDay, setNullableDay: setMailDay } = useNullableDayFilter();
-  const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
+  const { weekAnchor: hookAnchor, handleWeekDateChange: handleHookWeekDateChange } = useWeekAnchorWithSharedDayFilter();
+  const [weekAnchor, setWeekAnchor] = useState(() => {
+    const d = new Date(hookAnchor);
+    d.setDate(d.getDate() - 7);
+    return d;
+  });
+
+  const handleWeekDateChange = (next: Date) => {
+    setWeekAnchor(next);
+    handleHookWeekDateChange(next);
+  };
   const [selectedAccount, setSelectedAccount] = useState<string>("all");
   const [connectedEmails, setConnectedEmails] = useState<string[]>(() => loadConnectedEmails());
 

@@ -13,7 +13,7 @@ client = genai.Client(api_key=api)
 TAGS = ["Internship", "Job Offer", "Meeting Request", "Assigments/Deadlines", "Newsletter", "Other"]
 
 
-def call_gemini_with_retry(prompt, model="gemini-2.5-flash", max_retries=3, initial_backoff=1.0):
+def call_gemini_with_retry(prompt, model="gemini-3.1-pro-preview", max_retries=3, initial_backoff=1.0):
     """Send a Gemini request with retry/backoff on temporary failures."""
     backoff = initial_backoff
     last_exception = None
@@ -126,7 +126,7 @@ Return ONLY the JSON. No explanation, no markdown.
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-2.5-flash",
+            model="gemini-3.1-pro-preview",
         )
         raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         result = json.loads(raw)
@@ -183,7 +183,7 @@ Return ONLY the JSON array. No explanation, no markdown fences.
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-2.5-flash",
+            model="gemini-3.1-pro-preview",
         )
         raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         results = json.loads(raw)
@@ -293,7 +293,7 @@ Body: {email.get('body', 'No Body Content')}{received_note}{utd_note}
        - "date": the actual due date as "YYYY-MM-DD", calculated from the email's "Received" date and any relative time references in the body ("in 24 hours" = received + 1 day, "by Friday" = the next Friday on or after the received date, "by end of week" = that Friday, etc.). Use absolute dates from the body when stated. If truly no date can be determined, use the received date.
     7. "events": Array of event statements (plain strings).
     8. "location": The physical room number, address, or virtual link for the event. If none, output "".
-    9. "time": The date and time of the event in ISO 8601 format. If none, output "".
+    9. "time": The date and time of the event in ISO 8601 format in CST time zone. If none, output "".
     10. "needsReply": true if this email is a direct personal message to the user that requires a reply (e.g. interview invitation, direct question, recruiter outreach, professor asking something). false for newsletters, announcements, automated notifications, and mass emails.
     11. "draftReply": If needsReply is true, write a concise and professional draft reply (3-5 sentences) appropriate for the email context. If needsReply is false, output "".
 
@@ -306,7 +306,7 @@ Body: {email.get('body', 'No Body Content')}{received_note}{utd_note}
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-2.5-flash",
+            model="gemini-3.1-pro-preview",
         )
 
         raw_text = response.text.strip()
@@ -388,7 +388,7 @@ def analyze_email_with_gemini(subject, body, sender="", school="", priority_topi
     try:
         response = call_gemini_with_retry(
             prompt,
-            model="gemini-2.5-flash",
+            model="gemini-3.1-pro-preview",
         )
         
         raw_text = response.text.strip()
