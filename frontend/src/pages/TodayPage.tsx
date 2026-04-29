@@ -15,6 +15,7 @@ import {
   getCategoryColorById,
   useUserCategories,
 } from "../services/categories";
+import { useUserPriorities, loadUserPriorities, type PriorityRule } from "../services/priorities";
 import {
   getUserEmails,
   syncEmails,
@@ -58,6 +59,7 @@ const getFirstSyncSeenKey = () => `tagit.first-sync-seen.v1.${getCurrentUsername
  */
 type ImportantEmailPreview = {
   id: string;
+  subject: string;
   sender: string;
   source: "gmail" | "outlook";
   tone: "urgent" | "soon" | "done";
@@ -66,6 +68,9 @@ type ImportantEmailPreview = {
   accountEmail: string;
   priority?: "urgent";
   tagCategoryId?: string;
+  /** Raw fields used to resolve the category dynamically when priorities reorder. */
+  assignedCategory?: string;
+  uiBadges?: string[];
   date: string;
 };
 
@@ -96,19 +101,50 @@ const localDateFromIso = (receivedAt: string): string => {
   return `${y}-${mo}-${dy}`;
 };
 
+/**
+ * Match an email's assignedCategory / uiBadges against the user's priority
+ * topic labels to find the correct category ID. Falls back to priorityLevel.
+ */
+const resolveTagCategoryId = (
+  assignedCategory: string | undefined,
+  uiBadges: string[] | undefined,
+  priorityLevel: number,
+  priorities: PriorityRule[],
+): string => {
+  if (!priorities.length) return `priority-${priorityLevel}`;
+  const norm = (s: string) => s.toLowerCase().trim();
+  const cat = norm(assignedCategory ?? "");
+  const badges = (uiBadges ?? []).map(norm);
+
+  for (const p of priorities) {
+    if (norm(p.label) === cat) return `priority-${p.id}`;
+  }
+  for (const badge of badges) {
+    for (const p of priorities) {
+      const label = norm(p.label);
+      if (label.includes(badge) || badge.includes(label)) return `priority-${p.id}`;
+    }
+  }
+  return `priority-${priorityLevel}`;
+};
+
 const mapEmailToPreview = (e: ProcessedEmail): ImportantEmailPreview => {
   const dateStr = e.receivedAt ? localDateFromIso(e.receivedAt) : "";
   const tone: ImportantEmailPreview["tone"] =
     e.priorityLevel === 1 ? "urgent" : e.priorityLevel <= 3 ? "soon" : "done";
+  const priorities = loadUserPriorities();
   return {
     id: e.id,
+    subject: e.subject || "(No subject)",
     sender: extractSenderName(e.sender),
     source: e.source === "outlook" ? "outlook" : "gmail",
     tone,
     summary: e.summary || e.subject,
     accountEmail: e.source || "",
     priority: e.priorityLevel === 1 ? "urgent" : undefined,
-    tagCategoryId: `priority-${e.priorityLevel}`,
+    tagCategoryId: resolveTagCategoryId(e.assignedCategory, e.uiBadges, e.priorityLevel, priorities),
+    assignedCategory: e.assignedCategory,
+    uiBadges: e.uiBadges,
     date: dateStr,
   };
 };
@@ -324,6 +360,7 @@ const TodayPage: React.FC = () => {
   const emailLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categories = useUserCategories();
+  const priorities = useUserPriorities();
   const [tagiBubble, setTagiBubble] = useState(() => ({
     message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
     excited: false,
@@ -739,7 +776,15 @@ const TodayPage: React.FC = () => {
                             aria-hidden="true"
                             className="color-line h-10 w-[6px] self-center rounded-full"
                             style={{
-                              backgroundColor: getCategoryColorById(categories, mail.tagCategoryId),
+                              backgroundColor: getCategoryColorById(
+                                categories,
+                                resolveTagCategoryId(
+                                  mail.assignedCategory,
+                                  mail.uiBadges,
+                                  parseInt(mail.tagCategoryId?.replace("priority-", "") ?? "0", 10),
+                                  priorities,
+                                ),
+                              ),
                             }}
                           />
 
@@ -749,8 +794,8 @@ const TodayPage: React.FC = () => {
                             className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
                           >
                             <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-semibold text-[#111827]">
-                                {mail.sender}
+                              <span className="text-sm font-semibold text-[#111827] truncate">
+                                {mail.subject}
                               </span>
                             </div>
                             <div

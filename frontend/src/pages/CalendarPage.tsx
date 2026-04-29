@@ -226,20 +226,21 @@ const CalendarPage: React.FC = () => {
 
   const dayCode = (dayLabel?: string) => dayLabel?.slice(0, 3).toLowerCase();
   const filteredEvents = useMemo(() => {
-    if (!calendarDay) return events;
-    const target = dayCode(calendarDay);
+    const weekStart = getDateForWeekdayInAnchorWeek(weekAnchor, "sun");
+    const weekEnd = getDateForWeekdayInAnchorWeek(weekAnchor, "sat");
+    weekEnd.setHours(23, 59, 59, 999);
+    const target = calendarDay ? dayCode(calendarDay) : null;
+
     return events.filter((event) => {
       const d = parseMmDdYyyy(event.date1);
-      if (d) {
-        const weekStart = getDateForWeekdayInAnchorWeek(weekAnchor, "sun");
-        const weekEnd = getDateForWeekdayInAnchorWeek(weekAnchor, "sat");
-        weekEnd.setHours(23, 59, 59, 999);
-        if (d < weekStart || d > weekEnd) return false;
+      if (d && (d < weekStart || d > weekEnd)) return false;
+      if (target) {
+        const matchesDay =
+          dayCode(event.day1) === target ||
+          (event.day2 && dayCode(event.day2) === target);
+        if (!matchesDay) return false;
       }
-      const matchesDay =
-        dayCode(event.day1) === target ||
-        (event.day2 && dayCode(event.day2) === target);
-      return !!matchesDay;
+      return true;
     });
   }, [calendarDay, events, weekAnchor]);
 
