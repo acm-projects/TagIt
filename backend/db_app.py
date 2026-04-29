@@ -1,12 +1,13 @@
 import os
 import traceback
-from flask import Flask, jsonify, request
+import json as _json
+from flask import Flask, Response, jsonify, request, stream_with_context
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import certifi
 from flask_cors import CORS
 
-from AI_Summary import analyze_email_with_gemini, analyze_emails_batch, is_spam, is_spam_batch, call_gemini_with_retry
+from AI_Summary import analyze_email_with_gemini, analyze_emails_batch, is_spam, is_spam_batch, call_gemini_with_retry, stream_gemini_response
 from auth_routes import auth_bp, get_username_from_request
 
 # Bump this whenever the spam detection logic improves significantly.
@@ -643,9 +644,14 @@ def get_user_events():
             key = f"event:{email_id}:{i}"
             if key in dismissed_keys:
                 continue
+            # The AI model sometimes returns objects instead of plain strings
+            if isinstance(event_text, dict):
+                text = event_text.get("title") or event_text.get("text") or event_text.get("location") or "Event"
+            else:
+                text = str(event_text) if event_text is not None else "Event"
             items.append({
                 "key": key,
-                "text": event_text,
+                "text": text,
                 "emailSubject": subject,
                 "emailId": email_id,
                 "source": source,
@@ -750,6 +756,81 @@ Question: {question}
         print(f"Chat error: {e}")
         traceback.print_exc()
         return jsonify({"error": "Could not generate a response.", "detail": str(e)}), 500
+
+
+@app.route("/api/chat/stream", methods=["POST"])
+def chat_stream():
+    """Streams a Gemini chat response as SSE using gemini-2.0-flash (no thinking overhead)."""
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    data = request.json
+    question = (data or {}).get("question", "").strip()
+    if not question:
+        return jsonify({"error": "No question provided."}), 400
+
+    # Limit to 15 most recent emails and only pull the fields we need
+    recent_docs = list(db.emails.find(
+        {"username": username, "isSpam": False},
+        {"subject": 1, "aiAnalysis.summary": 1, "aiAnalysis.tasks": 1,
+         "aiAnalysis.deadlines": 1, "_id": 0}
+    ).sort("_id", -1).limit(15))
+
+    if not recent_docs:
+        def _empty():
+            yield f"data: {_json.dumps({'chunk': 'No emails have been processed yet. Fetch your emails first!'})}\n\n"
+            yield "data: [DONE]\n\n"
+        return Response(stream_with_context(_empty()), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    def _flat_list(items):
+        if not items:
+            return ""
+        out = []
+        for item in items:
+            if isinstance(item, dict):
+                text = item.get("text", "")
+                date = item.get("date", "")
+                out.append(f"{text} ({date})" if date else text)
+            elif item:
+                out.append(str(item))
+        return "; ".join(out)
+
+    context_parts = []
+    for doc in recent_docs:
+        analysis = doc.get("aiAnalysis", {})
+        subject = doc.get("subject", "No Subject")
+        summary = analysis.get("summary", "")
+        tasks = _flat_list(analysis.get("tasks", []))
+        deadlines = _flat_list(analysis.get("deadlines", []))
+        entry = f"- {subject}: {summary}"
+        if tasks:
+            entry += f" | Tasks: {tasks}"
+        if deadlines:
+            entry += f" | Deadlines: {deadlines}"
+        context_parts.append(entry)
+
+    context = "\n".join(context_parts)
+    prompt = (
+        f"You are a concise inbox assistant. Answer using ONLY the email data below. "
+        f"If not found, say so briefly.\n\nEmails:\n{context}\n\nQuestion: {question}"
+    )
+
+    def generate():
+        try:
+            for text_chunk in stream_gemini_response(prompt, model="gemini-2.5-flash", thinking_budget=0):
+                yield f"data: {_json.dumps({'chunk': text_chunk})}\n\n"
+        except Exception as exc:
+            print(f"Chat stream error: {exc}")
+            yield f"data: {_json.dumps({'error': str(exc)})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/api/drafts/user", methods=["GET"])

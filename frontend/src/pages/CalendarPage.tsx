@@ -9,6 +9,7 @@ import {
   useUserCategories,
 } from "../services/categories";
 import { loadConnectedEmails } from "../services/connectedUser";
+import { getCurrentUsername } from "../services/currentUser";
 import { getUserEvents, dismissTask, addEventToGoogleCalendar, getGoogleCalendarEvents, deleteGoogleCalendarEvent, type EmailEventItem, type GoogleCalendarEvent } from "../services/api";
 import {
   getCachedEmailEvents,
@@ -80,9 +81,19 @@ const emailEventToCalendarEvent = (item: EmailEventItem): CalendarEvent => {
     }
   }
 
+  const rawText = item.text as unknown;
+  const titleStr =
+    typeof rawText === "string"
+      ? rawText
+      : typeof rawText === "object" && rawText !== null
+        ? ((rawText as Record<string, unknown>).title as string) ||
+          ((rawText as Record<string, unknown>).location as string) ||
+          item.emailSubject
+        : item.emailSubject;
+
   return {
     id: item.key,
-    title: item.text || item.emailSubject,
+    title: titleStr || item.emailSubject,
     date1: dateLabel,
     day1: dayLabel,
     time: timeDisplay || "TBD",
@@ -177,6 +188,17 @@ type CalendarToast =
   | { type: "added" }
   | { type: "removed"; event: CalendarEvent; insertIndex: number };
 
+async function getGCalPushedKeys(): Promise<Set<string>> {
+  try {
+    const key = `tagit_gcal_pushed_keys.${getCurrentUsername()}`;
+    const result = await chrome.storage.local.get(key);
+    const arr = result[key];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
 const CalendarPage: React.FC = () => {
   const { nullableDay: calendarDay, setNullableDay: setCalendarDay } = useNullableDayFilter();
   const { weekAnchor, handleWeekDateChange } = useWeekAnchorWithSharedDayFilter();
@@ -204,9 +226,9 @@ const CalendarPage: React.FC = () => {
 
   const dayCode = (dayLabel?: string) => dayLabel?.slice(0, 3).toLowerCase();
   const filteredEvents = useMemo(() => {
-    const target = calendarDay ? dayCode(calendarDay) : null;
+    if (!calendarDay) return events;
+    const target = dayCode(calendarDay);
     return events.filter((event) => {
-      // Always enforce current-week boundary (Sun–Sat, matching the header)
       const d = parseMmDdYyyy(event.date1);
       if (d) {
         const weekStart = getDateForWeekdayInAnchorWeek(weekAnchor, "sun");
@@ -214,14 +236,10 @@ const CalendarPage: React.FC = () => {
         weekEnd.setHours(23, 59, 59, 999);
         if (d < weekStart || d > weekEnd) return false;
       }
-      // If a specific day is selected, also filter by day-of-week
-      if (target) {
-        const matchesDay =
-          dayCode(event.day1) === target ||
-          (event.day2 && dayCode(event.day2) === target);
-        if (!matchesDay) return false;
-      }
-      return true;
+      const matchesDay =
+        dayCode(event.day1) === target ||
+        (event.day2 && dayCode(event.day2) === target);
+      return !!matchesDay;
     });
   }, [calendarDay, events, weekAnchor]);
 
@@ -249,10 +267,13 @@ const CalendarPage: React.FC = () => {
       source: "google",
       tagCategoryId: "priority-2",
       accountEmail,
+      fromGCal: true, // treated as a GCal event so the next refresh replaces rather than duplicates it
     };
     setEvents((prev) => [nextEvent, ...prev]);
-    // Add to user's Google Calendar
-    void addEventToGoogleCalendar({ title: newEventTitle.trim(), date: newEventDate });
+    // Add to user's Google Calendar then refresh so the real GCal entry replaces the placeholder
+    addEventToGoogleCalendar({ title: newEventTitle.trim(), date: newEventDate })
+      .then(() => loadGCalEvents())
+      .catch(() => {});
     setIsAddingEvent(false);
     setNewEventTitle("");
     setNewEventDate(formatIsoDateLocal(new Date()));
@@ -285,13 +306,15 @@ const CalendarPage: React.FC = () => {
   const loadEmailEvents = useCallback(async () => {
     setIsLoadingEvents(true);
     try {
-      const resp = await getUserEvents();
+      const [resp, pushedKeys] = await Promise.all([getUserEvents(), getGCalPushedKeys()]);
       if (resp.success && resp.data?.items) {
         setCachedEmailEvents(resp.data.items);
         setEvents((prev) => {
-          // Keep manually-added and GCal events; replace email-backend ones
           const keep = prev.filter((e) => !e.emailKey);
-          const fromBackend = resp.data!.items.map(emailEventToCalendarEvent);
+          // Skip email events already represented by a GCal entry to avoid duplicates
+          const fromBackend = resp.data!.items
+            .filter((item) => !pushedKeys.has(item.key))
+            .map(emailEventToCalendarEvent);
           return [...fromBackend, ...keep];
         });
       }
@@ -311,9 +334,11 @@ const CalendarPage: React.FC = () => {
       setGCalError(null);
       setCachedGCalEvents(resp.data.items);
       setEvents((prev) => {
-        const keep = prev.filter((e) => !e.fromGCal);
         const fromGCal = resp.data!.items.map(googleCalEventToCalendarEvent);
         console.log("[GCal] mapped events:", fromGCal);
+        const gCalIds = new Set(fromGCal.map((e) => e.gCalEventId).filter(Boolean));
+        // Drop old GCal events and any non-GCal events whose title+date already appear in the fresh GCal list
+        const keep = prev.filter((e) => !e.fromGCal && !(e.gCalEventId && gCalIds.has(e.gCalEventId)));
         return [...keep, ...fromGCal];
       });
     } else if (!resp.success) {

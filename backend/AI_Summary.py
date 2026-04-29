@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import json
 from google import genai
+from google.genai import types
 import requests
 import os
 import time
@@ -28,6 +29,21 @@ def call_gemini_with_retry(prompt, model="gemini-2.5-flash", max_retries=3, init
             time.sleep(backoff)
             backoff *= 2
     raise last_exception
+
+
+def stream_gemini_response(prompt, model="gemini-2.5-flash", thinking_budget=None):
+    """Yield text chunks from a streaming Gemini response."""
+    config = None
+    if thinking_budget is not None:
+        config = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_budget=thinking_budget)
+        )
+    kwargs = {"model": model, "contents": prompt}
+    if config:
+        kwargs["config"] = config
+    for chunk in client.models.generate_content_stream(**kwargs):
+        if chunk.text:
+            yield chunk.text
 
 # Known UTD building abbreviations and locations used in email contexts
 UTD_LOCATIONS = {

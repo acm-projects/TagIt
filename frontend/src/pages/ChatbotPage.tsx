@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUserCategories } from "../services/categories";
 import { useUserPriorities } from "../services/priorities";
-import { sendChatMessage, type ChatMessage } from "../services/chatbot";
+import { sendChatMessageStream, type ChatMessage } from "../services/chatbot";
 import authenticationBg from "../assets/AuthenticationBg.png";
 
 const SUGGESTION_BOXES = [
@@ -34,41 +34,46 @@ const ChatbotPage: React.FC = () => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [isSending, setIsSending] = useState(false);
+  const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [initialMessage, ...conversationMessages] = messages;
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, streamingContent]);
 
   const handleSendMessage = async (nextMessage?: string) => {
     const content = (nextMessage ?? message).trim();
     if (!content || isSending) return;
 
     const userMessage = createMessage("user", content);
-    const nextHistory = [...messages, userMessage];
+    const historySnapshot = [...messages, userMessage];
 
-    setMessages(nextHistory);
+    setMessages(historySnapshot);
     setMessage("");
     setErrorMessage(null);
     setIsSending(true);
+    setStreamingContent("");
 
+    let fullReply = "";
     try {
-      const response = await sendChatMessage({
-        message: content,
-        history: nextHistory.map(({ role, content: historyContent }) => ({
-          role,
-          content: historyContent,
-        })),
-        // TODO: Expand this context if your backend should also receive
-        // task data, calendar events, or mail summaries for better answers.
-        context: {
-          priorities,
-          categories,
+      await sendChatMessageStream(
+        {
+          message: content,
+          history: historySnapshot.map(({ role, content: c }) => ({ role, content: c })),
+          context: { priorities, categories },
         },
-      });
-
-      setMessages((previous) => [
-        ...previous,
-        createMessage("assistant", response.reply),
-      ]);
+        (chunk) => {
+          fullReply += chunk;
+          setStreamingContent(fullReply);
+        },
+      );
+      setMessages((prev) => [...prev, createMessage("assistant", fullReply)]);
+      setStreamingContent(null);
     } catch (error) {
+      setStreamingContent(null);
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong sending the message.",
       );
@@ -99,7 +104,7 @@ const ChatbotPage: React.FC = () => {
             </button>
           </div>
 
-          <div className="mt-4 flex-1 space-y-4 overflow-y-auto pb-2">
+          <div ref={scrollRef} className="mt-4 flex-1 space-y-4 overflow-y-auto pb-2">
             {initialMessage && (
               <div className="flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F9A36E] text-white shadow-[0_6px_14px_rgba(249,163,110,0.35)]">
@@ -157,6 +162,23 @@ const ChatbotPage: React.FC = () => {
                 </div>
               );
             })}
+
+            {streamingContent !== null && (
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F9A36E] text-white shadow-[0_6px_14px_rgba(249,163,110,0.35)]">
+                  <span className="material-symbols-outlined text-[18px]">forum</span>
+                </div>
+                <div className="max-w-[85%] rounded-[1.35rem] rounded-tl-md bg-white px-4 py-3 text-sm leading-6 whitespace-pre-wrap break-words text-[#1F2933] shadow-[0_10px_22px_rgba(15,23,42,0.08)]">
+                  {streamingContent || (
+                    <span className="inline-flex gap-1">
+                      <span className="animate-bounce" style={{ animationDelay: "0ms" }}>•</span>
+                      <span className="animate-bounce" style={{ animationDelay: "150ms" }}>•</span>
+                      <span className="animate-bounce" style={{ animationDelay: "300ms" }}>•</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="px-4 py-3 sm:px-5">

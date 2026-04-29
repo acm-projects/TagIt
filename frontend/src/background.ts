@@ -54,16 +54,6 @@ const openSidePanelForTab = async (tabId: number) => {
   setPanelOpenState(tabId, true);
 };
 
-const closeSidePanelForTab = async (tabId: number) => {
-  if (typeof sidePanelApi.close !== "function") {
-    await openSidePanelForTab(tabId);
-    return;
-  }
-
-  await sidePanelApi.close({ tabId });
-  setPanelOpenState(tabId, false);
-};
-
 void enableSidePanelOnClick();
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -74,32 +64,32 @@ chrome.action.onClicked.addListener((tab) => {
   const tabId = tab.id;
   if (tabId == null) return;
 
-  const toggle = async () => {
-    if (openPanelTabIds.has(tabId)) {
-      try {
-        await closeSidePanelForTab(tabId);
-      } catch {
-        // Panel wasn't actually open (stale tracking) — open it instead
-        setPanelOpenState(tabId, false);
-        await openSidePanelForTab(tabId);
-      }
+  if (openPanelTabIds.has(tabId)) {
+    // Panel tracked as open — try to close it
+    if (typeof sidePanelApi.close === "function") {
+      sidePanelApi.close({ tabId })
+        .then(() => setPanelOpenState(tabId, false))
+        .catch(() => setPanelOpenState(tabId, false));
     } else {
-      try {
-        await openSidePanelForTab(tabId);
-      } catch {
-        // Panel was already open (tracking lost during SW restart) — close it
+      setPanelOpenState(tabId, false);
+    }
+  } else {
+    // Panel tracked as closed — open it.
+    // sidePanel.open() MUST be called synchronously within the user gesture
+    // handler (before any await), otherwise Chrome rejects it.
+    chrome.sidePanel.open({ tabId })
+      .then(() => setPanelOpenState(tabId, true))
+      .catch((error: unknown) => {
+        console.error("Unable to toggle side panel.", error);
+        // Panel was already open (tracking lost after SW restart) — try to close
         setPanelOpenState(tabId, true);
         if (typeof sidePanelApi.close === "function") {
-          await sidePanelApi.close({ tabId });
-          setPanelOpenState(tabId, false);
+          sidePanelApi.close({ tabId })
+            .then(() => setPanelOpenState(tabId, false))
+            .catch(() => {});
         }
-      }
-    }
-  };
-
-  toggle().catch((error) => {
-    console.error("Unable to toggle side panel.", error);
-  });
+      });
+  }
 });
 
 sidePanelApi.onOpened?.addListener((info) => {

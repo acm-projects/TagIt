@@ -21,7 +21,7 @@ export interface ProcessedEmail {
   uiBadges: string[];
   tasks: string[];
   deadlines: string[];
-  events: string[];
+  events: (string | { location?: string; time?: string; title?: string })[];
   location: string;
   time: string;
   isSpam: boolean;

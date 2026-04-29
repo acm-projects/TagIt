@@ -258,12 +258,6 @@ const MailPage: React.FC = () => {
         if (mailDay) {
           const selectedDate = getDateForWeekdayInAnchorWeek(weekAnchor, mailDay);
           if (d && !isSameLocalDay(d, selectedDate)) return false;
-        } else if (d) {
-          // No day selected → show only the current week (Mon–Sun)
-          const weekMon = getDateForWeekdayInAnchorWeek(weekAnchor, "mon");
-          const weekSun = getDateForWeekdayInAnchorWeek(weekAnchor, "sun");
-          weekSun.setHours(23, 59, 59, 999);
-          if (d < weekMon || d > weekSun) return false;
         }
         const matchesAccount =
           selectedAccount === "all" ? true : mail.accountEmail === selectedAccount;

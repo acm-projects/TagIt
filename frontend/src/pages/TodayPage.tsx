@@ -119,9 +119,18 @@ const extractEventsFromEmails = (emails: ProcessedEmail[]): TodayEvent[] => {
     if (e.events?.length) {
       const dateStr = e.receivedAt ? localDateFromIso(e.receivedAt) : "";
       for (const ev of e.events) {
+        let title: string;
+        let time: string;
+        if (typeof ev === "string") {
+          title = ev;
+          time = e.time || "";
+        } else {
+          title = ev.title || ev.location || "Event";
+          time = ev.time || e.time || "";
+        }
         events.push({
-          time: e.time || "",
-          title: ev,
+          time,
+          title,
           tagCategoryId: `priority-${e.priorityLevel}`,
           date: dateStr,
         });
@@ -145,6 +154,10 @@ const EVENTS: TodayEvent[] = [
   { date: "Wed, Apr 02", time: "08:30 - 10:00", title: "ACM Meeting @ SLC", tagCategoryId: "priority-1" },
   { date: "Thu, Apr 03", time: "12:15 - 01:00", title: "Resume Review Drop-In", tagCategoryId: "priority-3" },
 ];
+
+const EMAIL_ROW_LEAVE_COLLAPSE_MS = 160;
+const EMAIL_EXPAND_AFTER_COLLAPSE_MS = 260;
+const EMAIL_BODY_TRANSITION_MS = 320;
 
 const TAGI_EXCITED_MS = 10_000;
 const TAGI_NORMAL_ROTATE_MIN_MS = 12 * 60 * 1000;
@@ -307,6 +320,9 @@ const TodayPage: React.FC = () => {
   const [closingEmailIds, setClosingEmailIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ email: ImportantEmailPreview; index: number } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
+  const emailLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emailExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categories = useUserCategories();
   const [tagiBubble, setTagiBubble] = useState(() => ({
     message: pickNormalMascotMessage(getTaskProgress(loadTasks()), EVENTS, tagiMascotCopy),
@@ -468,6 +484,44 @@ const TodayPage: React.FC = () => {
   const handleOpenEmail = (_email: ImportantEmailPreview) => {
     // Placeholder until mail detail/open workflow is wired.
   };
+
+  const clearEmailHoverTimers = useCallback(() => {
+    if (emailLeaveTimerRef.current !== null) {
+      clearTimeout(emailLeaveTimerRef.current);
+      emailLeaveTimerRef.current = null;
+    }
+    if (emailExpandTimerRef.current !== null) {
+      clearTimeout(emailExpandTimerRef.current);
+      emailExpandTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearEmailHoverTimers(), [clearEmailHoverTimers]);
+
+  const handleEmailRowEnter = useCallback(
+    (mailId: string) => {
+      clearEmailHoverTimers();
+      if (expandedEmailId === mailId) return;
+      if (expandedEmailId !== null) {
+        setExpandedEmailId(null);
+        emailExpandTimerRef.current = setTimeout(() => {
+          emailExpandTimerRef.current = null;
+          setExpandedEmailId(mailId);
+        }, EMAIL_EXPAND_AFTER_COLLAPSE_MS);
+        return;
+      }
+      setExpandedEmailId(mailId);
+    },
+    [clearEmailHoverTimers, expandedEmailId],
+  );
+
+  const handleEmailRowLeave = useCallback(() => {
+    clearEmailHoverTimers();
+    emailLeaveTimerRef.current = setTimeout(() => {
+      emailLeaveTimerRef.current = null;
+      setExpandedEmailId(null);
+    }, EMAIL_ROW_LEAVE_COLLAPSE_MS);
+  }, [clearEmailHoverTimers]);
 
   const triggerEmailSlide = (id: string) => {
     setSlidingEmailIds((prev) => {
@@ -672,11 +726,14 @@ const TodayPage: React.FC = () => {
                         visualStyle.backgroundColor = "transparent";
                       }
 
+                      const isExpanded = expandedEmailId === mail.id;
                       return (
                         <div
                           key={mail.id}
                           className={`tagged-item group flex items-start gap-2.5 py-1.5 text-[13px] email-row ${isSliding ? "email-row--slide-up" : ""} ${isClosing ? "email-row--closing" : ""}`}
                           style={visualStyle}
+                          onMouseEnter={() => handleEmailRowEnter(mail.id)}
+                          onMouseLeave={handleEmailRowLeave}
                         >
                           <div
                             aria-hidden="true"
@@ -696,9 +753,18 @@ const TodayPage: React.FC = () => {
                                 {mail.sender}
                               </span>
                             </div>
-                            <p className="w-full truncate text-[12px] text-[#6B7280] leading-tight">
-                              {mail.summary}
-                            </p>
+                            <div
+                              className={isExpanded ? "max-h-[min(16rem,50vh)] overflow-y-auto overflow-x-hidden" : "max-h-[1.2rem] overflow-hidden"}
+                              style={{
+                                transitionProperty: "max-height",
+                                transitionDuration: `${EMAIL_BODY_TRANSITION_MS}ms`,
+                                transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)",
+                              }}
+                            >
+                              <p className="text-[12px] text-[#6B7280] leading-tight whitespace-pre-line">
+                                {mail.summary}
+                              </p>
+                            </div>
                             {mail.source !== "gmail" && (
                               <div className="flex items-center gap-2 text-[12px] text-[#6B7280]">
                                 {getSourceIcon(mail.source)}
@@ -745,11 +811,7 @@ const TodayPage: React.FC = () => {
                           className="tagged-item group flex items-start gap-2.5 py-2 text-sm text-[#1F2933]"
                           style={{ borderBottom: "0.5px solid #E5E7EB" }}
                         >
-                          <div
-                            aria-hidden="true"
-                            className="color-line h-9 w-[6px] self-center rounded-full"
-                            style={{ backgroundColor: getCategoryColorById(categories, event.tagCategoryId) }}
-                          />
+                          <div aria-hidden="true" className="h-9 w-[6px] shrink-0 self-center rounded-full bg-[#ef4444]" />
                           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                             <span className="text-sm font-semibold text-[#111827] truncate">{event.title}</span>
                             {event.time && (
@@ -764,7 +826,7 @@ const TodayPage: React.FC = () => {
                           className="flex items-start gap-2.5 py-2"
                           style={{ borderBottom: index === todayDeadlines.length - 1 ? "none" : "0.5px solid #E5E7EB" }}
                         >
-                          <span className="material-symbols-outlined shrink-0 text-[16px] text-[#ef4444] mt-0.5">alarm</span>
+                          <div aria-hidden="true" className="h-9 w-[6px] shrink-0 self-center rounded-full bg-[#ef4444]" />
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold text-[#111827]">{item.text}</p>
                             <p className="truncate text-[11px] text-[#9CA3AF]">{item.emailSubject}</p>

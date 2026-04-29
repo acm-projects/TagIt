@@ -1,6 +1,6 @@
 import type { UserCategory } from "./categories";
 import type { PriorityRule } from "./priorities";
-import { apiRequest } from "./api";
+import { apiRequest, getStoredToken } from "./api";
 
 export type ChatRole = "user" | "assistant";
 
@@ -59,4 +59,53 @@ export async function sendChatMessage(
   }
 
   return { reply: data.answer };
+}
+
+export async function sendChatMessageStream(
+  request: ChatbotRequest,
+  onChunk: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const token = await getStoredToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${getChatbotApiBaseUrl()}/api/chat/stream`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ question: request.message }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Chat stream failed: HTTP ${response.status}`);
+  }
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const payload = line.slice(6).trim();
+      if (payload === "[DONE]") return;
+      try {
+        const parsed = JSON.parse(payload) as { chunk?: string; error?: string };
+        if (parsed.error) throw new Error(parsed.error);
+        if (parsed.chunk) onChunk(parsed.chunk);
+      } catch (e) {
+        if (e instanceof SyntaxError) continue;
+        throw e;
+      }
+    }
+  }
 }
